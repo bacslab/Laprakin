@@ -1,0 +1,36 @@
+{
+  "name": "laprakin-fullstack",
+  "version": "21.0.0-qris",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev --workspace @laprakin/server\" \"npm run dev --workspace @laprakin/client\"",
+    "build": "npm run build --workspace @laprakin/client",
+    "start": "npm run start --workspace @laprakin/server",
+    "test:smoke": "node scripts/smoke.mjs",
+    "start:prod": "node scripts/start-production.mjs",
+    "test:e2e": "node scripts/e2e.mjs",
+    "test:ai-auth": "node scripts/ai-auth-check.mjs",
+    "test:report-workflow": "node scripts/chat-workflow-check.mjs",
+    "test:workflow-api": "node scripts/workflow-api-check.mjs",
+    "test:ai-live": "node scripts/ai-live-check.mjs",
+    "prepare:production-env": "node scripts/prepare-production-env.mjs",
+    "test:production-config": "node scripts/production-config-check.mjs",
+    "verify:production": "node scripts/production-readiness.mjs",
+    "test:audit": "npm audit --omit=dev",
+    "migrate:v4": "node scripts/migrate-runtut-to-laprakin.mjs",
+    "setup": "node scripts/setup.mjs",
+    "test:payments": "node scripts/qris-payment-check.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "gsap": "^3.12.5",
+    "lenis": "^1.1.18"
+  }
+}

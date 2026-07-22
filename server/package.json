@@ -1,0 +1,28 @@
+{
+  "name": "@laprakin/server",
+  "version": "20.5.0-beta.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.0",
+    "bcryptjs": "^2.4.3",
+    "body-parser": "1.20.6",
+    "cookie-parser": "^1.4.7",
+    "docx": "^9.1.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.22.2",
+    "express-rate-limit": "^7.5.0",
+    "image-size": "^1.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.8.0",
+    "mime-types": "^2.1.35",
+    "multer": "^2.0.2",
+    "nanoid": "^5.0.9",
+    "nodemailer": "^9.0.1",
+    "zod": "^3.24.1"
+  }
+}

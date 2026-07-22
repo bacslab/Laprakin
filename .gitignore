@@ -1,0 +1,31 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+client/dist/
+
+# Local and production credentials
+.env
+.env.*
+server/.env
+server/.env.*
+!server/.env.example
+!server/.env.production.example
+
+# Runtime state and user-provided files
+server/data/
+server/uploads/
+server/public-media/landing/*
+server/public-media/feature-updates/*
+!server/public-media/landing/.gitkeep
+!server/public-media/feature-updates/.gitkeep
+
+# Generated test and build artifacts
+output/
+.playwright-cli/
+.vercel/
+.wrangler/
+*.log
+*.tgz
+
+.DS_Store
+Thumbs.db

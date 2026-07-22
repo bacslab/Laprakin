@@ -1,0 +1,103 @@
+services:
+  - type: web
+    name: laprakin
+    runtime: docker
+    repo: https://github.com/Mubax5/Laprakin
+    branch: main
+    plan: starter
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health/ready
+    disk:
+      name: laprakin-runtime
+      mountPath: /var/data/laprakin
+      sizeGB: 5
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_STATIC
+        value: "true"
+      - key: APP_URL
+        value: https://laprakin.app
+      - key: API_URL
+        value: https://laprakin.app
+      - key: ALLOWED_ORIGINS
+        value: https://laprakin.app
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: SESSION_DAYS
+        value: "30"
+      - key: LAPRAKIN_DATA_DIR
+        value: /var/data/laprakin/data
+      - key: LAPRAKIN_UPLOAD_DIR
+        value: /var/data/laprakin/uploads
+      - key: LAPRAKIN_PUBLIC_MEDIA_DIR
+        value: /var/data/laprakin/public-media
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DEVICE_HMAC_SECRET
+        generateValue: true
+      - key: TOKEN_HMAC_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: AI_REQUIRED
+        value: "true"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL_BASIC
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_MODEL_THINKING
+        value: gemini-3.6-flash
+      - key: GEMINI_MODEL_XTRATHINK
+        value: gemini-3.6-flash
+      - key: GEMINI_MODEL_DOCUMENT
+        value: gemini-3.5-flash
+      - key: GEMINI_MODEL_SUPPORT
+        value: gemini-3.5-flash-lite
+      - key: GOOGLE_OAUTH_REQUIRED
+        value: "true"
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        value: https://laprakin.app/api/auth/google/callback
+      - key: EMAIL_MODE
+        value: smtp
+      - key: MAIL_FROM
+        value: "Laprakin <noreply@mail.laprakin.app>"
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      - key: SMTP_PORT
+        value: "465"
+      - key: SMTP_SECURE
+        value: "true"
+      - key: SMTP_USER
+        value: resend
+      - key: SMTP_PASS
+        sync: false
+      - key: PAYMENTS_MODE
+        value: midtrans
+      - key: MIDTRANS_ENVIRONMENT
+        value: production
+      - key: MIDTRANS_IS_PRODUCTION
+        value: "true"
+      - key: MIDTRANS_SERVER_KEY
+        sync: false
+      - key: MIDTRANS_CLIENT_KEY
+        sync: false
+      - key: MIDTRANS_VERIFY_STATUS
+        value: "true"
+      - key: MAX_UPLOAD_MB
+        value: "20"
+      - key: MAX_FILES_PER_UPLOAD
+        value: "12"
+      - key: MAX_FILES_PER_DOCUMENT
+        value: "40"
+      - key: JOB_POLL_MS
+        value: "750"
+      - key: JOB_MAX_ATTEMPTS
+        value: "2"
+      - key: RETENTION_SWEEP_MINUTES
+        value: "60"

@@ -1,0 +1,23 @@
+services:
+  laprakin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    env_file:
+      - ./server/.env
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+    volumes:
+      - laprakin_data:/app/server/data
+      - laprakin_uploads:/app/server/uploads
+      - laprakin_public_media:/app/server/public-media
+    restart: unless-stopped
+
+volumes:
+  laprakin_data:
+  laprakin_uploads:
+  laprakin_public_media:
