@@ -641,7 +641,13 @@ export async function processMidtransWebhook(payload = {}) {
     throw new HttpError(401, 'Signature payment notification tidak valid.', 'INVALID_PAYMENT_SIGNATURE');
   }
   const order = db.prepare(`SELECT * FROM payment_orders WHERE id = ? AND provider = 'midtrans'`).get(orderId);
-  if (!order) throw new HttpError(404, 'Payment order tidak ditemukan.', 'PAYMENT_ORDER_NOT_FOUND');
+  if (!order) {
+    audit(null, 'payment.signed_unknown_order_ignored', 'payment_order', orderId, {
+      paymentType: String(payload.payment_type || ''),
+      transactionStatus: String(payload.transaction_status || ''),
+    });
+    return { id: orderId, status: 'ignored', acknowledged: true, ignored: true };
+  }
 
   // The signature validates the webhook. A direct status check is additionally
   // performed when enabled so the backend does not act on browser data.
