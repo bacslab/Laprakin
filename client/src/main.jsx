@@ -880,6 +880,7 @@ function PublicPricingPage() {
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeOrder, setActiveOrder] = useState(null);
+  const [checkoutRecoveryUrl, setCheckoutRecoveryUrl] = useState('');
   const [error, setError] = useState('');
 
   const loadPricing = useCallback(async () => {
@@ -1024,6 +1025,7 @@ function PublicPricingPage() {
     if (!user.emailVerified) return setError('Verifikasi email sebelum melakukan pembayaran.');
     setBusy(true);
     setError('');
+    setCheckoutRecoveryUrl('');
     try {
       const payload = await api('/payments/checkout', { method: 'POST', body: { items: cartItems } });
       if (payload.mode === 'manual') {
@@ -1032,8 +1034,13 @@ function PublicPricingPage() {
       }
       await updateOrder(payload.order);
       window.sessionStorage.setItem('laprakin:active-payment-order', payload.orderId);
-      if (!redirectToMidtransCheckout(payload.checkoutUrl)) {
-        throw new Error('Checkout QRIS belum tersedia. Coba lagi beberapa saat.');
+      const checkoutUrl = validatedMidtransCheckoutUrl(payload.checkoutUrl);
+      if (!checkoutUrl) {
+        throw new Error('URL checkout QRIS dari gateway tidak valid.');
+      }
+      setCheckoutRecoveryUrl(checkoutUrl);
+      if (!redirectToMidtransCheckout(checkoutUrl)) {
+        throw new Error('Navigasi otomatis diblokir browser. Buka checkout QRIS lewat tombol di bawah.');
       }
     } catch (err) {
       setError(err.message);
@@ -1079,7 +1086,7 @@ function PublicPricingPage() {
       </section>
       {user && selected && <section className="pricing-compact-checkout" aria-live="polite"><div><small>Checkout QRIS</small><b>{quoteBusy ? 'Menghitung…' : quote?.displayTotal || 'Rp0'}</b><span>{quote?.items?.map((item) => `${item.label}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`).join(' + ') || 'Produk pilihan'}</span></div><Button onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>{busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? 'Bayar dengan QRIS' : 'Gateway belum aktif'}</Button></section>}
       {activeOrder && <section className={`pricing-compact-status ${activeOrder.status || 'pending'}`}><div><b>{activeOrder.statusLabel || 'Status pembayaran'}</b><p>{statusCopy[activeOrder.status] || 'Status pembayaran sedang diproses.'}</p></div>{['created', 'pending'].includes(activeOrder.status) ? <button type="button" onClick={() => refreshOrder(activeOrder.id, true)} disabled={busy}><RefreshCw size={14}/>Refresh</button> : <CheckCircle2 size={20}/>}</section>}
-      {error && <div className="pricing-compact-error"><CircleAlert size={16}/><span>{error}</span></div>}
+      {error && <div className="pricing-compact-error"><CircleAlert size={16}/><span>{error}</span>{checkoutRecoveryUrl && <a href={checkoutRecoveryUrl}>Buka checkout QRIS</a>}</div>}
     </main>
   </div>;
 }
@@ -1594,13 +1601,23 @@ function BillingSettingsPane({ onOpenBilling }) {
   </div>;
 }
 
-function redirectToMidtransCheckout(checkoutUrl) {
-  if (!checkoutUrl) return false;
+function validatedMidtransCheckoutUrl(checkoutUrl) {
+  if (!checkoutUrl) return '';
   try {
     const target = new URL(checkoutUrl);
     const allowedHosts = new Set(['app.midtrans.com', 'app.sandbox.midtrans.com']);
-    if (target.protocol !== 'https:' || !allowedHosts.has(target.hostname)) return false;
-    window.location.assign(target.href);
+    if (target.protocol !== 'https:' || !allowedHosts.has(target.hostname)) return '';
+    return target.href;
+  } catch {
+    return '';
+  }
+}
+
+function redirectToMidtransCheckout(checkoutUrl) {
+  const target = validatedMidtransCheckoutUrl(checkoutUrl);
+  if (!target) return false;
+  try {
+    window.location.assign(target);
     return true;
   } catch {
     return false;
@@ -1621,6 +1638,7 @@ function BillingPage() {
   const [quote, setQuote] = useState(null);
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [activeOrder, setActiveOrder] = useState(null);
+  const [checkoutRecoveryUrl, setCheckoutRecoveryUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -1730,6 +1748,7 @@ function BillingPage() {
     if (!user?.emailVerified) { setError('Verifikasi email sebelum melakukan pembayaran.'); return; }
     setBusy(true);
     setError('');
+    setCheckoutRecoveryUrl('');
     try {
       const payload = await api('/payments/checkout', { method: 'POST', body: { items: cartItems } });
       if (payload.mode === 'manual') {
@@ -1738,8 +1757,13 @@ function BillingPage() {
       }
       await updateOrder(payload.order);
       window.sessionStorage.setItem('laprakin:active-payment-order', payload.orderId);
-      if (!redirectToMidtransCheckout(payload.checkoutUrl)) {
-        throw new Error('Checkout QRIS belum tersedia. Coba lagi beberapa saat.');
+      const checkoutUrl = validatedMidtransCheckoutUrl(payload.checkoutUrl);
+      if (!checkoutUrl) {
+        throw new Error('URL checkout QRIS dari gateway tidak valid.');
+      }
+      setCheckoutRecoveryUrl(checkoutUrl);
+      if (!redirectToMidtransCheckout(checkoutUrl)) {
+        throw new Error('Navigasi otomatis diblokir browser. Buka checkout QRIS lewat tombol di bawah.');
       }
     } catch (err) {
       setError(err.message);
@@ -1772,7 +1796,7 @@ function BillingPage() {
       </section>
       {subscriptionChoice !== 'none' && <section className="pricing-only-checkout"><div><small>Checkout QRIS</small><b>{quoteBusy ? 'Menghitung…' : quote?.displayTotal || 'Rp0'}</b><span>{quote?.items?.[0]?.label || 'Plan pilihanmu'} · berlaku 30 hari</span></div><Button onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>{busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? 'Bayar dengan QRIS' : 'Gateway belum aktif'}</Button></section>}
       {activeOrder && <div className={`pricing-only-status ${activeOrder.status || 'pending'}`}><div><b>{activeOrder.statusLabel || paymentStatusCopy[activeOrder.status] || 'Status pembayaran'}</b><p>{paymentStatusCopy[activeOrder.status] || 'Status pembayaran sedang diproses.'}</p></div>{activeOrder.canRefresh !== false && ['created', 'pending'].includes(activeOrder.status) ? <Button variant="secondary" onClick={() => getOrder(activeOrder.id, true)} disabled={busy}><RefreshCw size={14}/> Refresh status</Button> : <CheckCircle2 size={20}/>}</div>}
-      {error && <div className="billing-inline-error"><CircleAlert size={16}/><span>{error}</span></div>}
+      {error && <div className="billing-inline-error"><CircleAlert size={16}/><span>{error}</span>{checkoutRecoveryUrl && <a href={checkoutRecoveryUrl}>Buka checkout QRIS</a>}</div>}
     </main>
   </div>;
 }
