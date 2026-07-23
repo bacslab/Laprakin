@@ -366,6 +366,14 @@ function ensureColumn(tableName, columnName, definition) {
 
 // Forward-safe migrations for projects created before V3.
 ensureColumn('users', 'session_version', 'INTEGER DEFAULT 1');
+ensureColumn('users', 'verification_expires_at', 'TEXT');
+db.prepare(`
+  UPDATE users
+  SET verification_expires_at = ?
+  WHERE verification_token IS NOT NULL
+    AND email_verified_at IS NULL
+    AND verification_expires_at IS NULL
+`).run(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
 ensureColumn('jobs', 'payload_json', "TEXT DEFAULT '{}'");
 ensureColumn('jobs', 'attempt_count', 'INTEGER DEFAULT 0');
 ensureColumn('jobs', 'max_attempts', 'INTEGER DEFAULT 2');

@@ -6,6 +6,9 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(directory, '../.env') });
 const nodeEnv = process.env.NODE_ENV || 'development';
 const publicMediaDir = path.resolve(process.env.LAPRAKIN_PUBLIC_MEDIA_DIR || path.resolve(directory, '../public-media'));
+const manualEmailAuthOnly = process.env.MANUAL_EMAIL_AUTH_ONLY
+  ? process.env.MANUAL_EMAIL_AUTH_ONLY !== 'false'
+  : nodeEnv === 'production';
 
 function positiveInt(value, fallback) {
   const parsed = Number(value);
@@ -73,7 +76,8 @@ export const config = {
   googleClientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
   googleClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '',
   googleRedirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI || `${process.env.API_URL || process.env.BACKEND_URL || 'http://localhost:4000'}/api/auth/google/callback`,
-  googleOauthRequired: process.env.GOOGLE_OAUTH_REQUIRED ? process.env.GOOGLE_OAUTH_REQUIRED !== 'false' : nodeEnv === 'production',
+  manualEmailAuthOnly,
+  googleOauthRequired: !manualEmailAuthOnly && (process.env.GOOGLE_OAUTH_REQUIRED ? process.env.GOOGLE_OAUTH_REQUIRED !== 'false' : false),
   googleRequestTimeoutMs: boundedInt(process.env.GOOGLE_REQUEST_TIMEOUT_MS, 10000, 3000, 30000),
   supportAiEnabled: process.env.SUPPORT_AI_ENABLED !== 'false',
   supportMaxMessagesPerHour: positiveInt(process.env.SUPPORT_MAX_MESSAGES_PER_HOUR, 30),
@@ -109,10 +113,10 @@ export function productionConfigChecks() {
     const parsed = productionUrl(origin);
     return parsed.valid;
   }) && config.allowedOrigins.includes(app.url?.origin);
-  const googleCredentialsReady = config.googleOauthRequired && Boolean(config.googleClientId && config.googleClientSecret);
-  const googleRedirectReady = redirect.valid && api.valid
+  const googleCredentialsReady = !config.googleOauthRequired || Boolean(config.googleClientId && config.googleClientSecret);
+  const googleRedirectReady = !config.googleOauthRequired || (redirect.valid && api.valid
     && redirect.url.origin === api.url.origin
-    && redirect.url.pathname === '/api/auth/google/callback';
+    && redirect.url.pathname === '/api/auth/google/callback');
   const smtpReady = config.emailMode === 'smtp'
     && Boolean(config.smtpHost && config.smtpUser && config.smtpPass)
     && !/@localhost\b/i.test(config.mailFrom);
@@ -128,8 +132,9 @@ export function productionConfigChecks() {
     { name: 'application secrets', ok: secretsReady, detail: secretsReady ? '3 secret unik, minimal 32 karakter' : 'JWT_SECRET, DEVICE_HMAC_SECRET, dan TOKEN_HMAC_SECRET wajib unik dan minimal 32 karakter' },
     { name: 'AI required and credential', ok: config.aiRequired && Boolean(config.geminiKey), detail: config.aiRequired && config.geminiKey ? 'AI_REQUIRED=true dan key tersedia' : 'Set AI_REQUIRED=true dan GEMINI_API_KEY' },
     { name: 'stable AI models', ok: modelsStable, detail: modelsStable ? [...new Set(configuredModels)].join(', ') : 'Model preview/latest/experimental tidak diizinkan' },
-    { name: 'Google OAuth credential', ok: googleCredentialsReady, detail: googleCredentialsReady ? 'GOOGLE_OAUTH_REQUIRED=true dan credential tersedia' : 'Set GOOGLE_OAUTH_REQUIRED=true, client ID, dan client secret' },
-    { name: 'Google OAuth HTTPS callback', ok: googleRedirectReady, detail: googleRedirectReady ? config.googleRedirectUri : 'Callback wajib memakai origin API_URL dan path /api/auth/google/callback' },
+    { name: 'manual verified email auth', ok: config.manualEmailAuthOnly, detail: config.manualEmailAuthOnly ? 'Registrasi manual dan verifikasi email wajib' : 'Set MANUAL_EMAIL_AUTH_ONLY=true' },
+    { name: 'Google OAuth credential', ok: googleCredentialsReady, detail: config.googleOauthRequired ? (googleCredentialsReady ? 'Credential Google tersedia' : 'Client ID dan client secret wajib tersedia') : 'Google OAuth dinonaktifkan' },
+    { name: 'Google OAuth HTTPS callback', ok: googleRedirectReady, detail: config.googleOauthRequired ? (googleRedirectReady ? config.googleRedirectUri : 'Callback wajib memakai origin API_URL dan path /api/auth/google/callback') : 'Google OAuth dinonaktifkan' },
     { name: 'transactional email', ok: smtpReady, detail: smtpReady ? config.smtpHost : 'EMAIL_MODE=smtp, credential SMTP, dan MAIL_FROM non-localhost wajib tersedia' },
     { name: 'Midtrans production', ok: paymentsReady, detail: paymentsReady ? 'Midtrans production aktif' : 'PAYMENTS_MODE=midtrans, environment production, dan kedua key wajib tersedia' },
     { name: 'admin identity', ok: Boolean(process.env.ADMIN_EMAIL && /@/.test(process.env.ADMIN_EMAIL)), detail: process.env.ADMIN_EMAIL ? 'ADMIN_EMAIL dikonfigurasi' : 'ADMIN_EMAIL wajib eksplisit pada production' },

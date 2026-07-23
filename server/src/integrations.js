@@ -54,6 +54,7 @@ export async function verifyGeminiIntegration() {
 }
 
 export async function verifyGoogleOidcIntegration() {
+  if (!config.googleOauthRequired) return { ok: true, disabled: true, code: 'GOOGLE_OAUTH_DISABLED' };
   if (!config.googleClientId || !config.googleClientSecret) return { ok: false, code: 'GOOGLE_OAUTH_NOT_CONFIGURED' };
   try {
     const { response, payload } = await fetchJson(GOOGLE_DISCOVERY_URL, {}, config.googleRequestTimeoutMs);

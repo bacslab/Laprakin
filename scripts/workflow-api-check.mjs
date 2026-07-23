@@ -34,6 +34,7 @@ const server = spawn(process.execPath, ['server/src/index.js'], {
     LAPRAKIN_UPLOAD_DIR: path.join(sandbox, 'uploads'),
     JOB_POLL_MS: '100',
     EMAIL_MODE: 'console',
+    MANUAL_EMAIL_AUTH_ONLY: 'true',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -80,6 +81,13 @@ try {
     method: 'POST',
     body: JSON.stringify({ email, password: 'KataSandi-Uji-2026' }),
   }, 201);
+  const meta = await request('/meta');
+  assert.equal(meta.features.googleLoginEnabled, false);
+  const rejectedLogin = await request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'KataSandi-Uji-2026' }),
+  }, 403);
+  assert.equal(rejectedLogin.error.code, 'EMAIL_NOT_VERIFIED');
   const verification = await request('/auth/verify', {
     method: 'POST',
     body: JSON.stringify({ token: registration.developmentVerificationToken }),

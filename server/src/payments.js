@@ -66,10 +66,12 @@ const MIDTRANS_QRIS_CHANNEL = 'other_qris';
 const PAYMENT_ORDER_TTL_MINUTES = 15;
 const TERMINAL_STATUSES = new Set(['paid', 'failed', 'expired', 'canceled', 'refunded']);
 
-function midtransOrigin() {
-  return config.midtransEnvironment === 'production'
-    ? 'https://app.midtrans.com'
-    : 'https://app.sandbox.midtrans.com';
+export function midtransOrigins(environment = config.midtransEnvironment) {
+  const production = environment === 'production';
+  return {
+    snap: production ? 'https://app.midtrans.com' : 'https://app.sandbox.midtrans.com',
+    api: production ? 'https://api.midtrans.com' : 'https://api.sandbox.midtrans.com',
+  };
 }
 
 function midtransAuthHeader() {
@@ -206,7 +208,7 @@ export function publicPaymentConfig() {
     qrisOnly: true,
     merchantDisplayName: 'Laprakin',
     clientKey: enabled ? config.midtransClientKey : '',
-    scriptUrl: enabled ? `${midtransOrigin()}/snap/snap.js` : '',
+    scriptUrl: enabled ? `${midtransOrigins().snap}/snap/snap.js` : '',
     message: enabled
       ? 'Checkout QRIS Dinamis Midtrans aktif. Hanya QRIS yang ditampilkan.'
       : 'Kredensial Midtrans belum dikonfigurasi.',
@@ -445,7 +447,7 @@ async function requestSnapTransaction(orderId, user, quote) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
   try {
-    const response = await fetch(`${midtransOrigin()}/snap/v1/transactions`, {
+    const response = await fetch(`${midtransOrigins().snap}/snap/v1/transactions`, {
       method: 'POST',
       headers: {
         authorization: midtransAuthHeader(),
@@ -528,12 +530,15 @@ async function queryMidtransStatus(orderId) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
   try {
-    const response = await fetch(`${midtransOrigin()}/v2/${encodeURIComponent(orderId)}/status`, {
+    const response = await fetch(`${midtransOrigins().api}/v2/${encodeURIComponent(orderId)}/status`, {
       method: 'GET',
       headers: { authorization: midtransAuthHeader(), accept: 'application/json' },
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
+    if (String(payload.status_code || '') === '404' && !payload.order_id) {
+      throw new HttpError(409, 'Transaksi belum dibuat di Midtrans. Buka checkout QRIS terlebih dahulu.', 'MIDTRANS_STATUS_NOT_READY');
+    }
     if (!response.ok || !payload.order_id) {
       throw new HttpError(502, 'Status pembayaran belum dapat diverifikasi ke Midtrans.', 'MIDTRANS_STATUS_UNAVAILABLE');
     }
@@ -672,8 +677,21 @@ export async function refreshPaymentOrderForUser(orderId, userId) {
   const order = db.prepare('SELECT * FROM payment_orders WHERE id = ? AND user_id = ? AND provider = ?').get(orderId, userId, 'midtrans');
   if (!order) throw new HttpError(404, 'Order pembayaran tidak ditemukan.', 'PAYMENT_ORDER_NOT_FOUND');
   if (TERMINAL_STATUSES.has(order.status)) return serializePaymentOrder(order);
-  const payload = await queryMidtransStatus(orderId);
-  return updateOrderFromVerifiedPayload(order, payload, 'status_api');
+  try {
+    const payload = await queryMidtransStatus(orderId);
+    return updateOrderFromVerifiedPayload(order, payload, 'status_api');
+  } catch (error) {
+    if (error?.code !== 'MIDTRANS_STATUS_NOT_READY') throw error;
+    if (order.expires_at && order.expires_at <= now()) {
+      const updatedAt = now();
+      db.prepare(`UPDATE payment_orders SET status = 'expired', updated_at = ?, last_status_check_at = ? WHERE id = ?`)
+        .run(updatedAt, updatedAt, order.id);
+      return serializePaymentOrder(db.prepare('SELECT * FROM payment_orders WHERE id = ?').get(order.id));
+    }
+    db.prepare('UPDATE payment_orders SET last_status_check_at = ?, updated_at = ? WHERE id = ?')
+      .run(now(), now(), order.id);
+    return serializePaymentOrder(db.prepare('SELECT * FROM payment_orders WHERE id = ?').get(order.id));
+  }
 }
 
 export function simulateLocalCheckout(user, input) {

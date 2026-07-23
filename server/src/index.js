@@ -115,9 +115,14 @@ const acceptedCategories = new Set(['module', 'template', 'evidence', 'data']);
 const acceptedDeclarations = new Set(['own', 'template_allowed', 'format_only']);
 const acceptedSectionTypes = new Set(['implementation', 'output', 'conclusion', 'appendix']);
 
+const securePasswordSchema = z.string()
+  .min(12, 'Kata sandi minimal 12 karakter.')
+  .max(64, 'Kata sandi maksimal 64 karakter.')
+  .refine((value) => Buffer.byteLength(value, 'utf8') <= 72, 'Kata sandi terlalu panjang untuk diproses dengan aman.');
+
 const registerSchema = z.object({
   email: z.string().email('Masukkan email yang valid.'),
-  password: z.string().min(8, 'Kata sandi minimal 8 karakter.').max(200),
+  password: securePasswordSchema,
   referralCode: z.string().trim().max(64).optional().default(''),
 });
 
@@ -133,12 +138,12 @@ const passwordResetRequestSchema = z.object({
 
 const passwordResetSchema = z.object({
   token: z.string().min(20, 'Link reset tidak valid.'),
-  password: z.string().min(8, 'Kata sandi minimal 8 karakter.').max(200),
+  password: securePasswordSchema,
 });
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Kata sandi saat ini wajib diisi.').max(200),
-  newPassword: z.string().min(8, 'Kata sandi baru minimal 8 karakter.').max(200),
+  newPassword: securePasswordSchema,
 });
 
 const profileSchema = z.object({
@@ -1111,7 +1116,7 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     mode: config.nodeEnv,
     aiConfigured: Boolean(config.geminiKey),
-    googleLoginConfigured: Boolean(config.googleClientId && config.googleClientSecret),
+    googleLoginConfigured: Boolean(!config.manualEmailAuthOnly && config.googleOauthRequired && config.googleClientId && config.googleClientSecret),
     paymentsMode: config.paymentsMode,
     queueDepth: queue,
     time: now(),
@@ -1125,7 +1130,7 @@ app.get('/api/health/ready', (_req, res) => {
     if (config.aiRequired && !config.geminiKey) missing.push('ai');
     if (config.googleOauthRequired && (!config.googleClientId || !config.googleClientSecret)) missing.push('google_oauth');
     if (missing.length) return res.status(503).json({ ok: false, database: 'ready', missing });
-    return res.json({ ok: true, database: 'ready', worker: workerBusy ? 'busy' : 'idle', ai: config.geminiKey ? 'configured' : 'disabled', googleOauth: config.googleClientId && config.googleClientSecret ? 'configured' : 'disabled' });
+    return res.json({ ok: true, database: 'ready', worker: workerBusy ? 'busy' : 'idle', ai: config.geminiKey ? 'configured' : 'disabled', googleOauth: config.googleOauthRequired ? 'configured' : 'disabled' });
   } catch {
     return res.status(503).json({ ok: false, database: 'unavailable' });
   }
@@ -1139,7 +1144,7 @@ app.get('/api/meta', (_req, res) => {
       geminiConfigured: Boolean(config.geminiKey),
       manualPayments: config.paymentsMode === 'manual' && !config.isProd,
       uploadMaxMb: config.maxUploadBytes / 1024 / 1024,
-      googleLoginEnabled: Boolean(config.googleClientId && config.googleClientSecret),
+      googleLoginEnabled: Boolean(!config.manualEmailAuthOnly && config.googleOauthRequired && config.googleClientId && config.googleClientSecret),
       supportAiEnabled: Boolean(config.supportAiEnabled && config.geminiKey),
     },
   });
@@ -1213,8 +1218,12 @@ app.post('/api/auth/request-password-reset', authLimiter, asyncHandler(async (re
 app.post('/api/auth/reset-password', authLimiter, asyncHandler(async (req, res) => {
   const input = passwordResetSchema.parse(req.body || {});
   const user = await resetPassword(input.token, input.password);
+  if (!user.emailVerified) {
+    clearSession(res);
+    return res.json({ user, csrfToken: null, message: 'Kata sandi berhasil diperbarui. Verifikasi email sebelum masuk.' });
+  }
   const csrfToken = setSession(res, user);
-  res.json({ user, wallet: getWallet(user.id), csrfToken, message: 'Kata sandi berhasil diperbarui.' });
+  return res.json({ user, wallet: getWallet(user.id), csrfToken, message: 'Kata sandi berhasil diperbarui.' });
 }));
 
 app.post('/api/auth/login', authLimiter, asyncHandler(async (req, res) => {

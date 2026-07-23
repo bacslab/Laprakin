@@ -103,7 +103,7 @@ function safeAppRedirectPath(value = '/app') {
 
 function supportFallback(text) {
   const q = text.toLowerCase();
-  if (/google|masuk|login/.test(q)) return 'Untuk masuk, gunakan email dan kata sandi atau tombol Masuk dengan Google bila admin sudah mengaktifkannya. Setelah berhasil masuk, Laprakin langsung membuka workspace kamu.';
+  if (/google|masuk|login/.test(q)) return 'Daftar memakai email dan kata sandi, lalu buka link verifikasi yang dikirim ke inbox. Setelah email terverifikasi, kamu dapat masuk ke workspace.';
   if (/credit|kredit|gratis/.test(q)) return 'Akun yang sudah verifikasi email dapat claim 2 credit gratis dari Credit Wallet. Satu credit dipakai saat menyusun draft final.';
   if (/upload|unggah|file|modul|screenshot|template/.test(q)) return 'Kamu bisa memasukkan modul, bukti praktik, template, dan data pendukung dari chat laprak. Pastikan bukti memang milikmu atau diizinkan untuk dipakai.';
   if (/export|docx|word/.test(q)) return 'Setelah draft dan checklist review siap, gunakan Export DOCX. File Word tetap bisa kamu edit sebelum dikumpulkan.';
@@ -137,6 +137,9 @@ export async function answerScopedSupportMessage(text, userId = null) {
 }
 
 export function createGoogleAuthorizationState(redirectPath = '/app') {
+  if (config.manualEmailAuthOnly || !config.googleOauthRequired) {
+    throw new HttpError(403, 'Daftar memakai email lalu selesaikan verifikasi untuk masuk.', 'GOOGLE_LOGIN_DISABLED');
+  }
   if (!config.googleClientId || !config.googleClientSecret) {
     throw new HttpError(503, 'Masuk dengan Google belum dikonfigurasi.', 'GOOGLE_LOGIN_DISABLED');
   }
@@ -197,6 +200,9 @@ async function verifyGoogleIdToken(idToken, expectedNonce) {
 }
 
 export async function finishGoogleAuthorization({ state, code }) {
+  if (config.manualEmailAuthOnly || !config.googleOauthRequired) {
+    throw new HttpError(403, 'Masuk dengan Google dinonaktifkan. Daftar memakai email lalu selesaikan verifikasi.', 'GOOGLE_LOGIN_DISABLED');
+  }
   const row = db.prepare(`SELECT * FROM oauth_states WHERE state_hash = ? AND used_at IS NULL AND expires_at > ?`).get(tokenHash(String(state || '')), now());
   if (!row) throw new HttpError(400, 'Sesi masuk Google sudah tidak berlaku. Coba lagi.', 'GOOGLE_STATE_INVALID');
   db.prepare('UPDATE oauth_states SET used_at = ? WHERE id = ?').run(now(), row.id);
@@ -323,19 +329,21 @@ export async function createUser({ email, password, referralCode = '' }) {
   const userId = nanoid();
   const verificationToken = randomToken();
   const createdAt = now();
+  const verificationExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   const passwordHash = await bcrypt.hash(password, 12);
   const role = config.adminEmail && normalizedEmail === config.adminEmail ? 'admin' : 'student';
 
   db.prepare(`
     INSERT INTO users (
-      id, email, password_hash, role, verification_token, referral_code, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      id, email, password_hash, role, verification_token, verification_expires_at, referral_code, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     userId,
     normalizedEmail,
     passwordHash,
     role,
     tokenHash(verificationToken),
+    verificationExpiresAt,
     referralCodeFor(userId),
     createdAt,
     createdAt,
@@ -369,6 +377,9 @@ export async function authenticateUser({ email, password }) {
   if (!row || !(await bcrypt.compare(String(password || ''), row.password_hash))) {
     throw new HttpError(401, 'Email atau kata sandi tidak cocok.', 'INVALID_LOGIN');
   }
+  if (!row.email_verified_at) {
+    throw new HttpError(403, 'Verifikasi email sebelum masuk. Periksa inbox atau kirim ulang link verifikasi.', 'EMAIL_NOT_VERIFIED');
+  }
   if (config.adminEmail && normalizedEmail === config.adminEmail && row.role !== 'admin') {
     db.prepare("UPDATE users SET role = 'admin', updated_at = ? WHERE id = ?").run(now(), row.id);
   }
@@ -381,8 +392,9 @@ export async function resendVerificationEmail(email) {
   const row = db.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').get(normalized);
   if (!row || row.email_verified_at) return { sent: true, verificationToken: null };
   const rawToken = randomToken();
-  db.prepare('UPDATE users SET verification_token = ?, updated_at = ? WHERE id = ?')
-    .run(tokenHash(rawToken), now(), row.id);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  db.prepare('UPDATE users SET verification_token = ?, verification_expires_at = ?, updated_at = ? WHERE id = ?')
+    .run(tokenHash(rawToken), expiresAt, now(), row.id);
   await sendVerificationEmail(toUser(row), rawToken);
   audit(row.id, 'auth.verification_resent', 'user', row.id, {});
   return { sent: true, verificationToken: rawToken };
@@ -390,11 +402,12 @@ export async function resendVerificationEmail(email) {
 
 export function verifyEmailToken(rawToken) {
   const row = db.prepare(`
-    SELECT * FROM users WHERE verification_token = ? AND deleted_at IS NULL
-  `).get(tokenHash(String(rawToken || '')));
-  if (!row) throw new HttpError(400, 'Link verifikasi tidak valid atau sudah dipakai.', 'INVALID_VERIFICATION_TOKEN');
+    SELECT * FROM users
+    WHERE verification_token = ? AND verification_expires_at > ? AND deleted_at IS NULL
+  `).get(tokenHash(String(rawToken || '')), now());
+  if (!row) throw new HttpError(400, 'Link verifikasi tidak valid, kedaluwarsa, atau sudah dipakai.', 'INVALID_VERIFICATION_TOKEN');
   db.prepare(`
-    UPDATE users SET email_verified_at = ?, verification_token = NULL, updated_at = ? WHERE id = ?
+    UPDATE users SET email_verified_at = ?, verification_token = NULL, verification_expires_at = NULL, updated_at = ? WHERE id = ?
   `).run(now(), now(), row.id);
   audit(row.id, 'auth.email_verified', 'user', row.id, {});
   notify(row.id, 'account', 'Email berhasil diverifikasi', 'Akunmu siap digunakan. Claim 2 credit gratis dari Credit Wallet.', '/app/wallet');
@@ -459,6 +472,9 @@ export function invalidateAllSessions(userId) {
 }
 
 export function setSession(res, user) {
+  if (!user?.emailVerified) {
+    throw new HttpError(403, 'Verifikasi email sebelum membuat sesi.', 'EMAIL_NOT_VERIFIED');
+  }
   const csrfToken = randomToken(24);
   const row = db.prepare('SELECT session_version FROM users WHERE id = ?').get(user.id);
   const token = jwt.sign(
@@ -491,7 +507,7 @@ export function getSession(req) {
   try {
     const payload = jwt.verify(req.cookies?.[COOKIE_NAME] || '', config.jwtSecret);
     const row = db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(payload.sub);
-    if (!row || Number(payload.sv || 1) !== Number(row.session_version || 1)) return null;
+    if (!row || !row.email_verified_at || Number(payload.sv || 1) !== Number(row.session_version || 1)) return null;
     return { user: toUser(row), csrfToken: payload.csrf };
   } catch {
     return null;

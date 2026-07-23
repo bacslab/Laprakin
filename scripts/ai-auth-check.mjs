@@ -8,6 +8,8 @@ process.env.AI_MAX_REQUESTS_PER_HOUR = '5';
 process.env.GOOGLE_OAUTH_CLIENT_ID = '123456789-test.apps.googleusercontent.com';
 process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'test-client-secret';
 process.env.GOOGLE_OAUTH_REDIRECT_URI = 'http://localhost:4000/api/auth/google/callback';
+process.env.MANUAL_EMAIL_AUTH_ONLY = 'false';
+process.env.GOOGLE_OAUTH_REQUIRED = 'true';
 
 const requests = [];
 globalThis.fetch = async (url, options = {}) => {
