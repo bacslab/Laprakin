@@ -718,7 +718,20 @@ function securityHeaders(req, res, next) {
   res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'");
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "script-src 'self' https://*.midtrans.com https://*.veritrans.co.id https://*.mixpanel.com https://*.google-analytics.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://*.cloudfront.net https://*.midtrans.com https://*.veritrans.co.id https://*.mixpanel.com https://*.google-analytics.com",
+    "media-src 'self' blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://*.midtrans.com https://*.veritrans.co.id https://*.mixpanel.com https://*.google-analytics.com",
+    "frame-src https://*.midtrans.com https://*.veritrans.co.id",
+  ].join('; '));
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
@@ -1150,7 +1163,7 @@ app.get('/api/meta', (_req, res) => {
   });
 });
 
-app.get('/api/auth/google/start', (req, res, next) => {
+app.get('/api/auth/google/start', authLimiter, (req, res, next) => {
   try {
     const redirectPath = String(req.query.next || '/app');
     const { state, url } = createGoogleAuthorizationState(redirectPath);
@@ -1159,21 +1172,31 @@ app.get('/api/auth/google/start', (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-app.get('/api/auth/google/callback', asyncHandler(async (req, res) => {
+app.get('/api/auth/google/callback', async (req, res) => {
   res.clearCookie('laprakin_google_state', { httpOnly: true, sameSite: 'lax', secure: config.isProd, path: '/' });
   if (req.query.error) return res.redirect(`${config.appUrl}/auth?google=cancelled`);
-  const state = String(req.query.state || '');
-  const code = String(req.query.code || '');
-  const cookieState = String(req.cookies?.laprakin_google_state || '');
-  if (!code || !state || !cookieState || state !== cookieState) {
-    throw new HttpError(400, 'Sesi masuk Google tidak valid. Coba lagi.', 'GOOGLE_STATE_INVALID');
+  try {
+    const state = String(req.query.state || '');
+    const code = String(req.query.code || '');
+    const cookieState = String(req.cookies?.laprakin_google_state || '');
+    if (!code || !state || !cookieState || state !== cookieState) {
+      throw new HttpError(400, 'Sesi masuk Google tidak valid. Coba lagi.', 'GOOGLE_STATE_INVALID');
+    }
+    const completed = await finishGoogleAuthorization({ state, code });
+    const googleDeviceId = observeDevice(req, completed.user.id);
+    evaluateSharedDeviceRisk(googleDeviceId, completed.user.id);
+    try { claimWelcomeCredits(completed.user.id, googleDeviceId); } catch { /* akun lama atau shared-device review tidak boleh memblokir login */ }
+    setSession(res, completed.user);
+    return res.redirect(`${config.appUrl}${completed.redirectPath.startsWith('/app') ? completed.redirectPath : '/app'}?welcome=google`);
+  } catch (error) {
+    console.error('[google-auth]', {
+      requestId: req.requestId,
+      code: error?.code || 'GOOGLE_LOGIN_FAILED',
+      status: Number(error?.status || 500),
+    });
+    return res.redirect(`${config.appUrl}/auth?google=failed`);
   }
-  const completed = await finishGoogleAuthorization({ state, code });
-  const googleDeviceId = observeDevice(req, completed.user.id);
-  evaluateSharedDeviceRisk(googleDeviceId, completed.user.id);
-  setSession(res, completed.user);
-  return res.redirect(`${config.appUrl}${completed.redirectPath.startsWith('/app') ? completed.redirectPath : '/app'}?welcome=google`);
-}));
+});
 
 app.post('/api/auth/register', authLimiter, asyncHandler(async (req, res) => {
   const input = registerSchema.parse(req.body || {});

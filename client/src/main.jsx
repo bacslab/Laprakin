@@ -624,10 +624,12 @@ function formatBytes(value = 0) {
 function formatDate(value) { const locale = document.documentElement.lang === 'en' ? 'en-US' : 'id-ID'; return value ? new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value)) : '—'; }
 
 function AppProvider({ children }) {
+  const location = useLocation();
   const [session, setSession] = useState({ loading: true, user: null, wallet: null });
   const [prefs, setPrefs] = useState(readPrefs);
   const [notice, setNotice] = useState(null);
   const [dialog, setDialog] = useState(null);
+  const sessionChecked = useRef(false);
   const refreshSession = async () => {
     try {
       const result = await api('/auth/me', { includeCsrf: false });
@@ -649,7 +651,15 @@ function AppProvider({ children }) {
       return null;
     });
   }, []);
-  useEffect(() => { refreshSession(); }, []);
+  useEffect(() => {
+    if (sessionChecked.current) return;
+    if (location.pathname === '/privacy' || location.pathname === '/terms') {
+      setSession({ loading: false, user: null, wallet: null });
+      return;
+    }
+    sessionChecked.current = true;
+    refreshSession();
+  }, [location.pathname]);
   useEffect(() => { localStorage.setItem('laprakin-preferences', JSON.stringify(prefs)); }, [prefs]);
   useEffect(() => {
     if (!notice) return undefined;
@@ -662,7 +672,7 @@ function AppProvider({ children }) {
 
 function App() {
   const location = useLocation();
-  return <AppErrorBoundary resetKey={location.pathname}><AppProvider><I18nRuntime><div className="route-transition"><Routes><Route path="/" element={<Landing />} /><Route path="/auth" element={<AuthPage />} /><Route path="/pricing" element={<PublicPricingPage />} /><Route path="/billing" element={<PricingRedirect />} /><Route path="/app/billing" element={<PricingRedirect />} /><Route path="/admin/*" element={<ProtectedAdmin />} /><Route path="/app/*" element={<ProtectedApp />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></div></I18nRuntime></AppProvider></AppErrorBoundary>;
+  return <AppErrorBoundary resetKey={location.pathname}><AppProvider><I18nRuntime><div className="route-transition"><Routes><Route path="/" element={<Landing />} /><Route path="/auth" element={<AuthPage />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/pricing" element={<PublicPricingPage />} /><Route path="/billing" element={<PricingRedirect />} /><Route path="/app/billing" element={<PricingRedirect />} /><Route path="/admin/*" element={<ProtectedAdmin />} /><Route path="/app/*" element={<ProtectedApp />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></div></I18nRuntime></AppProvider></AppErrorBoundary>;
 }
 
 function Landing() {
@@ -671,6 +681,55 @@ function Landing() {
   if (loading) return <LoadingScreen />;
   if (user?.emailVerified) return <Navigate to={user.role === 'admin' ? '/admin' : '/app'} replace />;
   return <FigmaLanding navigate={navigate} />;
+}
+
+const legalContent = {
+  privacy: {
+    eyebrow: 'Privasi',
+    title: 'Kebijakan Privasi Laprakin',
+    intro: 'Kebijakan ini menjelaskan data yang diproses saat kamu memakai landing page, login, workspace, AI, penyimpanan dokumen, dan pembayaran Laprakin.',
+    sections: [
+      ['Data yang kami proses', 'Data akun seperti email, nama, metode login, profil akademik yang kamu isi, preferensi workspace, serta metadata keamanan minimum. Isi chat, file, dan dokumen diproses hanya untuk menjalankan fitur yang kamu minta.'],
+      ['Pemrosesan AI', 'Jika izin provider AI eksternal aktif, konteks chat dan bagian lampiran yang relevan dapat dikirim dari server Laprakin ke Google Gemini untuk menghasilkan respons atau draft. API key tidak pernah dikirim ke browser. Kamu dapat mematikan izin ini melalui Settings > Kontrol data.'],
+      ['Login dan layanan pendukung', 'Google memproses autentikasi saat kamu memilih login Google. Midtrans memproses checkout QRIS. Provider email mengirim verifikasi dan reset password. Laprakin menyimpan status yang diperlukan, bukan detail rekening atau instrumen pembayaranmu.'],
+      ['Keamanan dan retensi', 'Sesi memakai cookie HttpOnly dan tindakan sensitif dilindungi CSRF. Token sementara, state OAuth, dan telemetry AI dipangkas otomatis. File yang dihapus masuk masa penghapusan sebelum dibersihkan permanen sesuai kebijakan retensi layanan.'],
+      ['Kendali pengguna', 'Kamu dapat mengunduh ringkasan data, mencabut seluruh sesi, mengubah preferensi AI, menghapus file, dan meminta penghapusan akun melalui workspace. Untuk pertanyaan privasi, gunakan menu Bantuan setelah masuk.'],
+      ['Integritas akademik', 'Laprakin membantu menyusun dan meninjau bahan, bukan membuat bukti, data praktikum, hasil eksperimen, atau sumber palsu. Kamu tetap bertanggung jawab memeriksa dokumen sebelum digunakan atau dikumpulkan.'],
+    ],
+  },
+  terms: {
+    eyebrow: 'Ketentuan',
+    title: 'Ketentuan Layanan Laprakin',
+    intro: 'Dengan membuat akun atau menggunakan Laprakin, kamu menyetujui ketentuan penggunaan layanan berikut.',
+    sections: [
+      ['Penggunaan layanan', 'Gunakan Laprakin untuk membantu mengelola bahan, percakapan, draft, revisi, dan export tugas akademik yang sah. Kamu wajib memberikan informasi yang benar dan menjaga keamanan akunmu.'],
+      ['Larangan', 'Dilarang memakai layanan untuk memalsukan bukti, data, screenshot, hasil praktikum, identitas, atau sumber; mengunggah materi tanpa hak; mencoba mengakses akun lain; menyalahgunakan sistem; atau mengganggu ketersediaan layanan.'],
+      ['Output AI', 'Respons dan draft AI bersifat bantuan kerja, dapat keliru, dan bukan pengganti penilaian akademik atau profesional. Kamu wajib meninjau fakta, angka, kutipan, struktur, serta kesesuaian dengan instruksi dosen sebelum menggunakannya.'],
+      ['File dan hak penggunaan', 'Kamu mempertahankan hak atas bahanmu dan menyatakan memiliki izin untuk mengunggah serta memprosesnya. Kamu memberi Laprakin izin terbatas untuk menyimpan dan memproses bahan hanya demi menyediakan fitur yang diminta.'],
+      ['Plan dan pembayaran', 'Harga, credit, masa aktif, dan fitur plan ditampilkan sebelum checkout. Pembayaran QRIS diproses Midtrans. Aktivasi mengikuti status pembayaran yang diverifikasi server; refund atau sengketa ditinjau berdasarkan status transaksi dan aturan yang berlaku.'],
+      ['Ketersediaan dan perubahan', 'Laprakin masih dalam tahap beta. Kami dapat memperbaiki, membatasi, atau menghentikan fitur demi keamanan, kepatuhan, dan keandalan. Perubahan material pada ketentuan akan diinformasikan melalui layanan.'],
+      ['Penangguhan akun', 'Akun dapat dibatasi bila terdapat penyalahgunaan, pelanggaran ketentuan, risiko keamanan, atau kewajiban hukum. Kami berupaya memberikan penjelasan dan jalur penyelesaian bila memungkinkan.'],
+    ],
+  },
+};
+
+function LegalPage({ type }) {
+  const { prefs } = useApp();
+  const theme = useResolvedTheme(prefs?.theme || 'system');
+  const content = legalContent[type] || legalContent.privacy;
+  return <div className={`legal-page theme-${theme}`}>
+    <header className="legal-topbar">
+      <Link to="/" className="legal-brand"><BrandMark alt="" /><b>laprakin</b><small>BETA</small></Link>
+      <Link to="/" className="legal-home-link"><ArrowLeft size={14}/>Beranda</Link>
+    </header>
+    <main className="legal-shell">
+      <article className="legal-document">
+        <header><span>{content.eyebrow}</span><h1>{content.title}</h1><p>{content.intro}</p><small>Berlaku sejak 23 Juli 2026</small></header>
+        <div className="legal-sections">{content.sections.map(([title, body], index) => <section key={title}><span>{String(index + 1).padStart(2, '0')}</span><div><h2>{title}</h2><p>{body}</p></div></section>)}</div>
+        <footer><p>Dokumen terkait:</p>{type === 'privacy' ? <Link to="/terms">Ketentuan Layanan</Link> : <Link to="/privacy">Kebijakan Privasi</Link>}</footer>
+      </article>
+    </main>
+  </div>;
 }
 
 function TutorialVideo({ media = {}, copy = {} }) {
@@ -731,12 +790,17 @@ function AuthPage() {
   const verifyToken = query.get('verify') || '';
   const resetToken = query.get('reset') || '';
   const requestedNext = query.get('next') || '';
+  const googleStatus = query.get('google') || '';
   const safeNext = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '';
   const destination = safeNext || (user?.role === 'admin' ? '/admin' : '/app');
   const [mode, setMode] = useState(resetToken ? 'reset' : 'login');
   const [form, setForm] = useState({ email: '', password: '', newPassword: '', referralCode: '' });
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(googleStatus === 'cancelled'
+    ? 'Masuk dengan Google dibatalkan.'
+    : googleStatus === 'failed'
+      ? 'Masuk dengan Google belum berhasil. Coba lagi.'
+      : '');
   const [success, setSuccess] = useState('');
   const [devToken, setDevToken] = useState('');
   const [googleEnabled, setGoogleEnabled] = useState(false);
@@ -791,7 +855,7 @@ function AuthPage() {
           {formModes && <span>File tetap privat di dalam akunmu.</span>}
         </div>
       </section>
-      <p className="auth-legal">Dengan melanjutkan, kamu menyetujui ketentuan dan kebijakan privasi Laprakin.</p>
+      <p className="auth-legal">Dengan melanjutkan, kamu menyetujui <Link to="/terms">Ketentuan Layanan</Link> dan <Link to="/privacy">Kebijakan Privasi</Link> Laprakin.</p>
     </main>
   </div>;
 }
@@ -968,18 +1032,7 @@ function PublicPricingPage() {
       }
       await updateOrder(payload.order);
       window.sessionStorage.setItem('laprakin:active-payment-order', payload.orderId);
-      const snap = await loadMidtransSnap(payload);
-      const refreshAfterCallback = () => refreshOrder(payload.orderId, true);
-      if (snap && payload.snapToken) {
-        snap.pay(payload.snapToken, {
-          onSuccess: refreshAfterCallback,
-          onPending: refreshAfterCallback,
-          onError: () => setError('Pembayaran QRIS belum berhasil. Periksa status order atau coba lagi.'),
-          onClose: () => setNotice('Checkout ditutup. Order tetap menunggu selama QRIS belum kedaluwarsa.'),
-        });
-      } else if (payload.checkoutUrl) {
-        window.location.assign(payload.checkoutUrl);
-      } else {
+      if (!redirectToMidtransCheckout(payload.checkoutUrl)) {
         throw new Error('Checkout QRIS belum tersedia. Coba lagi beberapa saat.');
       }
     } catch (err) {
@@ -1541,24 +1594,17 @@ function BillingSettingsPane({ onOpenBilling }) {
   </div>;
 }
 
-function loadMidtransSnap({ scriptUrl, clientKey }) {
-  if (window.snap) return Promise.resolve(window.snap);
-  if (!scriptUrl || !clientKey) return Promise.resolve(null);
-  const existing = document.querySelector('script[data-laprakin-midtrans="true"]');
-  if (existing) return new Promise((resolve, reject) => {
-    existing.addEventListener('load', () => resolve(window.snap || null), { once: true });
-    existing.addEventListener('error', () => reject(new Error('Checkout payment belum dapat dimuat.')), { once: true });
-  });
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = scriptUrl;
-    script.async = true;
-    script.dataset.clientKey = clientKey;
-    script.dataset.laprakinMidtrans = 'true';
-    script.onload = () => resolve(window.snap || null);
-    script.onerror = () => reject(new Error('Checkout payment belum dapat dimuat.'));
-    document.body.appendChild(script);
-  });
+function redirectToMidtransCheckout(checkoutUrl) {
+  if (!checkoutUrl) return false;
+  try {
+    const target = new URL(checkoutUrl);
+    const allowedHosts = new Set(['app.midtrans.com', 'app.sandbox.midtrans.com']);
+    if (target.protocol !== 'https:' || !allowedHosts.has(target.hostname)) return false;
+    window.location.assign(target.href);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function BillingPage() {
@@ -1692,18 +1738,7 @@ function BillingPage() {
       }
       await updateOrder(payload.order);
       window.sessionStorage.setItem('laprakin:active-payment-order', payload.orderId);
-      const snap = await loadMidtransSnap(payload);
-      const refreshAfterCallback = () => getOrder(payload.orderId, true);
-      if (snap && payload.snapToken) {
-        snap.pay(payload.snapToken, {
-          onSuccess: refreshAfterCallback,
-          onPending: refreshAfterCallback,
-          onError: () => setError('Pembayaran QRIS belum berhasil. Periksa status order atau coba lagi.'),
-          onClose: () => setNotice('Checkout ditutup. Order tetap menunggu selama QRIS belum kedaluwarsa.'),
-        });
-      } else if (payload.checkoutUrl) {
-        window.location.assign(payload.checkoutUrl);
-      } else {
+      if (!redirectToMidtransCheckout(payload.checkoutUrl)) {
         throw new Error('Checkout QRIS belum tersedia. Coba lagi beberapa saat.');
       }
     } catch (err) {
@@ -1756,6 +1791,7 @@ function LegacySettingsModal({ onClose, onSaved, onOpenBilling, prefs, setPrefs,
   const updatePrefs = (patch) => setPrefs((value) => ({ ...value, ...patch }));
   const saveAcademic = async () => { setBusy(true); try { await api('/profile', { method: 'PUT', body: { departmentKey: form.departmentKey, studyProgramKey: form.studyProgramKey } }); await onSaved(); setNotice('Jurusan dan prodi aktif disimpan.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   const changePassword = async (event) => { event.preventDefault(); setBusy(true); try { const data = await api('/auth/password', { method: 'PUT', body: security }); setCsrfToken(data.csrfToken); setSecurity({ currentPassword: '', newPassword: '' }); setNotice('Kata sandi diperbarui. Sesi perangkat lain berakhir.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
+  const requestGooglePassword = async () => { setBusy(true); try { await api('/auth/request-password-reset', { method: 'POST', body: { email: user.email }, includeCsrf: false }); setNotice('Link untuk membuat kata sandi sudah dikirim ke email akunmu.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   const logoutAll = async () => { const confirmed = await showDialog({ kind: 'confirm', title: 'Keluar dari semua perangkat?', message: 'Sesi di perangkat lain akan diakhiri. Perangkat ini tetap dapat melanjutkan setelah refresh.', confirmLabel: 'Akhiri sesi' }); if (!confirmed) return; setBusy(true); try { await api('/auth/logout-all', { method: 'POST' }); clearCsrfToken(); await refreshSession(); setNotice('Semua sesi sudah diakhiri.'); onClose(); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   const exportData = async () => { try { await download('/privacy/data-export', 'laprakin-data.json'); setNotice('Ringkasan data berhasil diunduh.'); } catch (err) { setNotice(err.message); } };
   const deleteAccount = async () => { if (deleteConfirm !== user.email) return setNotice('Masukkan email akun dengan tepat untuk melanjutkan.'); setBusy(true); try { await api('/me', { method: 'DELETE', body: { confirmation: deleteConfirm } }); clearCsrfToken(); await refreshSession(); onClose(); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
@@ -1854,7 +1890,13 @@ function SettingsModal({ onClose, onSaved, onOpenBilling, prefs, setPrefs, initi
         {tab === 'data' && <div className="settings-pane"><div className="settings-trust-card"><ShieldCheck size={19}/><div><b>Privat secara default</b><p>Isi chat dan file tidak tampil di dashboard operasional. Akses hanya dilakukan untuk proses yang kamu minta.</p></div></div><section className="settings-group"><Toggle checked={Boolean(prefs.allowExternalAi)} onChange={(checked) => updatePrefs({ allowExternalAi: checked })} title="Izinkan provider AI eksternal" description="Aktif hanya saat provider tersedia dan dibutuhkan untuk permintaanmu." /><Row title="Salinan data" description="Unduh profil, preferensi, dan ringkasan aktivitas akun."><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>Unduh data</Button></Row></section></div>}
         {tab === 'storage' && <div className="settings-pane">{storage ? <><div className="storage-overview"><div><span>Terpakai</span><b>{formatBytes(storage.usedBytes)}</b><small>dari {formatBytes(storage.limitBytes)}</small></div><strong>{storagePercentage}%</strong></div><div className="storage-meter"><i><em style={{ width: `${storagePercentage}%` }} /></i></div><div className="storage-cards"><span><FolderOpen size={17}/><b>{storage.tier === 'pro' ? 'Pro' : storage.tier === 'subscription' ? 'Subscription' : storage.tier === 'paid' ? 'Satuan' : 'Gratis'}</b><small>{storage.retentionHint}</small></span><span><FileText size={17}/><b>Yang dihitung</b><small>Modul, bukti, template, data, dan export DOCX.</small></span></div></> : <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat ringkasan penyimpanan...</div>}<p className="settings-footnote">Chat teks dan preferensi tidak dihitung sebagai penyimpanan file.</p></div>}
         {tab === 'safety' && <div className="settings-pane"><div className="safety-principles"><article><ShieldCheck size={18}/><div><b>Bukti tetap asli</b><p>Laprakin tidak membuat screenshot, data, atau hasil praktikum palsu.</p></div></article><article><FileText size={18}/><div><b>Draft tetap perlu ditinjau</b><p>Kamu memegang keputusan akhir sebelum dokumen diekspor atau dikumpulkan.</p></div></article><article><Eye size={18}/><div><b>Review secara kontekstual</b><p>Sinyal tidak biasa ditinjau sebagai metadata minimum, bukan isi pribadi.</p></div></article></div><div className="settings-info-banner"><CircleAlert size={16}/><p>Satu sinyal tidak menyebabkan pemblokiran otomatis. Jika ada batasan, Laprakin menjelaskan tindakan yang perlu dilakukan.</p></div></div>}
-        {tab === 'security' && <div className="settings-pane"><form onSubmit={changePassword} className="security-form settings-group"><div className="settings-group-heading"><b>Ubah kata sandi</b><small>Minimal 12 karakter dan berbeda dari sebelumnya.</small></div><label><span>Kata sandi saat ini</span><input required type="password" value={security.currentPassword} onChange={(event) => setSecurity({ ...security, currentPassword: event.target.value })} /></label><label><span>Kata sandi baru</span><input required minLength="12" maxLength="64" type="password" value={security.newPassword} onChange={(event) => setSecurity({ ...security, newPassword: event.target.value })} /></label><Button type="submit" disabled={busy}><LockKeyhole size={14}/>Ubah kata sandi</Button></form><section className="settings-group"><Row title="Keluar dari semua perangkat" description="Gunakan setelah login dari perangkat umum."><Button variant="secondary" onClick={logoutAll} disabled={busy}>Akhiri semua sesi</Button></Row></section></div>}
+        {tab === 'security' && <div className="settings-pane">
+          {String(user.authProvider || 'password').includes('google') && <section className="settings-group"><Row title="Google terhubung" description="Akun Google ini dapat dipakai untuk masuk tanpa kata sandi."><span className="settings-connected-status"><CheckCircle2 size={14}/>Aktif</span></Row></section>}
+          {user.authProvider === 'google'
+            ? <section className="settings-group"><div className="settings-group-heading"><b>Buat kata sandi Laprakin</b><small>Opsional. Link aman akan dikirim ke email Google yang terhubung.</small></div><Button type="button" variant="secondary" onClick={requestGooglePassword} disabled={busy}><Mail size={14}/>Kirim link buat kata sandi</Button></section>
+            : <form onSubmit={changePassword} className="security-form settings-group"><div className="settings-group-heading"><b>Ubah kata sandi</b><small>Minimal 12 karakter dan berbeda dari sebelumnya.</small></div><label><span>Kata sandi saat ini</span><input required type="password" value={security.currentPassword} onChange={(event) => setSecurity({ ...security, currentPassword: event.target.value })} /></label><label><span>Kata sandi baru</span><input required minLength="12" maxLength="64" type="password" value={security.newPassword} onChange={(event) => setSecurity({ ...security, newPassword: event.target.value })} /></label><Button type="submit" disabled={busy}><LockKeyhole size={14}/>Ubah kata sandi</Button></form>}
+          <section className="settings-group"><Row title="Keluar dari semua perangkat" description="Gunakan setelah login dari perangkat umum."><Button variant="secondary" onClick={logoutAll} disabled={busy}>Akhiri semua sesi</Button></Row></section>
+        </div>}
         {tab === 'academic' && <div className="settings-pane"><section className="settings-group academic-settings-form"><label><span>Jurusan</span><CustomSelect value={form.departmentKey} onChange={(value) => setForm({ departmentKey: value, studyProgramKey: '' })} options={[{ value: '', label: 'Pilih jurusan' }, ...departments.map((item) => ({ value: item.key, label: item.label }))]} /></label><label><span>Program studi aktif</span><CustomSelect value={form.studyProgramKey} onChange={(value) => setForm({ ...form, studyProgramKey: value })} options={[{ value: '', label: 'Pilih program studi' }, ...programs.filter((item) => item.department === form.departmentKey).map((item) => ({ value: item.key, label: item.label }))]} /></label><Button onClick={saveAcademic} disabled={busy}><Save size={14}/>Simpan profil akademik</Button></section><section className="settings-danger-zone"><div><b>Hapus akun</b><p>Unduh data yang diperlukan terlebih dahulu. Tindakan ini tidak dapat dibatalkan.</p></div><input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} placeholder={user.email} /><Button variant="danger" onClick={deleteAccount} disabled={busy || deleteConfirm !== user.email}>Hapus akun</Button></section></div>}
         {tab === 'keyboard' && <div className="settings-pane"><section className="settings-group"><Toggle checked={prefs.enterToSend !== false} onChange={(checked) => updatePrefs({ enterToSend: checked })} title="Enter untuk kirim" description="Gunakan Shift + Enter untuk membuat baris baru." /><Toggle checked={prefs.reducedMotion} onChange={(checked) => updatePrefs({ reducedMotion: checked })} title="Kurangi animasi" description="Pertahankan feedback penting dengan gerakan yang lebih singkat." /></section></div>}
       </div>

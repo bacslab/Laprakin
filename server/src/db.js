@@ -473,6 +473,7 @@ export function toUser(row) {
     departmentKey: row.department_key,
     studyProgramKey: row.study_program_key,
     role: row.role,
+    authProvider: row.auth_provider || 'password',
     emailVerified: Boolean(row.email_verified_at),
     createdAt: row.created_at,
   };

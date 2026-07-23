@@ -6,10 +6,10 @@ if (!config.geminiKey) throw new Error('GEMINI_API_KEY belum tersedia.');
 
 const startedAt = new Date().toISOString();
 const scenarios = [
-  { name: 'basic', purpose: 'chat', mode: 'basic' },
-  { name: 'thinking', purpose: 'chat', mode: 'thinking' },
-  { name: 'xtrathink', purpose: 'chat', mode: 'xtrathink' },
-  { name: 'support', purpose: 'support', mode: 'basic' },
+  { name: 'basic', purpose: 'chat', mode: 'basic', maxOutputTokens: 900 },
+  { name: 'thinking', purpose: 'chat', mode: 'thinking', maxOutputTokens: 1600 },
+  { name: 'xtrathink', purpose: 'chat', mode: 'xtrathink', maxOutputTokens: 2600 },
+  { name: 'support', purpose: 'support', mode: 'basic', maxOutputTokens: 180 },
 ];
 
 try {
@@ -19,7 +19,7 @@ try {
       purpose: scenario.purpose,
       mode: scenario.mode,
       contents: [{ role: 'user', parts: [{ text: 'Balas hanya dengan kata READY.' }] }],
-      maxOutputTokens: 160,
+      maxOutputTokens: scenario.maxOutputTokens,
     });
     if (!result.text.toUpperCase().includes('READY')) throw new Error(`${scenario.name} tidak memenuhi contract readiness.`);
     checks.push({ name: scenario.name, model: result.model, ok: true });
@@ -29,7 +29,7 @@ try {
     purpose: 'document',
     mode: 'thinking',
     contents: [{ role: 'user', parts: [{ text: 'Buat satu status readiness.' }] }],
-    maxOutputTokens: 512,
+    maxOutputTokens: 5000,
     responseMimeType: 'application/json',
     responseJsonSchema: {
       type: 'object',

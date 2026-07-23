@@ -21,6 +21,7 @@ RUN apt-get update \
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server ./server
+COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/client/dist ./client/dist
 
 RUN mkdir -p /app/server/data /app/server/uploads /app/server/public-media \

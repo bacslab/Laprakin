@@ -11,6 +11,19 @@
 7. **SMTP production**, **Midtrans production**, persistent database/storage, backup terenkripsi, monitoring error, uptime check, dan alert biaya.
 8. **Data legal**: Privacy Policy harus menyebut isi chat/file yang dikirim ke provider AI ketika opsi external AI aktif, tujuan pemrosesan, retensi, dan cara penghapusan.
 
+## Checklist console untuk `laprakin.app`
+
+- Google OAuth application type: **Web application**.
+- Authorized JavaScript origin: `https://laprakin.app`.
+- Authorized redirect URI: `https://laprakin.app/api/auth/google/callback` tanpa trailing slash.
+- OAuth consent screen homepage: `https://laprakin.app/`.
+- Privacy Policy: `https://laprakin.app/privacy`.
+- Terms of Service: `https://laprakin.app/terms`.
+- Authorized domain: `laprakin.app`, lalu verifikasi kepemilikan domain melalui Google Search Console.
+- Selama app berstatus Testing, tambahkan akun Google penguji. Sebelum public launch, publish ke Production dan selesaikan brand verification bila diminta Google.
+- Batasi API key hanya untuk **Generative Language API / Gemini API**. Tambahkan pembatasan IP hanya setelah outbound IP Azure dipastikan statis.
+- Atur project spend cap dan usage alert di Google AI Studio. Limit internal Laprakin tidak menggantikan limit billing provider.
+
 ## Perilaku yang sudah diimplementasikan
 
 - Workspace chat memanggil Gemini sungguhan; respons regex lama telah dihapus.
@@ -20,6 +33,9 @@
 - Lampiran dipotong berdasarkan batas karakter/ukuran. Prompt sistem melarang fabrikasi data dan memperlakukan isi file sebagai input tidak tepercaya.
 - Dokumen memakai structured JSON output dan tetap divalidasi sebelum disimpan.
 - Google login memakai Authorization Code, state, nonce, PKCE S256, one-time state, signature RS256, cache JWKS, audience/issuer/expiry/nonce/authorized-party checks, serta timeout jaringan.
+- Akun Google-only dapat membuat kata sandi melalui link email tanpa memutus koneksi Google.
+- State OAuth, token reset yang kedaluwarsa, dan telemetry AI lama dibersihkan otomatis oleh retention worker.
+- Homepage, Privacy Policy, dan Terms of Service tersedia sebagai route publik pada domain production.
 - Production gagal start bila credential wajib belum lengkap atau model memakai alias preview/latest/deprecated.
 
 ## Environment production
@@ -30,6 +46,9 @@ Gunakan `server/.env.production.example` sebagai template production dan `docs/C
 NODE_ENV=production
 AI_REQUIRED=true
 GEMINI_API_KEY=...
+GEMINI_MODEL_XTRATHINK=gemini-3.6-flash
+AI_MAX_REQUESTS_PER_DAY=5000
+MANUAL_EMAIL_AUTH_ONLY=false
 GOOGLE_OAUTH_REQUIRED=true
 GOOGLE_OAUTH_CLIENT_ID=...
 GOOGLE_OAUTH_CLIENT_SECRET=...

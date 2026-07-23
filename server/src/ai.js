@@ -34,12 +34,33 @@ export function aiModelFor(mode = 'basic', purpose = 'chat') {
   return config.geminiModelBasic;
 }
 
+export function aiThinkingConfigFor({ model, mode = 'basic', purpose = 'chat' }) {
+  const level = purpose === 'document' || mode === 'xtrathink'
+    ? 'high'
+    : mode === 'thinking'
+      ? 'medium'
+      : 'minimal';
+  if (/^gemini-3(?:\.|$)/i.test(String(model))) return { thinkingLevel: level };
+  if (/^gemini-2\.5(?:-|$)/i.test(String(model))) {
+    return { thinkingBudget: level === 'minimal' ? 0 : level === 'medium' ? 2048 : -1 };
+  }
+  return null;
+}
+
 function reserveUsage({ userId, purpose, mode, model }) {
   const id = nanoid();
   let transactionOpen = false;
   try {
     db.exec('BEGIN IMMEDIATE');
     transactionOpen = true;
+    const dailySince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const dailyCount = Number(db.prepare(`
+      SELECT COUNT(*) AS count FROM ai_usage_events
+      WHERE created_at >= ?
+    `).get(dailySince)?.count || 0);
+    if (dailyCount >= config.aiMaxRequestsPerDay) {
+      throw new HttpError(429, 'Kapasitas AI harian sedang penuh. Coba lagi nanti.', 'AI_DAILY_LIMIT');
+    }
     if (userId) {
       const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       const count = Number(db.prepare(`
@@ -178,6 +199,8 @@ export async function generateAiContent({
   const model = aiModelFor(mode, purpose);
   const usageEventId = reserveUsage({ userId, purpose, mode, model });
   const generationConfig = { maxOutputTokens };
+  const thinkingConfig = aiThinkingConfigFor({ model, mode, purpose });
+  if (thinkingConfig) generationConfig.thinkingConfig = thinkingConfig;
   if (responseJsonSchema) {
     generationConfig.responseFormat = {
       text: {

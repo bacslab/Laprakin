@@ -687,7 +687,7 @@ export default function FigmaLanding({ navigate }) {
         <nav className="fg-footer-links" aria-label="Navigasi footer" data-aos="fade-left">
           <div><b>Produk</b><button type="button" onClick={() => goTo('cara-pakai')}>Cara pakai</button><button type="button" onClick={() => goTo('fitur')}>Fitur</button><button type="button" onClick={() => navigate('/pricing')}>Harga</button></div>
           <div><b>Akses</b><button type="button" onClick={() => navigate('/auth')}>Workspace</button><button type="button" onClick={() => navigate('/auth')}>Masuk</button><button type="button" onClick={() => goTo('faq')}>FAQ</button></div>
-          <div><b>Laprakin</b><span>Privat secara default</span><span>Untuk tugas akademik</span><span>Versi beta</span></div>
+          <div><b>Laprakin</b><button type="button" onClick={() => navigate('/privacy')}>Privasi</button><button type="button" onClick={() => navigate('/terms')}>Ketentuan</button><span>Versi beta</span></div>
         </nav>
         <div className="fg-footer-meta" data-aos="fade-up"><span>© 2026 Laprakin</span><span>Belajar tetap utama. Laporan tinggal dirapikan.</span></div>
       </div>

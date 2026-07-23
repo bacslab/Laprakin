@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 process.env.NODE_ENV = 'development';
+const testRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'laprakin-ai-auth-'));
+process.env.LAPRAKIN_DATA_DIR = path.join(testRoot, 'data');
 process.env.GEMINI_API_KEY = 'server-only-test-key';
 process.env.AI_MAX_RETRIES = '2';
 process.env.AI_MAX_REQUESTS_PER_HOUR = '5';
+process.env.AI_MAX_REQUESTS_PER_DAY = '100';
 process.env.GOOGLE_OAUTH_CLIENT_ID = '123456789-test.apps.googleusercontent.com';
 process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'test-client-secret';
 process.env.GOOGLE_OAUTH_REDIRECT_URI = 'http://localhost:4000/api/auth/google/callback';
@@ -57,7 +63,12 @@ globalThis.fetch = async (url, options = {}) => {
 };
 
 const purpose = `contract-${crypto.randomBytes(6).toString('hex')}`;
-const [{ generateAiContent }, { db }, { createGoogleAuthorizationState }] = await Promise.all([
+const [{ generateAiContent, aiThinkingConfigFor }, { db }, {
+  cleanupExpiredResources,
+  createGoogleAuthorizationState,
+  requestPasswordReset,
+  resetPassword,
+}] = await Promise.all([
   import('../server/src/ai.js'),
   import('../server/src/db.js'),
   import('../server/src/services.js'),
@@ -76,6 +87,10 @@ assert.equal(generationRequests[1].options.headers['x-goog-api-key'], 'server-on
 const standardBody = JSON.parse(generationRequests[1].options.body);
 assert.equal(standardBody.safetySettings.length, 4);
 assert.ok(standardBody.safetySettings.every((setting) => setting.threshold === 'BLOCK_MEDIUM_AND_ABOVE'));
+assert.deepEqual(standardBody.generationConfig.thinkingConfig, { thinkingLevel: 'minimal' });
+assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.6-flash', mode: 'thinking', purpose: 'chat' }), { thinkingLevel: 'medium' });
+assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.6-flash', mode: 'xtrathink', purpose: 'chat' }), { thinkingLevel: 'high' });
+assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.5-flash', mode: 'thinking', purpose: 'document' }), { thinkingLevel: 'high' });
 
 const structured = await generateAiContent({
   purpose: `${purpose}-structured`,
@@ -106,6 +121,25 @@ await assert.rejects(
   (error) => error.code === 'AI_SAFETY_BLOCKED' && error.status === 422,
 );
 
+const dailyPurpose = `daily-${crypto.randomBytes(6).toString('hex')}`;
+const insertDailyUsage = db.prepare(`
+  INSERT INTO ai_usage_events (
+    id, user_id, purpose, mode, provider, model, status, created_at
+  ) VALUES (?, NULL, ?, 'basic', 'gemini', 'contract-model', 'success', ?)
+`);
+for (let index = 0; index < 100; index += 1) {
+  insertDailyUsage.run(`${dailyPurpose}-${index}`, dailyPurpose, new Date().toISOString());
+}
+await assert.rejects(
+  generateAiContent({
+    purpose: `${dailyPurpose}-blocked`,
+    contents: [{ role: 'user', parts: [{ text: 'Tes batas harian.' }] }],
+    maxOutputTokens: 40,
+  }),
+  (error) => error.code === 'AI_DAILY_LIMIT' && error.status === 429,
+);
+db.prepare('DELETE FROM ai_usage_events WHERE purpose = ?').run(dailyPurpose);
+
 const usage = db.prepare('SELECT * FROM ai_usage_events WHERE purpose = ? ORDER BY created_at DESC LIMIT 1').get(purpose);
 assert.equal(usage.status, 'success');
 assert.equal(usage.total_tokens, 18);
@@ -135,6 +169,54 @@ assert.ok(authorizationUrl.searchParams.get('nonce'));
 const oauthState = db.prepare('SELECT * FROM oauth_states ORDER BY created_at DESC LIMIT 1').get();
 assert.equal(oauthState.redirect_path, '/app');
 
+const googleOnlyUserId = `google-password-${crypto.randomBytes(6).toString('hex')}`;
+const googleOnlyEmail = `${googleOnlyUserId}@example.test`;
+db.prepare(`
+  INSERT INTO users (
+    id, email, password_hash, full_name, role, email_verified_at,
+    referral_code, google_sub, auth_provider, created_at, updated_at
+  ) VALUES (?, ?, 'not-a-login-hash', 'Google User', 'student', ?, ?, ?, 'google', ?, ?)
+`).run(
+  googleOnlyUserId,
+  googleOnlyEmail,
+  quotaTimestamp,
+  googleOnlyUserId,
+  `google-sub-${googleOnlyUserId}`,
+  quotaTimestamp,
+  quotaTimestamp,
+);
+const passwordRequest = await requestPasswordReset(googleOnlyEmail);
+assert.ok(passwordRequest.resetToken);
+const googleWithPassword = await resetPassword(passwordRequest.resetToken, 'Production-ready-password-123');
+assert.equal(googleWithPassword.authProvider, 'password+google');
+
+const expiredTimestamp = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString();
+const expiredOauthId = `expired-oauth-${crypto.randomBytes(6).toString('hex')}`;
+const expiredResetId = `expired-reset-${crypto.randomBytes(6).toString('hex')}`;
+const expiredAiUsageId = `expired-ai-${crypto.randomBytes(6).toString('hex')}`;
+db.prepare(`
+  INSERT INTO oauth_states (
+    id, state_hash, nonce, code_verifier, redirect_path, expires_at, created_at
+  ) VALUES (?, ?, 'expired-nonce', 'expired-verifier', '/app', ?, ?)
+`).run(expiredOauthId, `expired-state-${expiredOauthId}`, expiredTimestamp, expiredTimestamp);
+db.prepare(`
+  INSERT INTO password_reset_tokens (
+    id, user_id, token_hash, expires_at, created_at
+  ) VALUES (?, ?, ?, ?, ?)
+`).run(expiredResetId, googleOnlyUserId, `expired-token-${expiredResetId}`, expiredTimestamp, expiredTimestamp);
+db.prepare(`
+  INSERT INTO ai_usage_events (
+    id, user_id, purpose, mode, provider, model, status, created_at
+  ) VALUES (?, NULL, 'expired-contract', 'basic', 'gemini', 'contract-model', 'success', ?)
+`).run(expiredAiUsageId, expiredTimestamp);
+const cleanup = await cleanupExpiredResources();
+assert.ok(cleanup.purgedOauthStates >= 1);
+assert.ok(cleanup.purgedPasswordResetTokens >= 1);
+assert.ok(cleanup.purgedAiUsageEvents >= 1);
+assert.equal(db.prepare('SELECT 1 FROM oauth_states WHERE id = ?').get(expiredOauthId), undefined);
+assert.equal(db.prepare('SELECT 1 FROM password_reset_tokens WHERE id = ?').get(expiredResetId), undefined);
+assert.equal(db.prepare('SELECT 1 FROM ai_usage_events WHERE id = ?').get(expiredAiUsageId), undefined);
+
 const { verifyProductionIntegrations } = await import('../server/src/integrations.js');
 const integrations = await verifyProductionIntegrations();
 assert.equal(integrations.ok, true);
@@ -147,4 +229,10 @@ db.prepare('DELETE FROM ai_usage_events WHERE purpose = ?').run(`${purpose}-safe
 db.prepare('DELETE FROM ai_usage_events WHERE user_id = ?').run(quotaUserId);
 db.prepare('DELETE FROM users WHERE id = ?').run(quotaUserId);
 db.prepare('DELETE FROM oauth_states WHERE id = ?').run(oauthState.id);
+db.prepare('DELETE FROM notifications WHERE user_id = ?').run(googleOnlyUserId);
+db.prepare('DELETE FROM audit_logs WHERE actor_user_id = ?').run(googleOnlyUserId);
+db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(googleOnlyUserId);
+db.prepare('DELETE FROM users WHERE id = ?').run(googleOnlyUserId);
+db.close();
+await fs.rm(testRoot, { recursive: true, force: true });
 console.log('AI/Auth contract passed: retry + secret transport + telemetry + PKCE + redirect allowlist + live readiness contract');

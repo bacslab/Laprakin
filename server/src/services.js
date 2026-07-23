@@ -103,7 +103,9 @@ function safeAppRedirectPath(value = '/app') {
 
 function supportFallback(text) {
   const q = text.toLowerCase();
-  if (/google|masuk|login/.test(q)) return 'Daftar memakai email dan kata sandi, lalu buka link verifikasi yang dikirim ke inbox. Setelah email terverifikasi, kamu dapat masuk ke workspace.';
+  if (/google|masuk|login/.test(q)) return config.googleOauthRequired
+    ? 'Kamu bisa masuk dengan Google atau memakai email dan kata sandi. Login email memerlukan verifikasi inbox terlebih dahulu.'
+    : 'Daftar memakai email dan kata sandi, lalu buka link verifikasi yang dikirim ke inbox. Setelah email terverifikasi, kamu dapat masuk ke workspace.';
   if (/credit|kredit|gratis/.test(q)) return 'Akun yang sudah verifikasi email dapat claim 2 credit gratis dari Credit Wallet. Satu credit dipakai saat menyusun draft final.';
   if (/upload|unggah|file|modul|screenshot|template/.test(q)) return 'Kamu bisa memasukkan modul, bukti praktik, template, dan data pendukung dari chat laprak. Pastikan bukti memang milikmu atau diizinkan untuk dipakai.';
   if (/export|docx|word/.test(q)) return 'Setelah draft dan checklist review siap, gunakan Export DOCX. File Word tetap bisa kamu edit sebelum dikumpulkan.';
@@ -439,7 +441,7 @@ export async function resetPassword(rawToken, password) {
   const passwordHash = await bcrypt.hash(password, 12);
   db.exec('BEGIN');
   try {
-    db.prepare(`UPDATE users SET password_hash = ?, session_version = COALESCE(session_version, 1) + 1, updated_at = ? WHERE id = ?`)
+    db.prepare(`UPDATE users SET password_hash = ?, auth_provider = CASE WHEN auth_provider = 'google' THEN 'password+google' ELSE auth_provider END, session_version = COALESCE(session_version, 1) + 1, updated_at = ? WHERE id = ?`)
       .run(passwordHash, now(), token.user_id);
     db.prepare(`UPDATE password_reset_tokens SET used_at = ? WHERE id = ?`).run(now(), token.id);
     db.exec('COMMIT');
@@ -2314,8 +2316,27 @@ export function documentReadiness(documentId, userId) {
 }
 
 export async function cleanupExpiredResources() {
-  const result = { expiredExports: 0, purgedFiles: 0, purgedDocuments: 0 };
-  const exports = db.prepare(`SELECT * FROM exports WHERE expires_at IS NOT NULL AND expires_at <= ? AND status != 'expired'`).all(now());
+  const currentTime = now();
+  const result = {
+    expiredExports: 0,
+    purgedFiles: 0,
+    purgedDocuments: 0,
+    purgedOauthStates: 0,
+    purgedPasswordResetTokens: 0,
+    purgedAiUsageEvents: 0,
+  };
+  result.purgedOauthStates = Number(db.prepare(`
+    DELETE FROM oauth_states
+    WHERE expires_at <= ? OR (used_at IS NOT NULL AND used_at <= ?)
+  `).run(currentTime, addDays(-1)).changes || 0);
+  result.purgedPasswordResetTokens = Number(db.prepare(`
+    DELETE FROM password_reset_tokens
+    WHERE expires_at <= ? OR (used_at IS NOT NULL AND used_at <= ?)
+  `).run(currentTime, addDays(-1)).changes || 0);
+  result.purgedAiUsageEvents = Number(db.prepare(`
+    DELETE FROM ai_usage_events WHERE created_at <= ?
+  `).run(addDays(-90)).changes || 0);
+  const exports = db.prepare(`SELECT * FROM exports WHERE expires_at IS NOT NULL AND expires_at <= ? AND status != 'expired'`).all(currentTime);
   for (const item of exports) {
     try { await fs.unlink(item.storage_path); } catch { /* File may already have been removed. */ }
     db.prepare("UPDATE exports SET status = 'expired' WHERE id = ?").run(item.id);
