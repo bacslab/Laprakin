@@ -1,4 +1,4 @@
-# Deployment Notes 窶・Laprakin V21 QRIS
+# Deployment Notes — Laprakin V21 QRIS
 
 Dokumen ini untuk **private beta single-instance**. Jangan membuka aplikasi untuk publik sebelum item keamanan, legal, dan operasional di bawah benar-benar ditangani.
 
@@ -135,9 +135,8 @@ Ikuti checklist rinci pada `docs/AI_GOOGLE_PRODUCTION.md`. Production sengaja ga
 ## 8. Penanganan secret dan diagnostik aman
 
 - Jangan menyalin output `docker compose config`, `docker inspect`, `printenv`, atau isi `server/.env` ke chat, issue, log publik, maupun tiket support. Perintah tersebut dapat menampilkan seluruh credential production.
-- Gunakan `npm run verify:production`, `/api/health/ready`, dan panel **Admin 竊・AI & Login** untuk pemeriksaan operasional. Ketiganya hanya menampilkan status dan metadata aman.
+- Gunakan `npm run verify:production`, `/api/health/ready`, dan panel **Admin → AI & Login** untuk pemeriksaan operasional. Ketiganya hanya menampilkan status dan metadata aman.
 - Pastikan `server/.env` dimiliki operator deployment, permission `0600`, tidak masuk image, dan tidak pernah masuk repository.
 - Jika secret sempat tampil, anggap telah bocor: buat credential baru, deploy, verifikasi integrasi, lalu cabut credential lama. Rotasi `JWT_SECRET`, `DEVICE_HMAC_SECRET`, dan `TOKEN_HMAC_SECRET` juga mengakhiri sesi lama.
 - Gemini API key harus dibatasi hanya ke `generativelanguage.googleapis.com`. Resend SMTP memakai key `sending_access`, bukan `full_access`.
 - Google OAuth client secret dan Midtrans Server Key harus dirotasi dari dashboard provider; lakukan deploy dan verifikasi sebelum menonaktifkan secret lama agar downtime minimum.
-

@@ -66,12 +66,12 @@ Pin model stable eksplisit. Jangan memakai alias `latest`, model `preview`, `exp
 4. Dari akun admin, panggil `POST /api/admin/integrations/check` dan pastikan semua model serta OIDC berstatus sehat.
 5. Uji login Google: berhasil, user membatalkan, state salah, callback diulang, dan akun email yang sudah ada.
 6. Uji chat tiap mode, dokumen dengan PDF/DOCX/gambar, provider timeout, 429, dan quota user.
-7. Pantau `GET /api/admin/ai/usage?days=30`. Endpoint hanya mengembalikan jumlah call, token, latency, model, dan error窶杯anpa prompt atau output.
-8. Periksa tabel `ai_usage_events` hanya berisi metadata operasional窶杯idak boleh ada prompt, isi file, atau output AI.
+7. Pantau `GET /api/admin/ai/usage?days=30`. Endpoint hanya mengembalikan jumlah call, token, latency, model, dan error—tanpa prompt atau output.
+8. Periksa tabel `ai_usage_events` hanya berisi metadata operasional—tidak boleh ada prompt, isi file, atau output AI.
 9. Uji backup/restore database, upload, dan public media.
 10. Jalankan DAST pada staging yang identik dengan production dan lakukan review manual otorisasi horizontal untuk setiap resource user.
 
-Tidak ada sistem yang dapat dijamin 窶・00% tidak bisa ditembus窶・ Target production yang benar adalah defense-in-depth, pengujian berulang, patch dependency, monitoring, incident response, dan bukti bahwa kontrol kritis bekerja.
+Tidak ada sistem yang dapat dijamin “100% tidak bisa ditembus”. Target production yang benar adalah defense-in-depth, pengujian berulang, patch dependency, monitoring, incident response, dan bukti bahwa kontrol kritis bekerja.
 
 ## Diagnostik tanpa membocorkan credential
 
@@ -79,4 +79,3 @@ Tidak ada sistem yang dapat dijamin 窶・00% tidak bisa ditembus窶・ Target p
 - Gunakan `/api/health/ready` untuk probe uptime. Jangan memakai `docker compose config`, `docker inspect`, atau `printenv` sebagai output support karena environment production dapat ikut tercetak.
 - Jangan pernah mengirim API key atau client secret melalui screenshot, chat, command output, atau issue tracker.
 - Setelah rotasi, jalankan `npm run test:ai-live`, verifikasi SMTP tanpa mengirim email, dan lakukan satu login Google nyata sebelum mencabut credential lama.
-
