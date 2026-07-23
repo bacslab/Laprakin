@@ -10,6 +10,8 @@ server/.env
 server/.env.*
 !server/.env.example
 !server/.env.production.example
+server/.backup-key
+server/backups/
 
 # Runtime state and user-provided files
 server/data/

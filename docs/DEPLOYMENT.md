@@ -120,6 +120,18 @@ Backup minimal mencakup:
 
 Simpan backup terenkripsi. Jangan menyimpan file laporan atau database user pada repository Git.
 
+Repository menyediakan `ops/backup-laprakin.sh` dan systemd timer untuk snapshot SQLite yang konsisten, upload privat, serta media CMS. Backup dienkripsi AES-256-CBC/PBKDF2 dan disimpan tujuh hari secara default.
+
+```bash
+sudo install -m 0644 ops/laprakin-backup.service /etc/systemd/system/
+sudo install -m 0644 ops/laprakin-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now laprakin-backup.timer
+sudo systemctl start laprakin-backup.service
+```
+
+File key lokal dibuat otomatis sebagai `server/.backup-key` dengan permission `0600`. Salin key tersebut ke password manager/secret vault yang terpisah, lalu sinkronkan archive dari `server/backups/` ke object storage privat. Backup lokal pada disk VM yang sama bukan pengganti backup offsite.
+
 ## 6. QRIS production checklist
 
 - Gunakan `PAYMENTS_MODE=midtrans`, `MIDTRANS_ENVIRONMENT=production`, dan HTTPS publik.
