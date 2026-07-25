@@ -18,7 +18,7 @@ const productionEnv = {
   SMTP_USER: 'smtp-user',
   SMTP_PASS: 'smtp-password',
   AI_REQUIRED: 'true',
-  GEMINI_API_KEY: 'contract-key',
+  GEMINI_API_KEY: 'AIzaProductionContractKey_123456789012345',
   MANUAL_EMAIL_AUTH_ONLY: 'false',
   GOOGLE_OAUTH_REQUIRED: 'true',
   GOOGLE_OAUTH_CLIENT_ID: 'contract.apps.googleusercontent.com',

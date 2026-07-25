@@ -7,7 +7,7 @@ import path from 'node:path';
 process.env.NODE_ENV = 'development';
 const testRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'laprakin-ai-auth-'));
 process.env.LAPRAKIN_DATA_DIR = path.join(testRoot, 'data');
-process.env.GEMINI_API_KEY = 'server-only-test-key';
+process.env.GEMINI_API_KEY = 'AIzaServerOnlyTestKey_12345678901234567890';
 process.env.AI_MAX_RETRIES = '2';
 process.env.AI_MAX_REQUESTS_PER_HOUR = '5';
 process.env.AI_MAX_REQUESTS_PER_DAY = '100';
@@ -47,6 +47,24 @@ globalThis.fetch = async (url, options = {}) => {
   }
   const requestBody = JSON.parse(String(options.body || '{}'));
   const requestText = JSON.stringify(requestBody.contents || []);
+  if (
+    requestText.includes('Trigger document fallback')
+    && String(url).includes('/gemini-3.6-flash:generateContent')
+  ) {
+    return new Response(JSON.stringify({ error: { status: 'RESOURCE_EXHAUSTED' } }), {
+      status: 429,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  if (
+    requestText.includes('Trigger empty document fallback')
+    && String(url).includes('/gemini-3.6-flash:generateContent')
+  ) {
+    return new Response(JSON.stringify({
+      candidates: [{ content: { parts: [] } }],
+      usageMetadata: { promptTokenCount: 11, candidatesTokenCount: 0, totalTokenCount: 11 },
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
   if (requestText.includes('Trigger safety contract')) {
     return new Response(JSON.stringify({
       promptFeedback: { blockReason: 'SAFETY' },
@@ -83,7 +101,7 @@ assert.equal(generated.text, 'Respons provider nyata.');
 const generationRequests = requests.filter((request) => String(request.url).includes(':generateContent'));
 assert.equal(generationRequests.length, 2, '429 harus dicoba ulang satu kali.');
 assert.equal(new URL(generationRequests[1].url).search, '', 'API key tidak boleh berada di query string.');
-assert.equal(generationRequests[1].options.headers['x-goog-api-key'], 'server-only-test-key');
+assert.equal(generationRequests[1].options.headers['x-goog-api-key'], 'AIzaServerOnlyTestKey_12345678901234567890');
 const standardBody = JSON.parse(generationRequests[1].options.body);
 assert.equal(standardBody.safetySettings.length, 4);
 assert.ok(standardBody.safetySettings.every((setting) => setting.threshold === 'BLOCK_MEDIUM_AND_ABOVE'));
@@ -91,6 +109,28 @@ assert.deepEqual(standardBody.generationConfig.thinkingConfig, { thinkingLevel: 
 assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.6-flash', mode: 'thinking', purpose: 'chat' }), { thinkingLevel: 'medium' });
 assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.6-flash', mode: 'xtrathink', purpose: 'chat' }), { thinkingLevel: 'high' });
 assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.5-flash', mode: 'thinking', purpose: 'document' }), { thinkingLevel: 'high' });
+
+const documentFallbackStart = requests.length;
+const documentFallback = await generateAiContent({
+  purpose: 'document_evidence',
+  mode: 'thinking',
+  contents: [{ role: 'user', parts: [{ text: 'Trigger document fallback' }] }],
+  maxOutputTokens: 80,
+});
+const documentFallbackRequests = requests.slice(documentFallbackStart)
+  .filter((request) => String(request.url).includes(':generateContent'));
+assert.equal(documentFallback.model, 'gemini-3.5-flash-lite');
+assert.ok(documentFallbackRequests.some((request) => String(request.url).includes('/gemini-3.6-flash:generateContent')));
+assert.ok(documentFallbackRequests.some((request) => String(request.url).includes('/gemini-3.5-flash-lite:generateContent')));
+
+const emptyDocumentFallback = await generateAiContent({
+  purpose: 'document_evidence',
+  mode: 'thinking',
+  contents: [{ role: 'user', parts: [{ text: 'Trigger empty document fallback' }] }],
+  maxOutputTokens: 80,
+});
+assert.equal(emptyDocumentFallback.model, 'gemini-3.5-flash-lite');
+assert.equal(emptyDocumentFallback.text, 'Respons provider nyata.');
 
 const structured = await generateAiContent({
   purpose: `${purpose}-structured`,

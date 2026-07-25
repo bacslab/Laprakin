@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from './router';
 import { Archive, CalendarClock, ImagePlus, LoaderCircle, Plus, Save, UploadCloud, X } from 'lucide-react';
 import { api } from './api';
 import './feature-updates.css';

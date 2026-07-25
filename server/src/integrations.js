@@ -20,7 +20,7 @@ function publicNetworkError(error) {
 }
 
 export async function verifyGeminiIntegration() {
-  if (!config.geminiKey) return { ok: false, code: 'AI_NOT_CONFIGURED', models: [] };
+  if (!config.geminiKeyValid) return { ok: false, code: config.geminiKey ? 'AI_CREDENTIAL_INVALID' : 'AI_NOT_CONFIGURED', models: [] };
   const models = [...new Set([
     config.geminiModelBasic,
     config.geminiModelThinking,

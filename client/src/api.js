@@ -12,6 +12,16 @@ function getOrCreateDeviceId() {
 }
 
 export const deviceId = getOrCreateDeviceId();
+const clientProfile = [
+  window.screen?.width,
+  window.screen?.height,
+  window.screen?.colorDepth,
+  window.devicePixelRatio,
+  Intl.DateTimeFormat().resolvedOptions().timeZone,
+  navigator.platform,
+  navigator.hardwareConcurrency,
+  navigator.maxTouchPoints,
+].map((value) => String(value ?? '')).join('|');
 
 export function setCsrfToken(token) {
   if (token) sessionStorage.setItem(CSRF_KEY, token);
@@ -33,7 +43,7 @@ export async function api(path, options = {}) {
     includeCsrf = !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()),
   } = options;
 
-  const headers = { 'x-laprakin-device': deviceId };
+  const headers = { 'x-laprakin-device': deviceId, 'x-laprakin-client-profile': clientProfile };
   if (!form) headers['content-type'] = 'application/json';
   if (includeCsrf && getCsrfToken()) headers['x-laprakin-csrf'] = getCsrfToken();
 
@@ -58,7 +68,7 @@ export async function api(path, options = {}) {
 }
 
 export async function download(path, fileName) {
-  const headers = { 'x-laprakin-device': deviceId };
+  const headers = { 'x-laprakin-device': deviceId, 'x-laprakin-client-profile': clientProfile };
   if (getCsrfToken()) headers['x-laprakin-csrf'] = getCsrfToken();
   const response = await fetch(`${API_BASE}${path.replace('/api', '')}`, {
     credentials: 'include',

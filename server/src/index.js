@@ -1,17 +1,27 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import mime from 'mime-types';
+import AdmZip from 'adm-zip';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { config, validateProductionConfig } from './config.js';
 import { audit, db, toUser } from './db.js';
 import { verifyProductionIntegrations } from './integrations.js';
-import { assessChatReadiness, assessDocumentGenerationReadiness } from './report-quality.js';
-import { asyncHandler, HttpError, now, parseJson, sanitizeFilename, sha256, detectBufferType } from './utils.js';
+import {
+  analyzeChatRequest,
+  assessChatReadiness,
+  assessDocumentGenerationReadiness,
+  defaultChatSourceStatus,
+  generateChatTitle,
+  inferChatContext,
+  isPlausibleAcademicContext,
+} from './report-quality.js';
+import { asyncHandler, hmac, HttpError, now, parseJson, randomToken, sanitizeFilename, sha256, detectBufferType } from './utils.js';
 import {
   activateSandboxSubscription,
   analyzeDocument,
@@ -19,9 +29,11 @@ import {
   claimWelcomeCredits,
   clearSession,
   consumeCredit,
+  createChatWorkPlan,
   createUser,
   createVersion,
   dataExportForUser,
+  buildDocumentDocxBuffer,
   exportDocumentDocx,
   getReviewState,
   getWallet,
@@ -29,6 +41,8 @@ import {
   observeDevice,
   publicUser,
   refundCredit,
+  refundLaprakCredit,
+  reserveLaprakCredit,
   requireAuth,
   requireCsrf,
   restoreVersion,
@@ -56,14 +70,21 @@ import {
   updateDocumentParameter,
   deleteDocumentParameter,
   parameterIntegrity,
+  prepareDocumentEvidence,
   listDeletedDocuments,
   restoreDeletedDocument,
   answerScopedSupportMessage,
   answerWorkspaceChat,
+  validateDocumentRevision,
+  summarizeDocumentWorkResult,
   createGoogleAuthorizationState,
   finishGoogleAuthorization,
   grantCredit,
   billingSummaryForUser,
+  createDocumentQuizAttempt,
+  submitDocumentQuizAttempt,
+  quizAccessForDocument,
+  extractText,
 } from './services.js';
 import {
   PRICING,
@@ -147,11 +168,14 @@ const changePasswordSchema = z.object({
 });
 
 const profileSchema = z.object({
-  fullName: z.string().trim().max(100).optional().default(''),
-  nim: z.string().trim().max(40).optional().default(''),
-  className: z.string().trim().max(40).optional().default(''),
-  departmentKey: z.string().trim().max(24).optional().default(''),
-  studyProgramKey: z.string().trim().max(48).optional().default(''),
+  fullName: z.string().trim().max(100).optional(),
+  nickname: z.string().trim().max(20, 'Nama panggilan maksimal 20 karakter.')
+    .refine((value) => !value || /^[\p{L}\p{M}][\p{L}\p{M}\s'.-]*$/u.test(value), 'Nama panggilan hanya boleh berisi huruf, spasi, apostrof, titik, atau tanda hubung.')
+    .optional(),
+  nim: z.string().trim().max(40).optional(),
+  className: z.string().trim().max(40).optional(),
+  departmentKey: z.string().trim().max(24).optional(),
+  studyProgramKey: z.string().trim().max(48).optional(),
 });
 
 const documentSchema = z.object({
@@ -249,11 +273,45 @@ const chatMessageSchema = z.object({
   aiMode: z.enum(['basic', 'thinking', 'xtrathink']).optional().default('basic'),
   allowExternalAi: z.boolean().optional().default(false),
 });
+const chatActionSchema = z.object({
+  idempotencyKey: z.string().trim().min(8).max(120),
+  type: z.enum([
+    'OPEN_SOURCE_UPLOAD',
+    'CONTINUE_WITHOUT_SOURCE',
+    'SUBMIT_CLARIFICATION',
+    'DOCUMENT_READY',
+  ]),
+  payload: z.object({
+    sourceType: z.enum(['all', 'module', 'instruction', 'practice_evidence', 'template', 'supporting_document']).optional(),
+    availability: z.enum(['not_available', 'skipped']).optional(),
+    documentType: z.enum(['lab_report', 'proposal', 'paper', 'journal', 'final_project']).optional(),
+    courseName: z.string().trim().max(150).optional(),
+    practiceTopic: z.string().trim().max(150).optional(),
+    answer: z.string().trim().max(500).optional(),
+    forceFromSources: z.boolean().optional(),
+    aiMode: z.enum(['basic', 'thinking', 'xtrathink']).optional(),
+  }).optional().default({}),
+});
 const chatReorderSchema = z.object({
   items: z.array(z.object({ id: z.string().min(4).max(80), courseGroup: z.string().trim().max(100).optional().default(''), sortPosition: z.number().int().min(0).max(10000) })).min(1).max(80),
 });
 const chatAttachmentSchema = z.object({
-  kind: z.enum(['module', 'evidence', 'template', 'data']).optional().default('evidence'),
+  kind: z.enum(['module', 'instruction', 'practice_evidence', 'template', 'supporting_document', 'unknown', 'evidence', 'data']).optional(),
+  finalize: z.enum(['true', 'false']).optional().default('true').transform((value) => value === 'true'),
+});
+const chatAttachmentCategorySchema = z.object({
+  kind: z.enum(['module', 'instruction', 'practice_evidence', 'template', 'supporting_document', 'unknown']),
+});
+const onboardingPreferenceSchema = z.object({ dismissed: z.boolean() });
+const revisionSchema = z.object({
+  instruction: z.string().trim().min(2, 'Jelaskan perubahan yang kamu inginkan.').max(1800),
+  aiMode: z.enum(['basic', 'thinking', 'xtrathink']).optional().default('basic'),
+});
+const quizAttemptSchema = z.object({
+  answers: z.array(z.object({
+    questionId: z.string().min(4).max(80),
+    selectedIndex: z.number().int().min(0).max(3),
+  })).min(1).max(20),
 });
 const supportMessageSchema = z.object({
   content: z.string().trim().min(1).max(900),
@@ -283,6 +341,22 @@ const feedbackReplySchema = z.object({
 
 const riskStatusSchema = z.object({
   status: z.enum(['open', 'reviewed', 'dismissed']),
+});
+
+const adminCreditGrantSchema = z.object({
+  audience: z.enum(['user', 'all', 'paid']),
+  userId: z.string().trim().min(8).max(80).optional(),
+  amount: z.number().int().min(1).max(100),
+  reason: z.string().trim().min(4).max(160),
+  idempotencyKey: z.string().trim().min(12).max(100).regex(/^[a-zA-Z0-9._:-]+$/),
+}).superRefine((value, context) => {
+  if (value.audience === 'user' && !value.userId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['userId'], message: 'Pilih user tujuan.' });
+  }
+});
+
+const adminAlertStatusSchema = z.object({
+  status: z.enum(['open', 'resolved']),
 });
 
 const landingMediaUrlSchema = z.string().trim().max(420).optional().default('');
@@ -371,6 +445,11 @@ const landingCmsSchema = z.object({
 });
 
 const pinSchema = z.object({
+  pinned: z.boolean().optional().default(true),
+});
+const projectPinSchema = z.object({
+  projectName: z.string().trim().min(1).max(100),
+  projectKey: z.string().trim().min(1).max(120),
   pinned: z.boolean().optional().default(true),
 });
 
@@ -534,6 +613,150 @@ function evaluateSharedDeviceRisk(deviceId, userId) {
       metadata: { accountCount },
     });
   }
+}
+
+const DEVICE_COOKIE_NAME = 'laprakin_device';
+const DEVICE_COOKIE_MAX_AGE = 400 * 24 * 60 * 60 * 1000;
+
+function safeTokenSignatureMatch(left, right) {
+  if (!/^[a-f0-9]{64}$/i.test(left) || !/^[a-f0-9]{64}$/i.test(right)) return false;
+  return crypto.timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
+}
+
+function signedDeviceToken(token) {
+  return `${token}.${hmac(token, `${config.deviceSecret}:cookie`)}`;
+}
+
+function verifiedDeviceToken(value) {
+  const [token, signature, extra] = String(value || '').split('.');
+  if (extra || !/^[A-Za-z0-9_-]{32,128}$/.test(token || '')) return '';
+  const expected = hmac(token, `${config.deviceSecret}:cookie`);
+  return safeTokenSignatureMatch(signature || '', expected) ? token : '';
+}
+
+function deviceCookieMiddleware(req, res, next) {
+  let token = verifiedDeviceToken(req.cookies?.[DEVICE_COOKIE_NAME]);
+  if (!token) {
+    token = randomToken(32);
+    res.cookie(DEVICE_COOKIE_NAME, signedDeviceToken(token), {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: config.isProd,
+      maxAge: DEVICE_COOKIE_MAX_AGE,
+      path: '/',
+      priority: 'high',
+    });
+  }
+  req.laprakinDeviceToken = token;
+  next();
+}
+
+function normalizedNetworkPrefix(input) {
+  const value = String(input || 'unknown').trim().toLowerCase().replace(/^::ffff:/, '');
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(value)) return value.split('.').slice(0, 3).join('.');
+  if (value.includes(':')) return value.split(':').slice(0, 4).join(':');
+  return value.slice(0, 120) || 'unknown';
+}
+
+function registrationIdentity(req, email) {
+  const suppliedClientId = String(req.get('x-laprakin-device') || '').trim();
+  const validClientId = /^[A-Za-z0-9._:-]{8,160}$/.test(suppliedClientId) ? suppliedClientId : '';
+  const clientProfile = String(req.get('x-laprakin-client-profile') || '').trim().slice(0, 500);
+  const browserMaterial = [
+    String(req.get('user-agent') || '').trim().slice(0, 300),
+    String(req.get('accept-language') || '').trim().slice(0, 120),
+    String(req.get('sec-ch-ua-platform') || '').trim().slice(0, 80),
+    String(req.get('sec-ch-ua') || '').trim().slice(0, 180),
+    clientProfile,
+  ].join('|');
+  const networkPrefix = normalizedNetworkPrefix(req.ip);
+  const browserHash = hmac(browserMaterial, `${config.deviceSecret}:browser`);
+  const networkHash = hmac(networkPrefix, `${config.deviceSecret}:network`);
+  return {
+    deviceCookieHash: hmac(req.laprakinDeviceToken, `${config.deviceSecret}:registration-cookie`),
+    clientDeviceHash: validClientId ? hmac(validClientId, `${config.deviceSecret}:registration-client`) : null,
+    browserHash,
+    networkHash,
+    networkBrowserHash: hmac(`${networkHash}:${browserHash}`, `${config.deviceSecret}:network-browser`),
+    emailHash: hmac(String(email || '').trim().toLowerCase(), `${config.deviceSecret}:registration-email`),
+  };
+}
+
+function reserveRegistration(req, email) {
+  const identity = registrationIdentity(req, email);
+  const timestamp = now();
+  db.prepare("DELETE FROM registration_guards WHERE user_id IS NULL AND status = 'reserved' AND created_at < ?")
+    .run(new Date(Date.now() - 15 * 60 * 1000).toISOString());
+
+  const existing = db.prepare(`
+    SELECT id FROM registration_guards
+    WHERE device_cookie_hash = ?
+       OR (? IS NOT NULL AND client_device_hash = ?)
+    LIMIT 1
+  `).get(identity.deviceCookieHash, identity.clientDeviceHash, identity.clientDeviceHash);
+  if (existing) {
+    addRiskEvent({
+      category: 'registration_device_reuse',
+      severity: 'medium',
+      summary: 'Perangkat mencoba membuat lebih dari satu akun.',
+      metadata: { networkHash: identity.networkHash.slice(0, 16) },
+    });
+    throw new HttpError(409, 'Perangkat ini sudah pernah dipakai untuk membuat akun. Masuk ke akun tersebut atau pulihkan aksesnya.', 'DEVICE_REGISTRATION_LIMIT');
+  }
+
+  const recentNetworkCount = Number(db.prepare(`
+    SELECT COUNT(*) AS count FROM registration_guards
+    WHERE network_hash = ? AND created_at >= ?
+  `).get(identity.networkHash, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())?.count || 0);
+  const recentBrowserCount = Number(db.prepare(`
+    SELECT COUNT(*) AS count FROM registration_guards
+    WHERE browser_hash = ? AND created_at >= ?
+  `).get(identity.browserHash, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())?.count || 0);
+  if (recentBrowserCount >= 3 || recentNetworkCount >= 10) {
+    addRiskEvent({
+      category: 'registration_evasion_pattern',
+      severity: 'medium',
+      summary: 'Pola registrasi berulang terdeteksi dari perangkat atau jaringan yang sama.',
+      metadata: { recentBrowserCount, recentNetworkCount },
+    });
+    throw new HttpError(429, 'Registrasi tambahan dari perangkat atau jaringan ini dibatasi. Gunakan akun yang sudah dibuat atau hubungi bantuan.', 'REGISTRATION_RISK_LIMIT');
+  }
+
+  const id = nanoid();
+  try {
+    db.prepare(`
+      INSERT INTO registration_guards (
+        id, user_id, device_cookie_hash, client_device_hash, browser_hash,
+        network_hash, network_browser_hash, email_hash, status, created_at, updated_at
+      ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?)
+    `).run(
+      id,
+      identity.deviceCookieHash,
+      identity.clientDeviceHash,
+      identity.browserHash,
+      identity.networkHash,
+      identity.networkBrowserHash,
+      identity.emailHash,
+      timestamp,
+      timestamp,
+    );
+  } catch (error) {
+    if (String(error?.message || '').includes('UNIQUE constraint failed')) {
+      throw new HttpError(409, 'Perangkat ini sudah pernah dipakai untuk membuat akun. Masuk ke akun tersebut atau pulihkan aksesnya.', 'DEVICE_REGISTRATION_LIMIT');
+    }
+    throw error;
+  }
+  return id;
+}
+
+function bindRegistrationGuard(guardId, userId, verified = false) {
+  const timestamp = now();
+  db.prepare("UPDATE registration_guards SET user_id = ?, status = ?, verified_at = ?, updated_at = ? WHERE id = ? AND user_id IS NULL")
+    .run(userId, verified ? 'verified' : 'registered', verified ? timestamp : null, timestamp, guardId);
+}
+
+function releaseRegistrationGuard(guardId) {
+  db.prepare("DELETE FROM registration_guards WHERE id = ? AND user_id IS NULL AND status = 'reserved'").run(guardId);
 }
 
 function evaluateUploadBurstRisk(userId) {
@@ -735,7 +958,7 @@ function securityHeaders(req, res, next) {
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Laprakin-Device, X-Laprakin-CSRF');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Laprakin-Device, X-Laprakin-Client-Profile, X-Laprakin-CSRF');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     return res.status(204).end();
   }
@@ -746,6 +969,7 @@ function securityHeaders(req, res, next) {
 app.use(securityHeaders);
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+app.use(deviceCookieMiddleware);
 app.use((req, _res, next) => {
   req.requestId = nanoid(10);
   next();
@@ -784,6 +1008,14 @@ const integrationCheckLimiter = rateLimit({
   message: { error: { message: 'Pengecekan integrasi dibatasi. Coba lagi nanti.', code: 'INTEGRATION_CHECK_RATE_LIMIT' } },
 });
 
+const adminMutationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { message: 'Terlalu banyak tindakan admin. Coba lagi sebentar.', code: 'ADMIN_ACTION_RATE_LIMIT' } },
+});
+
 const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 40,
@@ -816,7 +1048,7 @@ function exposeDocument(row) {
   `).all(row.id);
   const sections = db.prepare('SELECT * FROM report_sections WHERE document_id = ? ORDER BY position').all(row.id);
   const exports = db.prepare(`
-    SELECT id, file_name, status, review_mode, created_at, expires_at
+    SELECT id, file_name, status, review_mode, content_signature, created_at, expires_at
     FROM exports WHERE document_id = ? ORDER BY created_at DESC
   `).all(row.id);
   const parameters = db.prepare(`
@@ -855,12 +1087,52 @@ function exposeDocument(row) {
     reviewSeconds: Number(row.review_seconds || 0),
     lastReviewedAt: row.last_reviewed_at || null,
     readiness: documentReadiness(row.id, row.owner_user_id),
+    quizAccess: quizAccessForDocument(row.id, row.owner_user_id),
+    versions: listVersions(row.id, row.owner_user_id),
     jobs,
   };
 }
 
 const documentStreams = new Map();
+const adminStreams = new Set();
 let workerBusy = false;
+
+function publishAdminEvent(type, payload) {
+  if (!adminStreams.size) return;
+  const message = `event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`;
+  for (const response of adminStreams) {
+    try { response.write(message); } catch { adminStreams.delete(response); }
+  }
+}
+
+function createAdminAlert({
+  kind,
+  severity = 'warning',
+  userId = null,
+  documentId = null,
+  jobId = null,
+  summary,
+  errorCode = '',
+}) {
+  const id = nanoid();
+  db.prepare(`
+    INSERT INTO admin_alerts (
+      id, kind, severity, user_id, document_id, job_id, summary, error_code, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)
+  `).run(
+    id,
+    String(kind || 'system').slice(0, 60),
+    ['info', 'warning', 'critical'].includes(severity) ? severity : 'warning',
+    userId,
+    documentId,
+    jobId,
+    String(summary || 'Kejadian operasional perlu ditinjau.').slice(0, 240),
+    String(errorCode || '').slice(0, 80),
+    now(),
+  );
+  publishAdminEvent('alert', { id, kind, severity, createdAt: now() });
+  return id;
+}
 
 function jobPayload(job) {
   return parseJson(job.payload_json, {});
@@ -885,6 +1157,11 @@ function recordJobEvent(jobId) {
 }
 
 function publicJob(job) {
+  const terminal = ['failed', 'canceled'].includes(job.status);
+  const rawError = String(job.error_message || '');
+  const safeError = /(?:JSON|Unterminated string|Unexpected (?:end|token)|position \d+)/i.test(rawError)
+    ? 'Respons AI sempat tidak lengkap. Coba susun draft lagi.'
+    : rawError;
   return {
     id: job.id,
     documentId: job.document_id,
@@ -893,7 +1170,7 @@ function publicJob(job) {
     progress: job.progress,
     message: job.message,
     result: parseJson(job.result_json, {}),
-    errorMessage: job.error_message || '',
+    errorMessage: terminal ? safeError : '',
     attemptCount: job.attempt_count || 0,
     maxAttempts: job.max_attempts || 1,
     cancelRequested: Boolean(job.cancel_requested_at),
@@ -942,6 +1219,26 @@ function enqueueJob({ documentId, userId, jobType, payload = {}, maxAttempts = c
   return jobId;
 }
 
+function refundJobCreditSafely(job, payload) {
+  if (job.job_type !== 'generate' || !payload.creditBucket) return true;
+  try {
+    if (payload.creditSessionId) refundLaprakCredit(job.owner_user_id, payload.creditSessionId);
+    else refundCredit(job.owner_user_id, payload.creditBucket, job.document_id);
+    return true;
+  } catch (error) {
+    createAdminAlert({
+      kind: 'credit_refund_failed',
+      severity: 'critical',
+      userId: job.owner_user_id,
+      documentId: job.document_id,
+      jobId: job.id,
+      summary: 'Pengembalian kredit setelah kegagalan generate perlu diperiksa.',
+      errorCode: error?.code || 'CREDIT_REFUND_FAILED',
+    });
+    return false;
+  }
+}
+
 async function runJob(job) {
   const claimed = db.prepare(`
     UPDATE jobs SET status = 'running', attempt_count = attempt_count + 1,
@@ -969,12 +1266,13 @@ async function runJob(job) {
   const payload = jobPayload(job);
   try {
     let result;
+    let completionSummary = null;
     if (job.job_type === 'scan') {
       result = await scanDocumentFiles(job.document_id, job.owner_user_id, update);
     } else if (job.job_type === 'analyze') {
       result = await analyzeDocument(job.document_id, job.owner_user_id, update);
     } else if (job.job_type === 'generate') {
-      result = await generateDocument(job.document_id, job.owner_user_id, update);
+      result = await generateDocument(job.document_id, job.owner_user_id, update, payload);
     } else if (job.job_type === 'export') {
       update(20, 'Menyiapkan dokumen Word');
       const exported = await exportDocumentDocx(job.document_id, job.owner_user_id, payload.reviewMode || 'reviewed');
@@ -990,10 +1288,73 @@ async function runJob(job) {
       canceled.code = 'JOB_CANCELED';
       throw canceled;
     }
+    if (job.job_type === 'generate') {
+      const generatedState = db.prepare(`
+        SELECT document.generated_at,
+          (SELECT COUNT(*) FROM report_sections section WHERE section.document_id = document.id) AS section_count
+        FROM documents document WHERE document.id = ? AND document.owner_user_id = ?
+      `).get(job.document_id, job.owner_user_id);
+      if (!generatedState?.generated_at || Number(generatedState.section_count || 0) < 3) {
+        createAdminAlert({
+          kind: 'document_generation_incomplete',
+          severity: 'critical',
+          userId: job.owner_user_id,
+          documentId: job.document_id,
+          jobId: job.id,
+          summary: 'Job generate selesai tetapi dokumen belum memiliki hasil yang utuh.',
+          errorCode: 'GENERATE_RESULT_INCOMPLETE',
+        });
+        throw new HttpError(500, 'Hasil dokumen belum tersimpan lengkap.', 'GENERATE_RESULT_INCOMPLETE');
+      }
+      completionSummary = await summarizeDocumentWorkResult({
+        documentId: job.document_id,
+        userId: job.owner_user_id,
+        isRevision: Boolean(payload.isRevision),
+        instruction: payload.revisionInstruction || '',
+        aiMode: payload.aiMode || 'basic',
+      });
+    }
+    const completedAt = now();
     db.prepare(`
       UPDATE jobs SET status = 'completed', progress = 100, message = 'Selesai', result_json = ?, finished_at = ?, heartbeat_at = ?
       WHERE id = ?
-    `).run(JSON.stringify(result || {}), now(), now(), job.id);
+    `).run(JSON.stringify(result || {}), completedAt, completedAt, job.id);
+    if (job.job_type === 'generate') {
+      db.prepare(`UPDATE chat_sessions SET workflow_state = 'DOCUMENT_PREVIEW', updated_at = ? WHERE document_id = ? AND owner_user_id = ?`)
+        .run(now(), job.document_id, job.owner_user_id);
+      const session = db.prepare(`
+        SELECT id, work_plan_json FROM chat_sessions
+        WHERE document_id = ? AND owner_user_id = ? AND archived_at IS NULL
+        LIMIT 1
+      `).get(job.document_id, job.owner_user_id);
+      if (session) {
+        const liveJob = db.prepare('SELECT started_at FROM jobs WHERE id = ?').get(job.id);
+        const documentVersion = db.prepare('SELECT revision_count FROM documents WHERE id = ?').get(job.document_id);
+        db.prepare(`
+          INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+          VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+        `).run(
+          nanoid(),
+          session.id,
+          job.owner_user_id,
+          completionSummary?.text || 'Dokumen sudah selesai disusun. Buka hasilnya untuk melakukan pemeriksaan akhir.',
+          JSON.stringify({
+            kind: 'document_ready',
+            jobId: job.id,
+            isRevision: Boolean(payload.isRevision),
+            model: completionSummary?.model || 'local-summary',
+            workPlan: parseJson(session.work_plan_json, {}),
+            thinkingStartedAt: liveJob?.started_at || job.created_at,
+            thinkingFinishedAt: completedAt,
+            documentVersion: Number(documentVersion?.revision_count || 0) + 1,
+          }),
+          completedAt,
+        );
+      }
+    } else if (job.job_type === 'export') {
+      db.prepare(`UPDATE chat_sessions SET workflow_state = 'FINAL', updated_at = ? WHERE document_id = ? AND owner_user_id = ?`)
+        .run(now(), job.document_id, job.owner_user_id);
+    }
     recordJobEvent(job.id);
     const jobCopy = {
       scan: { title: 'Pemeriksaan file selesai', body: 'Cek jika ada file yang perlu kamu redaksi sebelum dibagikan.' },
@@ -1012,7 +1373,7 @@ async function runJob(job) {
     const current = db.prepare('SELECT * FROM jobs WHERE id = ?').get(job.id);
     const canceled = error?.code === 'JOB_CANCELED' || Boolean(current?.cancel_requested_at) || current?.status === 'canceled';
     if (canceled) {
-      if (job.job_type === 'generate' && payload.creditBucket) refundCredit(job.owner_user_id, payload.creditBucket, job.document_id);
+      refundJobCreditSafely(job, payload);
       db.prepare(`
         UPDATE jobs SET status = 'canceled', message = 'Dibatalkan', error_message = ?, finished_at = ?, canceled_at = ?, heartbeat_at = ?
         WHERE id = ?
@@ -1023,27 +1384,80 @@ async function runJob(job) {
       });
       audit(job.owner_user_id, 'job.canceled', 'document', job.document_id, { jobId: job.id, jobType: job.job_type });
     } else {
-      const canRetry = (current?.attempt_count || 1) < (current?.max_attempts || 1);
+      const canRetry = error?.retryable !== false
+        && (current?.attempt_count || 1) < (current?.max_attempts || 1);
       if (canRetry) {
-        const runAfter = new Date(Date.now() + 1500 * (current.attempt_count || 1)).toISOString();
+        const providerBusy = /(?:RESOURCE_EXHAUSTED|AI_TIMEOUT|AI_NETWORK_ERROR)/i.test(String(error?.code || ''));
+        const retryDelay = providerBusy
+          ? Math.min(30000, 5000 * (2 ** Math.max(0, Number(current?.attempt_count || 1) - 1)))
+          : 1500 * (current.attempt_count || 1);
+        const runAfter = new Date(Date.now() + retryDelay).toISOString();
         db.prepare(`
-          UPDATE jobs SET status = 'queued', progress = 0, message = 'Akan dicoba lagi', error_message = ?, run_after = ?, heartbeat_at = ?
+          UPDATE jobs SET status = 'queued', progress = 0, message = ?, error_message = ?, run_after = ?, heartbeat_at = ?
           WHERE id = ?
-        `).run(error?.message || 'Terjadi kesalahan sementara.', runAfter, now(), job.id);
+        `).run(
+          providerBusy ? 'Kapasitas penuh, mencoba model cadangan' : 'Akan dicoba lagi',
+          error?.message || 'Terjadi kesalahan sementara.',
+          runAfter,
+          now(),
+          job.id,
+        );
         recordJobEvent(job.id);
       } else {
-        if (job.job_type === 'generate' && payload.creditBucket) {
-          refundCredit(job.owner_user_id, payload.creditBucket, job.document_id);
-        }
+        const creditRefunded = refundJobCreditSafely(job, payload);
         db.prepare(`
           UPDATE jobs SET status = 'failed', message = 'Proses gagal', error_message = ?, finished_at = ?, heartbeat_at = ?
           WHERE id = ?
         `).run(error?.message || 'Terjadi kesalahan.', now(), now(), job.id);
+        if (job.job_type === 'generate') {
+          const session = db.prepare(`
+            SELECT id FROM chat_sessions
+            WHERE document_id = ? AND owner_user_id = ? AND archived_at IS NULL
+            LIMIT 1
+          `).get(job.document_id, job.owner_user_id);
+          const document = db.prepare('SELECT generated_at FROM documents WHERE id = ?').get(job.document_id);
+          db.prepare(`
+            UPDATE chat_sessions SET workflow_state = ?, updated_at = ?
+            WHERE document_id = ? AND owner_user_id = ?
+          `).run(document?.generated_at ? 'DOCUMENT_PREVIEW' : 'READY_TO_GENERATE', now(), job.document_id, job.owner_user_id);
+          if (session) {
+            const providerBusy = /(?:RESOURCE_EXHAUSTED|AI_TIMEOUT|AI_NETWORK_ERROR)/i.test(String(error?.code || ''));
+            db.prepare(`
+              INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+              VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+            `).run(
+              nanoid(),
+              session.id,
+              job.owner_user_id,
+              providerBusy
+                ? 'Kapasitas penyusunan AI sedang penuh. Dokumen kerja dan bahanmu tetap tersimpan, credit tidak terpakai. Tekan Susun draft untuk melanjutkan saat kapasitas tersedia.'
+                : 'Draft belum berhasil disusun. Dokumen kerja dan bahanmu tetap tersimpan, credit tidak terpakai. Buka proses lalu tekan Susun draft untuk mencoba lagi.',
+              JSON.stringify({
+                kind: 'generation_failed',
+                jobId: job.id,
+                retryable: Boolean(error?.retryable),
+                errorCode: String(error?.code || 'AI_PROVIDER_ERROR').slice(0, 80),
+              }),
+              now(),
+            );
+          }
+        }
         recordJobEvent(job.id);
         notifyUser(job.owner_user_id, {
           kind: 'error', title: 'Proses belum berhasil',
           body: job.job_type === 'generate' ? 'Tidak ada credit yang hangus karena kegagalan sistem. Kamu bisa mencoba kembali dari halaman laporan.' : 'Kamu bisa mencoba kembali dari halaman laporan.',
           href: `/app/documents/${job.document_id}`,
+        });
+        createAdminAlert({
+          kind: job.job_type === 'generate' ? 'document_generation_failed' : 'job_failed',
+          severity: creditRefunded ? 'warning' : 'critical',
+          userId: job.owner_user_id,
+          documentId: job.document_id,
+          jobId: job.id,
+          summary: creditRefunded
+            ? `${job.job_type} gagal setelah percobaan terakhir; kredit telah dikembalikan bila sebelumnya direservasi.`
+            : `${job.job_type} gagal dan pengembalian kredit perlu diperiksa.`,
+          errorCode: error?.code || 'JOB_FAILED',
         });
         audit(job.owner_user_id, 'job.failed', 'document', job.document_id, { jobId: job.id, jobType: job.job_type });
       }
@@ -1077,6 +1491,58 @@ function recoverInterruptedJobs() {
     WHERE status = 'running'
   `).run();
   if (result.changes) console.log(`[jobs] recovered ${result.changes} interrupted job(s)`);
+}
+
+function recoverFailedGenerationSessions() {
+  const sessions = db.prepare(`
+    SELECT
+      chat_sessions.id,
+      chat_sessions.owner_user_id,
+      chat_sessions.document_id,
+      documents.generated_at,
+      jobs.id AS job_id,
+      jobs.error_message
+    FROM chat_sessions
+    JOIN documents ON documents.id = chat_sessions.document_id
+    JOIN jobs ON jobs.id = (
+      SELECT latest.id FROM jobs AS latest
+      WHERE latest.document_id = chat_sessions.document_id
+        AND latest.owner_user_id = chat_sessions.owner_user_id
+        AND latest.job_type = 'generate'
+      ORDER BY latest.created_at DESC
+      LIMIT 1
+    )
+    WHERE chat_sessions.workflow_state = 'GENERATING'
+      AND chat_sessions.archived_at IS NULL
+      AND jobs.status = 'failed'
+  `).all();
+  for (const session of sessions) {
+    db.prepare('UPDATE chat_sessions SET workflow_state = ?, updated_at = ? WHERE id = ?')
+      .run(session.generated_at ? 'DOCUMENT_PREVIEW' : 'READY_TO_GENERATE', now(), session.id);
+    const existingMessage = db.prepare(`
+      SELECT 1 FROM chat_messages
+      WHERE session_id = ? AND owner_user_id = ?
+        AND meta_json LIKE ?
+      LIMIT 1
+    `).get(session.id, session.owner_user_id, `%"jobId":"${session.job_id}"%`);
+    if (!existingMessage) {
+      const providerBusy = /(?:kapasitas|RESOURCE_EXHAUSTED|TIMEOUT|NETWORK)/i.test(String(session.error_message || ''));
+      db.prepare(`
+        INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+        VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+      `).run(
+        nanoid(),
+        session.id,
+        session.owner_user_id,
+        providerBusy
+          ? 'Kapasitas penyusunan AI sempat penuh. Dokumen kerja dan bahanmu tetap tersimpan, credit tidak terpakai. Buka proses lalu tekan Susun draft untuk melanjutkan.'
+          : 'Penyusunan sebelumnya belum berhasil. Dokumen kerja dan bahanmu tetap tersimpan, credit tidak terpakai. Buka proses lalu tekan Susun draft untuk mencoba lagi.',
+        JSON.stringify({ kind: 'generation_failed', jobId: session.job_id, recovered: true }),
+        now(),
+      );
+    }
+  }
+  if (sessions.length) console.log(`[jobs] recovered ${sessions.length} failed generation session(s)`);
 }
 
 function normalizeSourceDeclaration(value) {
@@ -1128,7 +1594,8 @@ app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
     mode: config.nodeEnv,
-    aiConfigured: Boolean(config.geminiKey),
+    aiConfigured: config.geminiKeyValid,
+    aiCredentialIssue: config.geminiKey && !config.geminiKeyValid ? 'GEMINI_API_KEY harus memakai API key Google AI Studio berawalan AIza.' : '',
     googleLoginConfigured: Boolean(!config.manualEmailAuthOnly && config.googleOauthRequired && config.googleClientId && config.googleClientSecret),
     paymentsMode: config.paymentsMode,
     queueDepth: queue,
@@ -1140,10 +1607,10 @@ app.get('/api/health/ready', (_req, res) => {
   try {
     db.prepare('SELECT 1').get();
     const missing = [];
-    if (config.aiRequired && !config.geminiKey) missing.push('ai');
+    if (config.aiRequired && !config.geminiKeyValid) missing.push('ai');
     if (config.googleOauthRequired && (!config.googleClientId || !config.googleClientSecret)) missing.push('google_oauth');
     if (missing.length) return res.status(503).json({ ok: false, database: 'ready', missing });
-    return res.json({ ok: true, database: 'ready', worker: workerBusy ? 'busy' : 'idle', ai: config.geminiKey ? 'configured' : 'disabled', googleOauth: config.googleOauthRequired ? 'configured' : 'disabled' });
+    return res.json({ ok: true, database: 'ready', worker: workerBusy ? 'busy' : 'idle', ai: config.geminiKeyValid ? 'configured' : 'disabled', googleOauth: config.googleOauthRequired ? 'configured' : 'disabled' });
   } catch {
     return res.status(503).json({ ok: false, database: 'unavailable' });
   }
@@ -1154,11 +1621,11 @@ app.get('/api/meta', (_req, res) => {
     departments,
     programs,
     features: {
-      geminiConfigured: Boolean(config.geminiKey),
+      geminiConfigured: config.geminiKeyValid,
       manualPayments: config.paymentsMode === 'manual' && !config.isProd,
       uploadMaxMb: config.maxUploadBytes / 1024 / 1024,
       googleLoginEnabled: Boolean(!config.manualEmailAuthOnly && config.googleOauthRequired && config.googleClientId && config.googleClientSecret),
-      supportAiEnabled: Boolean(config.supportAiEnabled && config.geminiKey),
+      supportAiEnabled: Boolean(config.supportAiEnabled && config.geminiKeyValid),
     },
   });
 });
@@ -1182,7 +1649,17 @@ app.get('/api/auth/google/callback', async (req, res) => {
     if (!code || !state || !cookieState || state !== cookieState) {
       throw new HttpError(400, 'Sesi masuk Google tidak valid. Coba lagi.', 'GOOGLE_STATE_INVALID');
     }
-    const completed = await finishGoogleAuthorization({ state, code });
+    const completed = await finishGoogleAuthorization({
+      state,
+      code,
+      beforeCreate: (email) => {
+        const guardId = reserveRegistration(req, email);
+        return {
+          bind: (userId) => bindRegistrationGuard(guardId, userId, true),
+          release: () => releaseRegistrationGuard(guardId),
+        };
+      },
+    });
     const googleDeviceId = observeDevice(req, completed.user.id);
     evaluateSharedDeviceRisk(googleDeviceId, completed.user.id);
     try { claimWelcomeCredits(completed.user.id, googleDeviceId); } catch { /* akun lama atau shared-device review tidak boleh memblokir login */ }
@@ -1200,7 +1677,15 @@ app.get('/api/auth/google/callback', async (req, res) => {
 
 app.post('/api/auth/register', authLimiter, asyncHandler(async (req, res) => {
   const input = registerSchema.parse(req.body || {});
-  const created = await createUser(input);
+  const guardId = reserveRegistration(req, input.email);
+  let created;
+  try {
+    created = await createUser(input);
+    bindRegistrationGuard(guardId, created.user.id);
+  } catch (error) {
+    releaseRegistrationGuard(guardId);
+    throw error;
+  }
   const registeredDeviceId = observeDevice(req, created.user.id);
   evaluateSharedDeviceRisk(registeredDeviceId, created.user.id);
   const response = {
@@ -1272,12 +1757,16 @@ app.post('/api/auth/logout-all', requireAuth, requireCsrf, (req, res) => {
   res.status(204).end();
 });
 
-app.put('/api/auth/password', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
-  const input = changePasswordSchema.parse(req.body || {});
-  const user = await changePassword(req.user.id, input.currentPassword, input.newPassword);
-  const csrfToken = setSession(res, user);
-  res.json({ user, csrfToken, message: 'Kata sandi diperbarui. Sesi perangkat lain diakhiri.' });
+app.post('/api/auth/password-change-request', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
+  const result = await requestPasswordReset(req.user.email);
+  const response = { message: 'Link verifikasi perubahan kata sandi sudah dikirim ke email akunmu.' };
+  if (!config.isProd && result.resetToken) response.developmentResetToken = result.resetToken;
+  res.json(response);
 }));
+
+app.put('/api/auth/password', requireAuth, requireCsrf, (_req, _res, next) => {
+  next(new HttpError(403, 'Perubahan kata sandi wajib dimulai dari link verifikasi email.', 'PASSWORD_EMAIL_VERIFICATION_REQUIRED'));
+});
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
   // Renew persistent cookie on active use. Session remains revocable via versioning.
@@ -1349,6 +1838,14 @@ app.get('/api/storage/summary', requireAuth, (req, res) => {
 
 app.get('/api/wallet', requireAuth, (req, res) => {
   res.json({ ...getWallet(req.user.id), subscription: activeSubscription(req.user.id) });
+});
+
+app.get('/api/chat/processing-access', requireAuth, (req, res) => {
+  const wallet = getWallet(req.user.id);
+  res.json({
+    available: wallet.balances.total > 0,
+    credits: wallet.balances.total,
+  });
 });
 
 app.get('/api/billing', requireAuth, (req, res) => {
@@ -1441,21 +1938,25 @@ app.post('/api/product-updates/:id/receipt', requireAuth, requireCsrf, asyncHand
 
 app.put('/api/profile', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
   const input = profileSchema.parse(req.body || {});
-  const program = input.studyProgramKey ? programs.find((item) => item.key === input.studyProgramKey) : null;
-  if (input.studyProgramKey && !program) throw new HttpError(400, 'Prodi tidak valid.', 'INVALID_STUDY_PROGRAM');
-  if (program && input.departmentKey && program.department !== input.departmentKey) {
+  const current = db.prepare('SELECT full_name, nickname, nim, class_name, department_key, study_program_key FROM users WHERE id = ?').get(req.user.id);
+  const departmentKey = input.departmentKey ?? current.department_key;
+  const studyProgramKey = input.studyProgramKey ?? current.study_program_key;
+  const program = studyProgramKey ? programs.find((item) => item.key === studyProgramKey) : null;
+  if (studyProgramKey && !program) throw new HttpError(400, 'Prodi tidak valid.', 'INVALID_STUDY_PROGRAM');
+  if (program && departmentKey && program.department !== departmentKey) {
     throw new HttpError(400, 'Prodi tidak sesuai dengan jurusan.', 'PROGRAM_DEPARTMENT_MISMATCH');
   }
 
   db.prepare(`
     UPDATE users SET
-      full_name = ?, nim = ?, class_name = ?, department_key = ?, study_program_key = ?, updated_at = ?
+      full_name = ?, nickname = ?, nim = ?, class_name = ?, department_key = ?, study_program_key = ?, updated_at = ?
     WHERE id = ?
   `).run(
-    input.fullName,
-    input.nim,
-    input.className,
-    program?.department || input.departmentKey,
+    input.fullName ?? current.full_name,
+    input.nickname ?? current.nickname,
+    input.nim ?? current.nim,
+    input.className ?? current.class_name,
+    program?.department || departmentKey,
     program?.key || '',
     now(),
     req.user.id,
@@ -1464,43 +1965,287 @@ app.put('/api/profile', requireAuth, requireCsrf, asyncHandler(async (req, res) 
   res.json({ user: publicUser(req.user.id) });
 }));
 
+app.post('/api/profile/onboarding', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
+  const input = onboardingPreferenceSchema.parse(req.body || {});
+  db.prepare('UPDATE users SET onboarding_dismissed = ?, updated_at = ? WHERE id = ?')
+    .run(input.dismissed ? 1 : 0, now(), req.user.id);
+  audit(req.user.id, 'profile.onboarding_updated', 'user', req.user.id, { dismissed: input.dismissed });
+  res.json({ user: publicUser(req.user.id) });
+}));
+
 function exposeChatSession(row) {
   if (!row) return null;
   return {
     ...row,
     isPinned: Boolean(row.is_pinned),
+    workflowState: row.workflow_state || 'NEW_CHAT',
+    clarificationCount: Number(row.clarification_count || 0),
+    sourceRecommendationShown: Boolean(row.source_recommendation_shown),
+    firstMessageAnalyzed: Boolean(row.first_message_analyzed),
+    generatedTitle: row.generated_title || '',
+    documentType: row.document_type || 'lab_report',
+    courseName: row.course_name || '',
+    practiceTopic: row.practice_topic || '',
+    sourceStatus: defaultChatSourceStatus(row.source_status_json),
+    contextSummary: row.context_summary || '',
+    missingCriticalContext: row.missing_critical_context || '',
+    processingCreditReserved: Boolean(row.processing_credit_bucket && !row.processing_credit_refunded_at),
+    workPlan: parseJson(row.work_plan_json, {}),
     configuration: parseJson(row.configuration_json, {}),
   };
 }
 
 function listChatAttachments(sessionId, ownerUserId) {
   return db.prepare(`
-    SELECT id, kind, original_name, mime_type, detected_mime, size_bytes, created_at
+    SELECT id, kind, original_name, mime_type, detected_mime, size_bytes, processing_status, created_at
     FROM chat_attachments
     WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL
     ORDER BY created_at ASC
   `).all(sessionId, ownerUserId);
 }
 
-function chatWorkflow(session, user) {
-  const messages = db.prepare(`
-    SELECT role, content FROM chat_messages
+function listChatMessages(sessionId, ownerUserId) {
+  return db.prepare(`
+    SELECT id, role, content, meta_json, created_at
+    FROM chat_messages
     WHERE session_id = ? AND owner_user_id = ?
     ORDER BY created_at ASC
-  `).all(session.id, user.id);
-  return assessChatReadiness({
+  `).all(sessionId, ownerUserId).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) }));
+}
+
+function chatSourceModes(sourceStatus) {
+  const sourceValues = [sourceStatus.module, sourceStatus.instruction, sourceStatus.template, sourceStatus.supportingDocument];
+  const evidenceValue = sourceStatus.practiceEvidence;
+  return {
+    sourceMode: sourceValues.includes('UPLOADED')
+      ? 'uploaded'
+      : sourceValues.includes('AVAILABLE')
+        ? 'described'
+        : sourceValues.some((value) => ['NOT_AVAILABLE', 'SKIPPED'].includes(value))
+          ? 'unavailable'
+          : 'missing',
+    evidenceMode: evidenceValue === 'UPLOADED'
+      ? 'uploaded'
+      : evidenceValue === 'AVAILABLE'
+        ? 'described'
+        : ['NOT_AVAILABLE', 'SKIPPED'].includes(evidenceValue)
+          ? 'unavailable'
+          : 'missing',
+  };
+}
+
+function refreshChatWorkflow(sessionOrId, user, { deferAnalysis = false, forceReady = false } = {}) {
+  const session = typeof sessionOrId === 'string'
+    ? db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(sessionOrId, user.id)
+    : sessionOrId;
+  if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+
+  const messages = listChatMessages(session.id, user.id);
+  const attachments = listChatAttachments(session.id, user.id);
+  const analysis = analyzeChatRequest({ session, messages, attachments });
+  const currentState = session.workflow_state || 'NEW_CHAT';
+  const documentStates = new Set(['GENERATING', 'DOCUMENT_PREVIEW', 'REVISION', 'FINAL', 'QUIZ_REQUIRED', 'EXPORT_UNLOCKED']);
+  let workflowState = currentState;
+  let clarificationCount = Number(session.clarification_count || 0);
+  let recommendationShown = Number(session.source_recommendation_shown || 0);
+
+  if (session.document_id && documentStates.has(currentState)) {
+    workflowState = currentState;
+  } else if (deferAnalysis) {
+    workflowState = 'ANALYZING_INPUT';
+  } else if (!messages.length && !attachments.length) {
+    workflowState = 'NEW_CHAT';
+  } else if (forceReady) {
+    workflowState = 'READY_TO_GENERATE';
+  } else if (analysis.missingCriticalContext) {
+    workflowState = 'CLARIFICATION_REQUIRED';
+    clarificationCount = 1;
+  } else {
+    workflowState = 'READY_TO_GENERATE';
+  }
+
+  const generatedTitle = generateChatTitle(analysis);
+  const currentTitle = String(session.title || '').trim();
+  const titleIsGeneric = /^(?:laprak baru|chat baru|untitled)$/i.test(currentTitle);
+  const nextTitle = generatedTitle && titleIsGeneric ? generatedTitle : currentTitle || 'Laprak baru';
+  const nextMissingContext = forceReady ? '' : analysis.missingCriticalContext;
+
+  db.prepare(`
+    UPDATE chat_sessions SET
+      title = ?,
+      generated_title = ?,
+      workflow_state = ?,
+      clarification_count = ?,
+      source_recommendation_shown = ?,
+      first_message_analyzed = ?,
+      document_type = ?,
+      course_name = ?,
+      practice_topic = ?,
+      source_status_json = ?,
+      context_summary = ?,
+      missing_critical_context = ?,
+      configuration_json = ?,
+      course_group = CASE
+        WHEN course_group = '' OR course_group = 'Belum dikelompokkan' THEN ?
+        ELSE course_group
+      END,
+      updated_at = ?
+    WHERE id = ? AND owner_user_id = ?
+  `).run(
+    nextTitle,
+    generatedTitle || session.generated_title || '',
+    workflowState,
+    clarificationCount,
+    recommendationShown,
+    deferAnalysis ? Number(session.first_message_analyzed || 0) : Number(messages.length > 0 || attachments.length > 0),
+    analysis.documentType,
+    analysis.courseName,
+    analysis.practiceTopic,
+    JSON.stringify(analysis.sourceStatus),
+    analysis.contextSummary,
+    nextMissingContext,
+    JSON.stringify(analysis.configuration),
+    analysis.courseName || 'Belum dikelompokkan',
+    now(),
+    session.id,
+    user.id,
+  );
+  return db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(session.id, user.id);
+}
+
+async function refreshChatWorkPlan(sessionOrId, user, { content = '', aiMode = 'basic', onlyIfCourseMissing = false } = {}) {
+  const session = typeof sessionOrId === 'string'
+    ? db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(sessionOrId, user.id)
+    : sessionOrId;
+  if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  const plan = await createChatWorkPlan({ session, user, content, aiMode });
+  const updated = db.prepare(`
+    UPDATE chat_sessions
+    SET work_plan_json = ?, work_plan_generated_at = ?, updated_at = ?
+    WHERE id = ? AND owner_user_id = ?
+      ${onlyIfCourseMissing ? "AND course_name = ''" : ''}
+  `).run(JSON.stringify(plan), plan.generatedAt || now(), now(), session.id, user.id);
+  if (!updated.changes) {
+    return db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(session.id, user.id);
+  }
+  return db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(session.id, user.id);
+}
+
+function chatWorkflow(session, user) {
+  const messages = listChatMessages(session.id, user.id);
+  const attachments = listChatAttachments(session.id, user.id);
+  const readiness = assessChatReadiness({
     session,
     user,
     messages,
-    attachments: listChatAttachments(session.id, user.id),
+    attachments,
   });
+  const state = session.workflow_state || 'NEW_CHAT';
+  const sourceStatus = defaultChatSourceStatus(session.source_status_json);
+  const modes = chatSourceModes(sourceStatus);
+  const readyStates = new Set(['READY_TO_GENERATE', 'GENERATING', 'DOCUMENT_PREVIEW', 'REVISION', 'FINAL', 'QUIZ_REQUIRED', 'EXPORT_UNLOCKED']);
+  const canCreateDocument = readyStates.has(state);
+  const canGenerateDraft = state === 'READY_TO_GENERATE';
+  const missingCriticalContext = session.missing_critical_context || '';
+  const nextQuestion = state === 'SOURCE_RECOMMENDED' || state === 'WAITING_SOURCE_DECISION'
+    ? 'Modul dan bukti praktik sangat disarankan agar hasil lebih akurat, tetapi kamu tetap dapat melanjutkan tanpa file.'
+    : state === 'CLARIFICATION_REQUIRED'
+      ? missingCriticalContext === 'practice_topic'
+        ? 'Saya perlu satu informasi lagi: praktikum ini membahas topik apa?'
+        : missingCriticalContext === 'course_name'
+          ? 'Saya perlu satu informasi lagi: praktikum ini untuk mata kuliah apa?'
+          : missingCriticalContext === 'document_type_and_topic'
+            ? 'Jenis dokumen dan topik apa yang ingin kamu susun?'
+            : 'Mata kuliah dan topik praktikum ini apa?'
+      : state === 'READY_TO_GENERATE'
+        ? 'Konteksnya sudah cukup. Laprak siap disusun.'
+        : readiness.nextQuestion;
+
+  return {
+    ...readiness,
+    state,
+    stage: state === 'NEW_CHAT'
+      ? 'intake'
+      : ['SOURCE_RECOMMENDED', 'WAITING_SOURCE_DECISION'].includes(state)
+        ? 'source'
+        : state === 'CLARIFICATION_REQUIRED'
+          ? 'collecting'
+          : state === 'READY_TO_GENERATE'
+            ? 'ready'
+            : state.toLowerCase(),
+    canCreateDocument,
+    canGenerateDraft,
+    nextQuestion,
+    known: {
+      courseName: session.course_name || readiness.known?.courseName || '',
+      moduleTitle: session.practice_topic || readiness.known?.moduleTitle || '',
+    },
+    sourceStatus,
+    sourceMode: modes.sourceMode,
+    evidenceMode: modes.evidenceMode,
+    clarificationCount: Number(session.clarification_count || 0),
+    sourceRecommendationShown: Boolean(session.source_recommendation_shown),
+    firstMessageAnalyzed: Boolean(session.first_message_analyzed),
+    documentType: session.document_type || 'lab_report',
+    courseName: session.course_name || '',
+    practiceTopic: session.practice_topic || '',
+    contextSummary: session.context_summary || '',
+    missingCriticalContext,
+    attachmentsCount: attachments.length,
+    workPlan: {
+      ...parseJson(session.work_plan_json, {}),
+      ready: Boolean((session.course_name || readiness.known?.courseName) && parseJson(session.work_plan_json, {}).steps?.length),
+    },
+  };
 }
 
 function inferAttachmentKind(filename = '') {
   const extension = path.extname(filename).toLowerCase();
-  if (['.pdf', '.docx', '.txt', '.md'].includes(extension)) return 'module';
-  if (['.png', '.jpg', '.jpeg', '.webp'].includes(extension)) return 'evidence';
-  return 'data';
+  const normalized = path.basename(filename, extension).toLocaleLowerCase('id-ID').replace(/[^\p{L}\p{N}]+/gu, ' ');
+  if (['.png', '.jpg', '.jpeg', '.webp'].includes(extension)) return 'practice_evidence';
+  if (/\b(ss|screenshot|capture|hasil|bukti|dokumentasi|foto)\b/.test(normalized)) return 'practice_evidence';
+  if (/\b(template|format|contoh\s+(laporan|laprak))\b/.test(normalized)) return 'template';
+  if (/\b(instruksi|ketentuan|rubrik|tugas)\b/.test(normalized)) return 'instruction';
+  if (/\b(modul|materi|panduan|praktikum)\b/.test(normalized) || extension === '.pdf') return 'module';
+  if (['.docx', '.txt', '.md'].includes(extension)) return 'supporting_document';
+  if (['.csv', '.xlsx'].includes(extension)) return 'supporting_document';
+  return 'unknown';
+}
+
+function documentCategoryForChatKind(kind = '') {
+  if (kind === 'practice_evidence') return 'evidence';
+  if (kind === 'instruction') return 'module';
+  if (kind === 'supporting_document' || kind === 'unknown') return 'data';
+  return kind;
+}
+
+function normalizeLegacyEvidenceKinds() {
+  const evidenceNameClause = `
+    LOWER(original_name) LIKE 'ss %'
+    OR LOWER(original_name) LIKE 'ss-%'
+    OR LOWER(original_name) LIKE 'ss_%'
+    OR LOWER(original_name) LIKE '%screenshot%'
+    OR LOWER(original_name) LIKE '%capture%'
+    OR LOWER(original_name) LIKE '%bukti%'
+    OR LOWER(original_name) LIKE '%dokumentasi%'
+  `;
+  db.prepare(`UPDATE chat_attachments SET kind = 'practice_evidence' WHERE kind = 'module' AND (${evidenceNameClause})`).run();
+  db.prepare(`UPDATE document_files SET category = 'evidence', is_extracted = 0 WHERE category = 'module' AND (${evidenceNameClause})`).run();
+}
+
+normalizeLegacyEvidenceKinds();
+
+function chatConversationPayload(sessionOrId, user, extra = {}) {
+  const row = typeof sessionOrId === 'string'
+    ? db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(sessionOrId, user.id)
+    : sessionOrId;
+  return {
+    session: exposeChatSession(row),
+    messages: listChatMessages(row.id, user.id),
+    attachments: listChatAttachments(row.id, user.id),
+    workflow: chatWorkflow(row, user),
+    ...extra,
+  };
 }
 
 function copyChatAttachmentToDocument(documentId, ownerUserId, attachment) {
@@ -1508,7 +2253,7 @@ function copyChatAttachmentToDocument(documentId, ownerUserId, attachment) {
     SELECT id FROM document_files
     WHERE document_id = ? AND owner_user_id = ? AND category = ? AND sha256 = ? AND deleted_at IS NULL
     LIMIT 1
-  `).get(documentId, ownerUserId, attachment.kind, attachment.sha256);
+  `).get(documentId, ownerUserId, documentCategoryForChatKind(attachment.kind), attachment.sha256);
   if (existing) return existing.id;
   const targetDir = path.join(config.uploadDir, ownerUserId, documentId, 'source');
   fs.mkdirSync(targetDir, { recursive: true });
@@ -1522,7 +2267,7 @@ function copyChatAttachmentToDocument(documentId, ownerUserId, attachment) {
       mime_type, size_bytes, source_declaration, detected_mime, security_status, sha256, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'own', ?, 'pending', ?, ?)
   `).run(
-    id, documentId, ownerUserId, attachment.kind, attachment.original_name, storageName, storagePath,
+    id, documentId, ownerUserId, documentCategoryForChatKind(attachment.kind), attachment.original_name, storageName, storagePath,
     attachment.mime_type, attachment.size_bytes, attachment.detected_mime, attachment.sha256, now(),
   );
   return id;
@@ -1575,6 +2320,16 @@ app.get('/api/chat/sessions', requireAuth, (req, res) => {
   res.json({ sessions });
 });
 
+app.get('/api/chat/sessions/archived', requireAuth, (req, res) => {
+  const sessions = db.prepare(`
+    SELECT id, title, department_key, study_program_key, structure_mode, course_group, sort_position, is_pinned, configuration_json, document_id, archived_at, created_at, updated_at
+    FROM chat_sessions
+    WHERE owner_user_id = ? AND archived_at IS NOT NULL
+    ORDER BY archived_at DESC LIMIT 100
+  `).all(req.user.id).map(exposeChatSession);
+  res.json({ sessions });
+});
+
 app.post('/api/chat/sessions', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
   const input = chatSessionSchema.parse(req.body || {});
   const departmentKey = input.departmentKey || req.user.department_key || '';
@@ -1596,20 +2351,48 @@ app.post('/api/chat/sessions', requireAuth, requireCsrf, asyncHandler(async (req
   const sortPosition = Number(db.prepare('SELECT COALESCE(MAX(sort_position), -1) AS value FROM chat_sessions WHERE owner_user_id = ? AND course_group = ?').get(req.user.id, courseGroup)?.value || -1) + 1;
   db.prepare(`INSERT INTO chat_sessions (id, owner_user_id, title, department_key, study_program_key, structure_mode, course_group, sort_position, configuration_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, req.user.id, input.title, departmentKey, studyProgramKey, input.structureMode, courseGroup, sortPosition, JSON.stringify(configuration), now(), now());
-  const greeting = input.structureMode === 'custom'
-    ? 'Ceritakan tugas atau kirim bahan yang kamu punya. Aku akan mengecek konteks yang sudah cukup, menunjukkan yang masih kurang, lalu menyusun draft setelah bukti praktik tersedia.'
-    : 'Ceritakan tugas atau kirim modul yang kamu punya. Aku akan mengecek kebutuhan laprak, meminta bagian yang masih kurang, lalu membuka pembuatan draft setelah bahanmu cukup.';
-  db.prepare(`INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at) VALUES (?, ?, ?, 'assistant', ?, ?, ?)`)
-    .run(nanoid(), id, req.user.id, greeting, JSON.stringify({ kind: 'welcome' }), now());
-  const session = exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(id));
-  res.status(201).json({ session, messages: db.prepare('SELECT id, role, content, meta_json, created_at FROM chat_messages WHERE session_id = ? ORDER BY created_at').all(id).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) })), attachments: [], workflow: chatWorkflow(session, req.user) });
+  const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(id);
+  res.status(201).json(chatConversationPayload(session, req.user));
 }));
 
+app.post('/api/chat/sessions/:id/processing-access', requireAuth, requireCsrf, (req, res) => {
+  const session = db.prepare(`
+    SELECT id FROM chat_sessions
+    WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL
+  `).get(req.params.id, req.user.id);
+  if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  const bucket = reserveLaprakCredit(req.user.id, session.id);
+  const wallet = getWallet(req.user.id);
+  res.json({ reserved: true, bucket, credits: wallet.balances.total });
+});
+
+app.delete('/api/chat/sessions/:id/processing-access', requireAuth, requireCsrf, (req, res) => {
+  const session = db.prepare(`
+    SELECT id, document_id FROM chat_sessions
+    WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL
+  `).get(req.params.id, req.user.id);
+  if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  const hasStarted = Boolean(
+    session.document_id
+    || db.prepare(`
+      SELECT 1 FROM chat_messages
+      WHERE session_id = ? AND owner_user_id = ? AND role = 'user'
+      LIMIT 1
+    `).get(session.id, req.user.id),
+  );
+  const released = hasStarted ? false : refundLaprakCredit(req.user.id, session.id);
+  res.json({ released, credits: getWallet(req.user.id).balances.total });
+});
+
 app.get('/api/chat/sessions/:id', requireAuth, (req, res) => {
-  const row = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
+  let row = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!row) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
-  const messages = db.prepare('SELECT id, role, content, meta_json, created_at FROM chat_messages WHERE session_id = ? AND owner_user_id = ? ORDER BY created_at ASC').all(row.id, req.user.id).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) }));
-  res.json({ session: exposeChatSession(row), messages, attachments: listChatAttachments(row.id, req.user.id), workflow: chatWorkflow(row, req.user) });
+  if ((row.workflow_state || 'NEW_CHAT') === 'NEW_CHAT') {
+    const hasInput = db.prepare('SELECT 1 FROM chat_messages WHERE session_id = ? AND owner_user_id = ? LIMIT 1').get(row.id, req.user.id)
+      || db.prepare('SELECT 1 FROM chat_attachments WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL LIMIT 1').get(row.id, req.user.id);
+    if (hasInput) row = refreshChatWorkflow(row, req.user);
+  }
+  res.json(chatConversationPayload(row, req.user));
 });
 
 app.put('/api/chat/sessions/:id', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
@@ -1633,9 +2416,12 @@ app.put('/api/chat/sessions/:id', requireAuth, requireCsrf, asyncHandler(async (
     now(),
     session.id,
   );
-  const updated = exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id));
+  const updatedRow = refreshChatWorkflow(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id), req.user, {
+    forceReady: ['READY_TO_GENERATE', 'GENERATING', 'DOCUMENT_PREVIEW', 'REVISION', 'FINAL', 'QUIZ_REQUIRED', 'EXPORT_UNLOCKED'].includes(session.workflow_state),
+  });
+  const updated = exposeChatSession(updatedRow);
   audit(req.user.id, 'chat.config_updated', 'chat_session', session.id, { structureMode: updated.structure_mode });
-  res.json({ session: updated });
+  res.json({ session: updated, workflow: chatWorkflow(updatedRow, req.user) });
 }));
 
 app.post('/api/chat/sessions/reorder', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
@@ -1660,12 +2446,63 @@ app.post('/api/chat/sessions/:id/pin', requireAuth, requireCsrf, asyncHandler(as
   res.json({ session: updated });
 }));
 
+app.get('/api/projects/pins', requireAuth, (req, res) => {
+  const pins = db.prepare(`
+    SELECT project_key, project_name, created_at, updated_at
+    FROM project_pins
+    WHERE owner_user_id = ?
+    ORDER BY datetime(updated_at) DESC
+  `).all(req.user.id).map((row) => ({
+    projectKey: row.project_key,
+    projectName: row.project_name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+  res.json({ pins });
+});
+
+app.post('/api/projects/pins', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
+  const input = projectPinSchema.parse(req.body || {});
+  const projectKey = input.projectKey
+    .normalize('NFKD')
+    .toLocaleLowerCase('id-ID')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!projectKey) throw new HttpError(400, 'Nama project tidak valid.', 'PROJECT_NAME_INVALID');
+  if (input.pinned) {
+    const timestamp = now();
+    db.prepare(`
+      INSERT INTO project_pins (id, owner_user_id, project_key, project_name, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(owner_user_id, project_key) DO UPDATE SET
+        project_name = excluded.project_name,
+        updated_at = excluded.updated_at
+    `).run(nanoid(), req.user.id, projectKey, input.projectName, timestamp, timestamp);
+  } else {
+    db.prepare('DELETE FROM project_pins WHERE owner_user_id = ? AND project_key = ?')
+      .run(req.user.id, projectKey);
+  }
+  audit(req.user.id, input.pinned ? 'project.pinned' : 'project.unpinned', 'project', projectKey, {
+    projectName: input.projectName,
+  });
+  res.json({ projectKey, pinned: input.pinned });
+}));
+
 app.post('/api/chat/sessions/:id/archive', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
   db.prepare('UPDATE chat_sessions SET archived_at = ?, updated_at = ? WHERE id = ?').run(now(), now(), session.id);
   audit(req.user.id, 'chat.archived', 'chat_session', session.id, {});
   res.json({ ok: true });
+}));
+
+app.post('/api/chat/sessions/:id/restore', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
+  const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NOT NULL').get(req.params.id, req.user.id);
+  if (!session) throw new HttpError(404, 'Chat arsip tidak ditemukan.', 'ARCHIVED_CHAT_NOT_FOUND');
+  db.prepare('UPDATE chat_sessions SET archived_at = NULL, updated_at = ? WHERE id = ?').run(now(), session.id);
+  audit(req.user.id, 'chat.restored', 'chat_session', session.id, {});
+  res.json({ session: exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id)) });
 }));
 
 app.delete('/api/chat/sessions/:id', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
@@ -1685,6 +2522,10 @@ app.delete('/api/chat/sessions/:id', requireAuth, requireCsrf, asyncHandler(asyn
 app.post('/api/chat/sessions/:id/attachments', requireAuth, requireCsrf, chatUpload.array('files', config.maxFilesPerUpload), asyncHandler(async (req, res) => {
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) { removeUploadedFiles(req.files); throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND'); }
+  if (!session.processing_credit_bucket && getWallet(req.user.id).balances.total < 1) {
+    removeUploadedFiles(req.files);
+    throw new HttpError(402, 'Kredit Basic habis. Tambah kredit untuk memulai Laprak baru.', 'INSUFFICIENT_CREDIT');
+  }
   const input = chatAttachmentSchema.parse(req.body || {});
   const records = [];
   try {
@@ -1715,10 +2556,6 @@ app.post('/api/chat/sessions/:id/attachments', requireAuth, requireCsrf, chatUpl
       records.push({ id, kind, original_name: file.originalname, mime_type: file.mimetype, size_bytes: file.size, created_at: now() });
     }
     if (records.length) {
-      db.prepare(`INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at) VALUES (?, ?, ?, 'assistant', ?, ?, ?)`)
-        .run(nanoid(), session.id, req.user.id, session.document_id
-          ? `${records.length} bahan disimpan dan disinkronkan ke dokumen kerja.`
-          : `${records.length} bahan disimpan di percakapan ini dan akan ikut saat dokumen kerja dibuat.`, JSON.stringify({ kind: 'attachments', attachments: records.map((item) => item.id) }), now());
       db.prepare('UPDATE chat_sessions SET updated_at = ? WHERE id = ?').run(now(), session.id);
     }
   } catch (error) {
@@ -1726,7 +2563,15 @@ app.post('/api/chat/sessions/:id/attachments', requireAuth, requireCsrf, chatUpl
     throw error;
   }
   if (records.length) evaluateUploadBurstRisk(req.user.id);
-  res.status(201).json({ attachments: listChatAttachments(session.id, req.user.id) });
+  const refreshed = refreshChatWorkflow(
+    db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(session.id, req.user.id),
+    req.user,
+    { deferAnalysis: !input.finalize },
+  );
+  res.status(201).json(chatConversationPayload(
+    db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(session.id, req.user.id),
+    req.user,
+  ));
 }));
 
 app.delete('/api/chat/sessions/:id/attachments/:attachmentId', requireAuth, requireCsrf, (req, res) => {
@@ -1742,16 +2587,196 @@ app.delete('/api/chat/sessions/:id/attachments/:attachmentId', requireAuth, requ
     `).run(deletedAt, session.document_id, req.user.id, attachment.kind, attachment.sha256, attachment.original_name);
   }
   try { fs.unlinkSync(attachment.storage_path); } catch { /* best effort */ }
-  res.json({ ok: true, attachments: listChatAttachments(req.params.id, req.user.id) });
+  const refreshed = refreshChatWorkflow(
+    db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(req.params.id, req.user.id),
+    req.user,
+  );
+  res.json(chatConversationPayload(refreshed, req.user, { ok: true }));
 });
+
+app.patch('/api/chat/sessions/:id/attachments/:attachmentId', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
+  const input = chatAttachmentCategorySchema.parse(req.body || {});
+  const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
+  if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  const attachment = db.prepare(`
+    SELECT * FROM chat_attachments
+    WHERE id = ? AND session_id = ? AND owner_user_id = ? AND deleted_at IS NULL
+  `).get(req.params.attachmentId, session.id, req.user.id);
+  if (!attachment) throw new HttpError(404, 'Lampiran tidak ditemukan.', 'ATTACHMENT_NOT_FOUND');
+  db.prepare('UPDATE chat_attachments SET kind = ? WHERE id = ?').run(input.kind, attachment.id);
+  if (session.document_id) {
+    db.prepare(`
+      UPDATE document_files SET category = ?
+      WHERE document_id = ? AND owner_user_id = ? AND sha256 = ? AND original_name = ? AND deleted_at IS NULL
+    `).run(documentCategoryForChatKind(input.kind), session.document_id, req.user.id, attachment.sha256, attachment.original_name);
+  }
+  const refreshed = refreshChatWorkflow(session.id, req.user);
+  audit(req.user.id, 'chat.attachment_category_updated', 'chat_attachment', attachment.id, { kind: input.kind });
+  res.json(chatConversationPayload(refreshed, req.user));
+}));
 
 app.get('/api/chat/attachments/:id/preview', requireAuth, (req, res) => {
   const attachment = db.prepare(`SELECT * FROM chat_attachments WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL`).get(req.params.id, req.user.id);
   if (!attachment) throw new HttpError(404, 'Lampiran tidak ditemukan.', 'ATTACHMENT_NOT_FOUND');
-  if (!String(attachment.mime_type || '').startsWith('image/')) throw new HttpError(415, 'Preview hanya tersedia untuk gambar.', 'PREVIEW_UNSUPPORTED');
+  if (path.extname(attachment.original_name).toLowerCase() === '.docx') {
+    try {
+      const entry = new AdmZip(attachment.storage_path).getEntries()
+        .find((item) => item.entryName.startsWith('word/media/') && /\.(?:png|jpe?g)$/i.test(item.entryName) && !item.isDirectory);
+      if (entry) {
+        res.type(path.extname(entry.entryName).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg');
+        res.setHeader('Content-Disposition', 'inline');
+        return res.send(entry.getData());
+      }
+    } catch { /* Unsupported DOCX preview falls through to the normal 415 response. */ }
+    throw new HttpError(415, 'Dokumen ini tidak memiliki thumbnail visual.', 'PREVIEW_UNSUPPORTED');
+  }
+  if (!String(attachment.mime_type || '').startsWith('image/') && attachment.mime_type !== 'application/pdf') throw new HttpError(415, 'Preview hanya tersedia untuk gambar dan PDF.', 'PREVIEW_UNSUPPORTED');
   res.type(attachment.mime_type);
+  res.setHeader('Content-Disposition', 'inline');
   res.sendFile(path.resolve(attachment.storage_path));
 });
+
+app.get('/api/chat/attachments/:id/file', requireAuth, (req, res) => {
+  const attachment = db.prepare(`
+    SELECT * FROM chat_attachments
+    WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL
+  `).get(req.params.id, req.user.id);
+  if (!attachment) throw new HttpError(404, 'Lampiran tidak ditemukan.', 'ATTACHMENT_NOT_FOUND');
+  res.type(attachment.detected_mime || attachment.mime_type || mime.lookup(attachment.original_name) || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `inline; filename="${sanitizeFilename(attachment.original_name)}"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.sendFile(path.resolve(attachment.storage_path));
+});
+
+app.get('/api/chat/attachments/:id/text-preview', requireAuth, asyncHandler(async (req, res) => {
+  const attachment = db.prepare(`
+    SELECT * FROM chat_attachments
+    WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL
+  `).get(req.params.id, req.user.id);
+  if (!attachment) throw new HttpError(404, 'Lampiran tidak ditemukan.', 'ATTACHMENT_NOT_FOUND');
+  const text = String(await extractText(attachment))
+    .replace(/\u0000/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1600);
+  res.json({ text });
+}));
+
+app.post('/api/chat/sessions/:id/actions', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
+  const input = chatActionSchema.parse(req.body || {});
+  let session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
+  if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  const existing = db.prepare(`
+    SELECT id FROM chat_session_actions
+    WHERE session_id = ? AND owner_user_id = ? AND idempotency_key = ?
+  `).get(session.id, req.user.id, input.idempotencyKey);
+  if (existing) return res.json(chatConversationPayload(session, req.user, { idempotent: true, autoGenerate: false }));
+
+  const state = session.workflow_state || 'NEW_CHAT';
+  if (input.type === 'CONTINUE_WITHOUT_SOURCE' && !['SOURCE_RECOMMENDED', 'WAITING_SOURCE_DECISION'].includes(state)) {
+    throw new HttpError(409, 'Keputusan sumber tidak sesuai dengan tahap percakapan saat ini.', 'CHAT_ACTION_STATE_INVALID');
+  }
+  if (input.type === 'SUBMIT_CLARIFICATION' && state !== 'CLARIFICATION_REQUIRED') {
+    throw new HttpError(409, 'Klarifikasi ini sudah diproses atau tidak lagi dibutuhkan.', 'CHAT_ACTION_STATE_INVALID');
+  }
+  if (['CONTINUE_WITHOUT_SOURCE', 'SUBMIT_CLARIFICATION'].includes(input.type)) {
+    reserveLaprakCredit(req.user.id, session.id);
+  }
+
+  let autoGenerate = false;
+  db.exec('BEGIN');
+  try {
+    db.prepare(`
+      INSERT INTO chat_session_actions (
+        id, session_id, owner_user_id, idempotency_key, action_type, payload_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(nanoid(), session.id, req.user.id, input.idempotencyKey, input.type, JSON.stringify(input.payload), now());
+
+    if (input.type === 'CONTINUE_WITHOUT_SOURCE') {
+      const sourceStatus = defaultChatSourceStatus(session.source_status_json);
+      const targetState = input.payload.availability === 'not_available' ? 'NOT_AVAILABLE' : 'SKIPPED';
+      const sourceType = input.payload.sourceType || 'all';
+      const sourceKeys = sourceType === 'all'
+        ? Object.keys(sourceStatus)
+        : sourceType === 'module'
+          ? ['module', 'instruction', 'template', 'supportingDocument']
+          : sourceType === 'practice_evidence'
+            ? ['practiceEvidence']
+            : [sourceType === 'supporting_document' ? 'supportingDocument' : sourceType];
+      sourceKeys.forEach((key) => {
+        if (sourceStatus[key] === 'UNKNOWN' || sourceStatus[key] === 'AVAILABLE') sourceStatus[key] = targetState;
+      });
+      db.prepare(`
+        UPDATE chat_sessions SET source_status_json = ?, source_recommendation_shown = 1,
+          workflow_state = 'ANALYZING_INPUT', updated_at = ? WHERE id = ?
+      `).run(JSON.stringify(sourceStatus), now(), session.id);
+      session = refreshChatWorkflow(session.id, req.user);
+      const workflow = chatWorkflow(session, req.user);
+      const analysis = analyzeChatRequest({
+        session,
+        messages: listChatMessages(session.id, req.user.id),
+        attachments: listChatAttachments(session.id, req.user.id),
+      });
+      autoGenerate = workflow.state === 'READY_TO_GENERATE' && analysis.hasGenerationIntent;
+    } else if (input.type === 'SUBMIT_CLARIFICATION') {
+      const configuration = parseJson(session.configuration_json, {});
+      const missing = session.missing_critical_context || '';
+      let courseName = String(input.payload.courseName || '').trim();
+      let practiceTopic = String(input.payload.practiceTopic || '').trim();
+      if (!practiceTopic && input.payload.answer) practiceTopic = String(input.payload.answer).trim();
+      if (input.payload.forceFromSources && !practiceTopic) {
+        const source = listChatAttachments(session.id, req.user.id)[0];
+        practiceTopic = source ? path.basename(source.original_name, path.extname(source.original_name)).slice(0, 150) : 'Topik dari bahan yang tersedia';
+      }
+      if (missing === 'course_name' && !courseName && input.payload.answer) courseName = String(input.payload.answer).trim();
+      if (missing === 'practice_topic' && !practiceTopic && input.payload.answer) practiceTopic = String(input.payload.answer).trim();
+      if (!courseName) courseName = session.course_name || configuration.courseName || '';
+      if (!practiceTopic) practiceTopic = session.practice_topic || configuration.moduleTitle || '';
+      const documentType = input.payload.documentType || session.document_type || 'lab_report';
+      db.prepare(`
+        UPDATE chat_sessions SET configuration_json = ?, document_type = ?, course_name = ?,
+          practice_topic = ?, clarification_count = 1, missing_critical_context = '',
+          workflow_state = 'READY_TO_GENERATE', updated_at = ? WHERE id = ?
+      `).run(
+        JSON.stringify({ ...configuration, courseName, moduleTitle: practiceTopic }),
+        documentType,
+        courseName,
+        practiceTopic,
+        now(),
+        session.id,
+      );
+      session = refreshChatWorkflow(session.id, req.user, { forceReady: true });
+      autoGenerate = true;
+    } else if (input.type === 'DOCUMENT_READY') {
+      if (!session.document_id) throw new HttpError(409, 'Dokumen kerja belum dibuat.', 'CHAT_DOCUMENT_MISSING');
+      const document = db.prepare('SELECT generated_at FROM documents WHERE id = ? AND owner_user_id = ?').get(session.document_id, req.user.id);
+      if (!document?.generated_at) throw new HttpError(409, 'Dokumen belum selesai dibuat.', 'CHAT_DOCUMENT_NOT_READY');
+      db.prepare(`UPDATE chat_sessions SET workflow_state = 'DOCUMENT_PREVIEW', updated_at = ? WHERE id = ?`).run(now(), session.id);
+      session = db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw error;
+  }
+  if (input.type === 'SUBMIT_CLARIFICATION') {
+    session = await refreshChatWorkPlan(
+      db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(session.id, req.user.id),
+      req.user,
+      {
+        content: [input.payload.courseName, input.payload.practiceTopic, input.payload.answer].filter(Boolean).join(' - '),
+        aiMode: input.payload.aiMode || 'basic',
+      },
+    );
+  }
+
+  audit(req.user.id, 'chat.action_completed', 'chat_session', session.id, { type: input.type });
+  return res.json(chatConversationPayload(
+    db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(session.id, req.user.id),
+    req.user,
+    { autoGenerate },
+  ));
+}));
 
 app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimiter, asyncHandler(async (req, res) => {
   const input = chatMessageSchema.parse(req.body || {});
@@ -1764,34 +2789,190 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   if (!aiModes[input.aiMode]?.available) {
     const message = input.aiMode === 'xtrathink'
       ? 'Mode XtraThink hanya tersedia untuk subscription Max aktif.'
-      : 'Mode Thinking membutuhkan pembelian credit Laprakin atau subscription Pro/Max aktif.';
+      : 'Mode Thinking membutuhkan pembelian kredit Laprakin atau subscription Pro/Max aktif.';
     throw new HttpError(403, message, 'AI_MODE_LOCKED');
   }
+  const hadCreditReservation = Boolean(session.processing_credit_bucket && !session.processing_credit_refunded_at);
+  reserveLaprakCredit(req.user.id, session.id);
+  if (!session.document_id) {
+    const previousState = session.workflow_state || 'NEW_CHAT';
+    const priorUserMessages = listChatMessages(session.id, req.user.id)
+      .filter((message) => message.role === 'user')
+      .slice(-40);
+    const inferredContext = inferChatContext({
+      messages: [...priorUserMessages, { role: 'user', content: input.content }],
+      configuration: parseJson(session.configuration_json, {}),
+    });
+    if (previousState === 'CLARIFICATION_REQUIRED') {
+      const answer = input.content.replace(/\s+/g, ' ').trim().slice(0, 150);
+      const parts = answer.split(/\s*(?:,|;|\|| - )\s*/).filter(isPlausibleAcademicContext);
+      if (session.missing_critical_context === 'course_name' && !inferredContext.configuration.courseName && isPlausibleAcademicContext(answer)) {
+        inferredContext.configuration.courseName = answer;
+      } else if (session.missing_critical_context === 'practice_topic' && !inferredContext.configuration.moduleTitle && isPlausibleAcademicContext(answer)) {
+        inferredContext.configuration.moduleTitle = answer;
+      } else if (session.missing_critical_context === 'course_and_topic') {
+        if (!inferredContext.configuration.courseName && parts.length > 1) inferredContext.configuration.courseName = parts[0];
+        if (!inferredContext.configuration.moduleTitle && parts.length > 1) inferredContext.configuration.moduleTitle = parts.slice(1).join(' - ');
+      } else if (session.missing_critical_context === 'document_type_and_topic' && !inferredContext.configuration.moduleTitle && isPlausibleAcademicContext(answer)) {
+        inferredContext.configuration.moduleTitle = answer;
+      }
+    }
+    const links = Array.from(input.content.matchAll(/https?:\/\/[^\s)]+/g)).map((match) => match[0]).slice(0, 8);
+    const timestamp = now();
+    const userMessageId = nanoid();
+    db.prepare(`
+      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+      VALUES (?, ?, ?, 'user', ?, ?, ?)
+    `).run(userMessageId, session.id, req.user.id, input.content, JSON.stringify({ links, aiMode: input.aiMode }), timestamp);
+    db.prepare(`
+      UPDATE chat_attachments SET message_id = ?
+      WHERE session_id = ? AND owner_user_id = ? AND message_id IS NULL AND deleted_at IS NULL
+    `).run(userMessageId, session.id, req.user.id);
+    db.prepare('UPDATE chat_sessions SET configuration_json = ?, updated_at = ? WHERE id = ?')
+      .run(JSON.stringify(inferredContext.configuration), timestamp, session.id);
+    let refreshed = refreshChatWorkflow(session.id, req.user);
+    let assistant;
+    try {
+      assistant = config.geminiKeyValid
+        ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode })
+        : { text: 'Provider AI belum aktif di environment lokal ini. Isi GEMINI_API_KEY untuk menguji respons AI nyata.', model: 'local-unconfigured' };
+    } catch (error) {
+      if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
+      throw error;
+    }
+    const aiCourseName = isPlausibleAcademicContext(assistant.courseName) ? assistant.courseName : '';
+    const aiModuleTitle = isPlausibleAcademicContext(assistant.moduleTitle) ? assistant.moduleTitle : '';
+    const aiProjectName = isPlausibleAcademicContext(assistant.projectName) ? assistant.projectName : aiCourseName;
+    if (aiCourseName || aiModuleTitle || aiProjectName) {
+      const nextConfiguration = {
+        ...parseJson(refreshed.configuration_json, {}),
+        ...(aiCourseName ? { courseName: aiCourseName } : {}),
+        ...(aiModuleTitle ? { moduleTitle: aiModuleTitle } : {}),
+      };
+      db.prepare(`
+        UPDATE chat_sessions SET
+          configuration_json = ?,
+          course_name = CASE WHEN ? <> '' THEN ? ELSE course_name END,
+          practice_topic = CASE WHEN ? <> '' THEN ? ELSE practice_topic END,
+          course_group = CASE WHEN ? <> '' THEN ? ELSE course_group END,
+          updated_at = ?
+        WHERE id = ? AND owner_user_id = ?
+      `).run(
+        JSON.stringify(nextConfiguration),
+        aiCourseName, aiCourseName,
+        aiModuleTitle, aiModuleTitle,
+        aiProjectName, aiProjectName,
+        now(),
+        refreshed.id,
+        req.user.id,
+      );
+      refreshed = refreshChatWorkflow(refreshed.id, req.user);
+    }
+    const analysis = analyzeChatRequest({
+      session: refreshed,
+      messages: listChatMessages(refreshed.id, req.user.id),
+      attachments: listChatAttachments(refreshed.id, req.user.id),
+    });
+    const initialWorkflow = chatWorkflow(refreshed, req.user);
+    const isClarification = assistant.isClarification ?? initialWorkflow.state === 'CLARIFICATION_REQUIRED';
+    const fallbackShouldGenerate = initialWorkflow.state === 'READY_TO_GENERATE'
+      && (previousState === 'CLARIFICATION_REQUIRED' || analysis.hasAttachments || analysis.hasGenerationIntent);
+    const autoGenerate = initialWorkflow.state === 'READY_TO_GENERATE'
+      && (assistant.shouldGenerate ?? fallbackShouldGenerate);
+    if (!isClarification && refreshed.course_name) {
+      refreshed = await refreshChatWorkPlan(refreshed, req.user, { content: input.content, aiMode: input.aiMode });
+    }
+    const currentTitle = String(refreshed.title || '').trim();
+    const titleIsGeneric = /^(?:laprak baru|chat baru|untitled)$/i.test(String(session.title || '').trim())
+      || /^(?:laprak baru|chat baru|untitled)$/i.test(currentTitle)
+      || currentTitle === String(refreshed.generated_title || '').trim();
+    if (assistant.title && titleIsGeneric) {
+      db.prepare('UPDATE chat_sessions SET title = ?, generated_title = ?, updated_at = ? WHERE id = ? AND owner_user_id = ?')
+        .run(assistant.title, assistant.title, now(), refreshed.id, req.user.id);
+      refreshed = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(refreshed.id, req.user.id);
+    }
+    if (!autoGenerate) {
+      const finishedAt = now();
+      db.prepare(`
+        INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+        VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+      `).run(
+        nanoid(),
+        session.id,
+        req.user.id,
+        assistant.text,
+        JSON.stringify({
+          kind: isClarification ? 'clarification' : 'assistant_response',
+          aiMode: input.aiMode,
+          provider: config.geminiKeyValid ? 'gemini' : 'local',
+          model: assistant.model,
+          workflow: assistant.workflow || null,
+          workPlan: isClarification ? null : parseJson(refreshed.work_plan_json, {}),
+          thinkingStartedAt: timestamp,
+          thinkingFinishedAt: finishedAt,
+          isClarification,
+        }),
+        finishedAt,
+      );
+    }
+    const workflow = chatWorkflow(refreshed, req.user);
+    audit(req.user.id, 'chat.input_analyzed', 'chat_session', refreshed.id, {
+      workflowState: workflow.state,
+      documentType: workflow.documentType,
+    });
+    return res.json(chatConversationPayload(refreshed, req.user, { autoGenerate }));
+  }
+  const priorUserMessages = db.prepare(`
+    SELECT role, content FROM chat_messages
+    WHERE session_id = ? AND owner_user_id = ? AND role = 'user'
+    ORDER BY created_at DESC LIMIT 40
+  `).all(session.id, req.user.id).reverse();
+  const inferredContext = inferChatContext({
+    messages: [...priorUserMessages, { role: 'user', content: input.content }],
+    configuration: parseJson(session.configuration_json, {}),
+  });
+  const effectiveSession = {
+    ...session,
+    configuration_json: JSON.stringify(inferredContext.configuration),
+    configuration: inferredContext.configuration,
+  };
   const links = Array.from(input.content.matchAll(/https?:\/\/[^\s)]+/g)).map((match) => match[0]).slice(0, 8);
-  const assistant = config.geminiKey
-    ? await answerWorkspaceChat({ session, user: req.user, content: input.content, aiMode: input.aiMode })
-    : { text: 'Provider AI belum aktif di environment lokal ini. Isi GEMINI_API_KEY untuk menguji respons AI nyata.', model: 'local-unconfigured' };
+  let assistant;
+  try {
+    assistant = config.geminiKeyValid
+      ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode })
+      : { text: 'Provider AI belum aktif di environment lokal ini. Isi GEMINI_API_KEY untuk menguji respons AI nyata.', model: 'local-unconfigured' };
+  } catch (error) {
+    if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
+    throw error;
+  }
   const timestamp = now();
   db.exec('BEGIN');
   try {
+    const userMessageId = nanoid();
     db.prepare(`INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at) VALUES (?, ?, ?, 'user', ?, ?, ?)`)
-      .run(nanoid(), session.id, req.user.id, input.content, JSON.stringify({ links, aiMode: input.aiMode }), timestamp);
+      .run(userMessageId, session.id, req.user.id, input.content, JSON.stringify({ links, aiMode: input.aiMode }), timestamp);
+    db.prepare(`
+      UPDATE chat_attachments SET message_id = ?
+      WHERE session_id = ? AND owner_user_id = ? AND message_id IS NULL AND deleted_at IS NULL
+    `).run(userMessageId, session.id, req.user.id);
     db.prepare(`INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at) VALUES (?, ?, ?, 'assistant', ?, ?, ?)`)
-      .run(nanoid(), session.id, req.user.id, assistant.text, JSON.stringify({ aiMode: input.aiMode, provider: config.geminiKey ? 'gemini' : 'local', model: assistant.model, workflow: assistant.workflow || null }), timestamp);
-    db.prepare('UPDATE chat_sessions SET updated_at = ? WHERE id = ?').run(timestamp, session.id);
+      .run(nanoid(), session.id, req.user.id, assistant.text, JSON.stringify({ aiMode: input.aiMode, provider: config.geminiKeyValid ? 'gemini' : 'local', model: assistant.model, workflow: assistant.workflow || null }), timestamp);
+    db.prepare('UPDATE chat_sessions SET configuration_json = ?, updated_at = ? WHERE id = ?')
+      .run(effectiveSession.configuration_json, timestamp, session.id);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
   }
-  const workflow = chatWorkflow(session, req.user);
+  const workflow = chatWorkflow(effectiveSession, req.user);
   if (workflow.stage !== 'intake' && (!session.title || /^laprak baru$/i.test(session.title.trim()))) {
-    const cfg = parseJson(session.configuration_json, {});
+    const cfg = inferredContext.configuration;
     const candidate = [cfg.courseName, cfg.moduleTitle].filter(Boolean).join(' — ') || input.content.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim();
     const autoTitle = (candidate || 'Laprak baru').slice(0, 72);
     db.prepare(`UPDATE chat_sessions SET title = ?, course_group = CASE WHEN course_group = '' OR course_group = 'Belum dikelompokkan' THEN ? ELSE course_group END WHERE id = ?`).run(autoTitle, cfg.courseName || 'Belum dikelompokkan', session.id);
   }
-  audit(req.user.id, 'ai.chat_completed', 'chat_session', session.id, { mode: input.aiMode, model: assistant.model, provider: config.geminiKey ? 'gemini' : 'local' });
+  audit(req.user.id, 'ai.chat_completed', 'chat_session', session.id, { mode: input.aiMode, model: assistant.model, provider: config.geminiKeyValid ? 'gemini' : 'local' });
   const messages = db.prepare('SELECT id, role, content, meta_json, created_at FROM chat_messages WHERE session_id = ? AND owner_user_id = ? ORDER BY created_at ASC').all(session.id, req.user.id).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) }));
   const refreshedSession = exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id));
   res.json({ session: refreshedSession, messages, attachments: listChatAttachments(session.id, req.user.id), workflow: chatWorkflow(refreshedSession, req.user) });
@@ -1805,11 +2986,23 @@ app.post('/api/chat/sessions/:id/document', requireAuth, requireCsrf, asyncHandl
   if (!workflow.canCreateDocument) {
     throw new HttpError(422, `Konteks belum cukup untuk membuat dokumen. ${workflow.nextQuestion}`, 'CHAT_CONTEXT_INCOMPLETE');
   }
+  reserveLaprakCredit(req.user.id, session.id);
   const sessionConfiguration = parseJson(session.configuration_json, {});
   const messages = db.prepare(`SELECT content FROM chat_messages WHERE session_id = ? AND owner_user_id = ? AND role = 'user' ORDER BY created_at`).all(session.id, req.user.id);
-  const title = session.title === 'Laprak baru' ? (sessionConfiguration.moduleTitle || sessionConfiguration.courseName || messages[0]?.content || 'Laprak baru').slice(0, 120) : session.title;
+  const title = session.generated_title
+    || (session.title === 'Laprak baru' ? (sessionConfiguration.moduleTitle || sessionConfiguration.courseName || 'Laprak dengan konteks terbatas').slice(0, 120) : session.title);
   const id = nanoid(); const timestamp = now();
-  const recipe = { tone: sessionConfiguration.tone || 'semi-formal', perspective: sessionConfiguration.perspective || 'saya', includeConclusion: false, useTimesNewRoman: true, blackText: true, allowExternalAi: sessionConfiguration.allowExternalAi !== false, instructions: [sessionConfiguration.instructions || '', sessionConfiguration.customStructure ? `Struktur khusus: ${sessionConfiguration.customStructure}` : '', ...messages.map((message) => message.content)].filter(Boolean).join('\n').slice(0, 3000) };
+  const recipe = {
+    tone: sessionConfiguration.tone || 'semi-formal',
+    perspective: sessionConfiguration.perspective || 'saya',
+    includeConclusion: false,
+    useTimesNewRoman: true,
+    blackText: true,
+    allowExternalAi: sessionConfiguration.allowExternalAi !== false,
+    sourceMode: workflow.sourceMode === 'missing' ? 'unavailable' : workflow.sourceMode,
+    evidenceMode: workflow.evidenceMode === 'missing' ? 'unavailable' : workflow.evidenceMode,
+    instructions: [sessionConfiguration.instructions || '', sessionConfiguration.customStructure ? `Struktur khusus: ${sessionConfiguration.customStructure}` : '', ...messages.map((message) => message.content)].filter(Boolean).join('\n').slice(0, 3000),
+  };
   db.prepare(`INSERT INTO documents (id, owner_user_id, title, course_name, module_title, document_profile, recipe_json, priority, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'normal', 'draft', ?, ?)`)
     .run(id, req.user.id, title, sessionConfiguration.courseName || '', sessionConfiguration.moduleTitle || '', sessionConfiguration.documentProfile || (session.structure_mode === 'custom' ? 'proyek' : 'langkah'), JSON.stringify(recipe), timestamp, timestamp);
   const attachments = db.prepare(`SELECT * FROM chat_attachments WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL ORDER BY created_at`).all(session.id, req.user.id);
@@ -1817,8 +3010,7 @@ app.post('/api/chat/sessions/:id/document', requireAuth, requireCsrf, asyncHandl
     copyChatAttachmentToDocument(id, req.user.id, attachment);
   }
   seedDocumentTasks(id, req.user.id, null);
-  db.prepare('UPDATE chat_sessions SET document_id = ?, updated_at = ? WHERE id = ?').run(id, now(), session.id);
-  db.prepare(`INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at) VALUES (?, ?, ?, 'assistant', ?, ?, ?)`).run(nanoid(), session.id, req.user.id, `Laprak siap dibuat dari percakapan ini. ${attachments.length ? `${attachments.length} bahan sudah dibawa ke dokumen kerja.` : 'Kamu bisa menambah bahan dari ruang dokumen kapan saja.'}`, JSON.stringify({ documentId: id }), now());
+  db.prepare(`UPDATE chat_sessions SET document_id = ?, workflow_state = 'GENERATING', updated_at = ? WHERE id = ?`).run(id, now(), session.id);
   audit(req.user.id, 'chat.document_created', 'chat_session', session.id, { documentId: id, attachmentCount: attachments.length });
   res.status(201).json({ document: exposeDocument(db.prepare('SELECT * FROM documents WHERE id = ?').get(id)), workflow });
 }));
@@ -1963,9 +3155,21 @@ app.get('/api/documents/trash', requireAuth, (req, res) => {
   res.json({ documents: listDeletedDocuments(req.user.id) });
 });
 
-app.get('/api/documents/:id', requireAuth, requireDocumentOwner, (req, res) => {
+app.get('/api/documents/:id', requireAuth, requireDocumentOwner, asyncHandler(async (req, res) => {
+  await prepareDocumentEvidence(req.document.id, req.user.id);
   res.json(exposeDocument(req.document));
-});
+}));
+
+app.get('/api/documents/:id/preview.docx', requireAuth, requireDocumentOwner, asyncHandler(async (req, res) => {
+  if (!req.document.generated_at) {
+    throw new HttpError(409, 'Dokumen belum selesai dibuat.', 'DOCUMENT_NOT_READY');
+  }
+  const { buffer } = await buildDocumentDocxBuffer(req.document.id, req.user.id, { enforceExportQuality: false });
+  res.type('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  res.setHeader('Content-Disposition', `inline; filename="${sanitizeFilename(req.document.title || 'laprak')}.docx"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.send(buffer);
+}));
 
 app.post('/api/documents/:id/pin', requireAuth, requireCsrf, requireDocumentOwner, asyncHandler(async (req, res) => {
   const input = pinSchema.parse(req.body || {});
@@ -2144,6 +3348,19 @@ app.get('/api/files/:id/download', requireAuth, (req, res) => {
   res.download(file.storage_path, file.original_name);
 });
 
+app.get('/api/files/:id/preview', requireAuth, (req, res) => {
+  const file = db.prepare(`
+    SELECT * FROM document_files WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL
+  `).get(req.params.id, req.user.id);
+  if (!file) throw new HttpError(404, 'File tidak ditemukan.', 'FILE_NOT_FOUND');
+  if (!String(file.mime_type || '').startsWith('image/') && file.mime_type !== 'application/pdf') {
+    throw new HttpError(415, 'Preview hanya tersedia untuk gambar dan PDF.', 'PREVIEW_UNSUPPORTED');
+  }
+  res.type(file.mime_type);
+  res.setHeader('Content-Disposition', 'inline');
+  res.sendFile(path.resolve(file.storage_path));
+});
+
 app.delete('/api/files/:id', requireAuth, requireCsrf, (req, res) => {
   const file = db.prepare(`
     SELECT * FROM document_files WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL
@@ -2177,22 +3394,185 @@ app.post('/api/documents/:id/generate', requireAuth, requireCsrf, requireDocumen
   }
   const recipe = parseJson(req.document.recipe_json, {});
   if (!recipe.allowExternalAi) throw new HttpError(412, 'Aktifkan pemrosesan AI eksternal sebelum menyusun draft.', 'AI_CONSENT_REQUIRED');
-  if (!config.geminiKey) throw new HttpError(503, 'Provider AI belum tersedia. Draft tidak akan diganti dengan template kosong.', 'AI_PROVIDER_UNAVAILABLE');
+  if (!config.geminiKeyValid) throw new HttpError(503, 'GEMINI_API_KEY harus berupa API key Google AI Studio berawalan AIza sebelum draft dapat disusun.', 'AI_CREDENTIAL_INVALID');
   const entitlement = revisionEntitlementForUser(req.user.id);
   const isInitialDraft = !req.document.generated_at;
   const revisionCount = Number(req.document.revision_count || 0);
   if (!isInitialDraft && revisionCount >= entitlement.maxRevisions) {
     throw new HttpError(402, `Batas ${entitlement.maxRevisions} revisi untuk laprak ini sudah dipakai. Pilih paket yang sesuai untuk revisi lebih banyak.`, 'REVISION_LIMIT_REACHED');
   }
-  const bucket = isInitialDraft ? consumeCredit(req.user.id, req.document.id) : null;
+  let bucket = null;
+  let creditSessionId = null;
+  if (isInitialDraft) {
+    const creditSession = db.prepare(`
+      SELECT id, processing_credit_bucket, processing_credit_refunded_at
+      FROM chat_sessions
+      WHERE document_id = ? AND owner_user_id = ? AND archived_at IS NULL
+      LIMIT 1
+    `).get(req.document.id, req.user.id);
+    if (creditSession) {
+      bucket = reserveLaprakCredit(req.user.id, creditSession.id);
+      creditSessionId = creditSession.id;
+    } else {
+      bucket = consumeCredit(req.user.id, req.document.id);
+    }
+  }
   const jobId = enqueueJob({
     documentId: req.document.id,
     userId: req.user.id,
     jobType: 'generate',
-    payload: { creditBucket: bucket, isRevision: !isInitialDraft, revisionPlan: entitlement.plan },
+    payload: { creditBucket: bucket, creditSessionId, isRevision: !isInitialDraft, revisionPlan: entitlement.plan },
   });
+  db.prepare(`UPDATE chat_sessions SET workflow_state = 'GENERATING', updated_at = ? WHERE document_id = ? AND owner_user_id = ?`)
+    .run(now(), req.document.id, req.user.id);
   evaluateGenerationBurstRisk(req.user.id);
   res.status(202).json({ jobId, bucket, isRevision: !isInitialDraft, revisionLimit: entitlement.maxRevisions, revisionsUsed: revisionCount });
+});
+
+app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentOwner, aiChatLimiter, asyncHandler(async (req, res) => {
+  const input = revisionSchema.parse(req.body || {});
+  if (!req.document.generated_at) throw new HttpError(409, 'Susun draft pertama sebelum meminta revisi.', 'REVISION_DRAFT_REQUIRED');
+  ensureNoActiveJob(req.document.id, 'generate');
+  const recipe = parseJson(req.document.recipe_json, {});
+  if (!recipe.allowExternalAi) throw new HttpError(412, 'Aktifkan pemrosesan AI eksternal sebelum merevisi draft.', 'AI_CONSENT_REQUIRED');
+  if (!config.geminiKeyValid) throw new HttpError(503, 'GEMINI_API_KEY harus berupa API key Google AI Studio berawalan AIza sebelum revisi dapat diproses.', 'AI_CREDENTIAL_INVALID');
+  const entitlement = revisionEntitlementForUser(req.user.id);
+  const revisionCount = Number(req.document.revision_count || 0);
+  if (revisionCount >= entitlement.maxRevisions) {
+    throw new HttpError(402, `Batas ${entitlement.maxRevisions} revisi untuk laprak ini sudah dipakai.`, 'REVISION_LIMIT_REACHED');
+  }
+  const session = db.prepare(`
+    SELECT * FROM chat_sessions
+    WHERE document_id = ? AND owner_user_id = ? AND archived_at IS NULL
+    LIMIT 1
+  `).get(req.document.id, req.user.id);
+  if (!session) throw new HttpError(404, 'Percakapan dokumen tidak ditemukan.', 'CHAT_NOT_FOUND');
+  const timestamp = now();
+  const userMessageId = nanoid();
+  db.prepare(`
+    INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+    VALUES (?, ?, ?, 'user', ?, ?, ?)
+  `).run(userMessageId, session.id, req.user.id, input.instruction, JSON.stringify({ kind: 'revision_request', aiMode: input.aiMode || 'basic' }), timestamp);
+  db.prepare(`
+    UPDATE chat_attachments SET message_id = ?
+    WHERE session_id = ? AND owner_user_id = ? AND message_id IS NULL AND deleted_at IS NULL
+  `).run(userMessageId, session.id, req.user.id);
+  let validation;
+  try {
+    validation = await validateDocumentRevision({
+      document: req.document,
+      session,
+      user: req.user,
+      instruction: input.instruction,
+      aiMode: input.aiMode || 'basic',
+    });
+  } catch {
+    const cleanInstruction = String(input.instruction || '').trim();
+    const asksForAssessment = /\b(?:apa\s+(?:yang\s+)?kurang|cek|periksa|nilai|menurutmu|jelaskan)\b/i.test(cleanInstruction);
+    const requestsChange = /\b(?:ubah|revisi|perbaiki|rapikan|natural|template|struktur|bagian|kata|kalimat|gambar|tambah|hapus)\b/i.test(cleanInstruction);
+    const action = asksForAssessment ? 'ANSWER' : requestsChange ? 'REVISE' : 'ASK';
+    validation = {
+      action,
+      accepted: action === 'REVISE',
+      response: action === 'REVISE'
+        ? 'Saya akan menerapkan perbaikan berdasarkan isi dokumen dan percakapan sebelumnya.'
+        : action === 'ANSWER'
+          ? 'Dokumen belum dapat dinilai karena layanan AI sedang tidak tersedia.'
+          : 'Sebutkan perubahan atau penilaian yang kamu butuhkan dari dokumen ini.',
+      title: '',
+      model: 'validation-fallback',
+    };
+  }
+  const currentSessionTitle = String(session.title || '').trim();
+  const generatedSessionTitle = String(session.generated_title || '').trim();
+  const canReplaceTitle = !currentSessionTitle
+    || /^(?:laprak baru|chat baru|untitled)$/i.test(currentSessionTitle)
+    || currentSessionTitle === generatedSessionTitle
+    || currentSessionTitle.length > 72;
+  if (validation.title && canReplaceTitle) {
+    db.prepare('UPDATE chat_sessions SET title = ?, generated_title = ?, updated_at = ? WHERE id = ? AND owner_user_id = ?')
+      .run(validation.title, validation.title, now(), session.id, req.user.id);
+    session.title = validation.title;
+    session.generated_title = validation.title;
+  }
+  if (validation.action === 'ANSWER') {
+    const plannedSession = await refreshChatWorkPlan(session, req.user, {
+      content: input.instruction,
+      aiMode: input.aiMode || 'basic',
+    });
+    const finishedAt = now();
+    db.prepare(`
+      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+      VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+    `).run(nanoid(), session.id, req.user.id, validation.response, JSON.stringify({
+      kind: 'revision_answer',
+      model: validation.model,
+      workPlan: parseJson(plannedSession.work_plan_json, {}),
+      thinkingStartedAt: timestamp,
+      thinkingFinishedAt: finishedAt,
+      isClarification: false,
+    }), finishedAt);
+    db.prepare(`UPDATE chat_sessions SET updated_at = ? WHERE id = ?`).run(finishedAt, session.id);
+    return res.json({
+      answered: true,
+      conversation: chatConversationPayload(session.id, req.user),
+    });
+  }
+  if (!validation.accepted) {
+    db.prepare(`
+      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+      VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+    `).run(nanoid(), session.id, req.user.id, validation.response, JSON.stringify({
+      kind: 'revision_clarification',
+      model: validation.model,
+      isClarification: true,
+    }), now());
+    db.prepare(`UPDATE chat_sessions SET updated_at = ? WHERE id = ?`).run(now(), session.id);
+    return res.json({
+      needsClarification: true,
+      conversation: chatConversationPayload(session.id, req.user),
+    });
+  }
+  await refreshChatWorkPlan(session, req.user, {
+    content: input.instruction,
+    aiMode: input.aiMode || 'basic',
+  });
+  const jobId = enqueueJob({
+    documentId: req.document.id,
+    userId: req.user.id,
+    jobType: 'generate',
+    payload: {
+      isRevision: true,
+      revisionPlan: entitlement.plan,
+      revisionInstruction: input.instruction,
+      aiMode: input.aiMode || 'basic',
+    },
+  });
+  db.prepare(`UPDATE chat_sessions SET workflow_state = 'REVISION', updated_at = ? WHERE document_id = ? AND owner_user_id = ?`)
+    .run(now(), req.document.id, req.user.id);
+  evaluateGenerationBurstRisk(req.user.id);
+  res.status(202).json({
+    jobId,
+    isRevision: true,
+    revisionLimit: entitlement.maxRevisions,
+    revisionsUsed: revisionCount,
+    conversation: chatConversationPayload(session.id, req.user),
+  });
+}));
+
+app.post('/api/documents/:id/quiz', requireAuth, requireCsrf, requireDocumentOwner, aiChatLimiter, asyncHandler(async (req, res) => {
+  const attempt = await createDocumentQuizAttempt(req.document.id, req.user.id);
+  db.prepare(`UPDATE chat_sessions SET workflow_state = 'QUIZ_REQUIRED', updated_at = ? WHERE document_id = ? AND owner_user_id = ?`)
+    .run(now(), req.document.id, req.user.id);
+  res.status(201).json(attempt);
+}));
+
+app.post('/api/documents/:id/quiz/attempts/:attemptId', requireAuth, requireCsrf, requireDocumentOwner, (req, res) => {
+  const input = quizAttemptSchema.parse(req.body || {});
+  const result = submitDocumentQuizAttempt(req.document.id, req.user.id, req.params.attemptId, input.answers);
+  db.prepare(`UPDATE chat_sessions SET workflow_state = ?, updated_at = ? WHERE document_id = ? AND owner_user_id = ?`)
+    .run(result.passed ? 'EXPORT_UNLOCKED' : 'QUIZ_REQUIRED', now(), req.document.id, req.user.id);
+  res.json(result);
 });
 
 app.get('/api/jobs/:id', requireAuth, (req, res) => {
@@ -2217,8 +3597,22 @@ app.post('/api/jobs/:id/retry', requireAuth, requireCsrf, (req, res) => {
   let payload = jobPayload(job);
   if (job.job_type === 'generate') {
     const document = db.prepare('SELECT generated_at FROM documents WHERE id = ? AND owner_user_id = ?').get(job.document_id, req.user.id);
-    const bucket = document?.generated_at ? null : consumeCredit(req.user.id, job.document_id);
-    payload = { ...payload, creditBucket: bucket, isRevision: Boolean(document?.generated_at) };
+    let bucket = null;
+    let creditSessionId = null;
+    if (!document?.generated_at) {
+      const creditSession = db.prepare(`
+        SELECT id FROM chat_sessions
+        WHERE document_id = ? AND owner_user_id = ? AND archived_at IS NULL
+        LIMIT 1
+      `).get(job.document_id, req.user.id);
+      if (creditSession) {
+        bucket = reserveLaprakCredit(req.user.id, creditSession.id);
+        creditSessionId = creditSession.id;
+      } else {
+        bucket = consumeCredit(req.user.id, job.document_id);
+      }
+    }
+    payload = { ...payload, creditBucket: bucket, creditSessionId, isRevision: Boolean(document?.generated_at) };
   }
   db.prepare(`
     UPDATE jobs SET status = 'queued', progress = 0, message = 'Masuk antrean ulang', error_message = NULL,
@@ -2240,7 +3634,10 @@ app.post('/api/jobs/:id/cancel', requireAuth, requireCsrf, (req, res) => {
   const payload = jobPayload(job);
   if (job.status === 'queued') {
     db.prepare(`UPDATE jobs SET status = 'canceled', message = 'Dibatalkan pengguna', canceled_at = ?, finished_at = ? WHERE id = ?`).run(now(), now(), job.id);
-    if (job.job_type === 'generate' && payload.creditBucket) refundCredit(req.user.id, payload.creditBucket, job.document_id);
+    if (job.job_type === 'generate' && payload.creditBucket) {
+      if (payload.creditSessionId) refundLaprakCredit(req.user.id, payload.creditSessionId);
+      else refundCredit(req.user.id, payload.creditBucket, job.document_id);
+    }
   } else {
     db.prepare(`UPDATE jobs SET cancel_requested_at = ?, message = 'Permintaan pembatalan diterima' WHERE id = ?`).run(now(), job.id);
   }
@@ -2433,6 +3830,14 @@ app.put('/api/documents/:id/review/:checkKey', requireAuth, requireCsrf, require
 
 app.post('/api/documents/:id/export', requireAuth, requireCsrf, requireDocumentOwner, asyncHandler(async (req, res) => {
   ensureNoActiveJob(req.document.id, 'export');
+  const quizAccess = quizAccessForDocument(req.document.id, req.user.id);
+  if (!quizAccess.canDownload) {
+    throw new HttpError(
+      403,
+      `Selesaikan quiz dari draft terbaru dengan nilai minimal ${quizAccess.passScore}% sebelum membuat file unduhan.`,
+      'QUIZ_PASS_REQUIRED',
+    );
+  }
   const review = getReviewState(req.document.id, req.user.id);
   const files = db.prepare('SELECT * FROM document_files WHERE document_id = ? AND deleted_at IS NULL').all(req.document.id);
   const mappings = db.prepare('SELECT * FROM evidence_mappings WHERE document_id = ?').all(req.document.id);
@@ -2472,6 +3877,17 @@ app.get('/api/exports/:id/download', requireAuth, (req, res) => {
   if (!output) throw new HttpError(404, 'Export tidak ditemukan.', 'EXPORT_NOT_FOUND');
   if (output.expires_at && new Date(output.expires_at).getTime() <= Date.now()) {
     throw new HttpError(410, 'Masa simpan export sudah berakhir. Buat export baru dari dokumenmu.', 'EXPORT_EXPIRED');
+  }
+  const quizAccess = quizAccessForDocument(output.document_id, req.user.id);
+  if (!quizAccess.canDownload) {
+    throw new HttpError(
+      403,
+      `Nilai quiz minimal ${quizAccess.passScore}% diperlukan untuk mengunduh versi laporan ini.`,
+      'QUIZ_PASS_REQUIRED',
+    );
+  }
+  if (!output.content_signature || output.content_signature !== quizAccess.contentSignature) {
+    throw new HttpError(409, 'File ini berasal dari versi laporan lama. Buat file Word baru dari draft terbaru.', 'EXPORT_VERSION_OUTDATED');
   }
   res.download(output.storage_path, output.file_name);
 });
@@ -2547,6 +3963,193 @@ function requireAdmin(req, _res, next) {
   return next();
 }
 
+app.get('/api/admin/events', requireAuth, requireAdmin, (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+  res.write(`event: ready\ndata: ${JSON.stringify({ connectedAt: now() })}\n\n`);
+  adminStreams.add(res);
+  const heartbeat = setInterval(() => {
+    try { res.write(': keepalive\n\n'); } catch { clearInterval(heartbeat); adminStreams.delete(res); }
+  }, 25000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    adminStreams.delete(res);
+  });
+});
+
+app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
+  const query = z.string().trim().max(120).catch('').parse(req.query.q);
+  const limit = z.coerce.number().int().min(1).max(100).catch(50).parse(req.query.limit);
+  const pattern = `%${query.replace(/[%_]/g, '\\$&')}%`;
+  const users = db.prepare(`
+    SELECT id, email, full_name, role, email_verified_at, created_at
+    FROM users
+    WHERE deleted_at IS NULL AND role != 'admin'
+      AND (? = '' OR email LIKE ? ESCAPE '\\' OR full_name LIKE ? ESCAPE '\\')
+    ORDER BY created_at DESC LIMIT ?
+  `).all(query, pattern, pattern, limit).map((user) => {
+    const wallet = getWallet(user.id);
+    const subscription = activeSubscription(user.id);
+    const hasPaidCredit = Boolean(db.prepare(`
+      SELECT 1 FROM wallet_entries WHERE user_id = ? AND bucket = 'paid' AND amount > 0 LIMIT 1
+    `).get(user.id));
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.full_name || '',
+      emailVerified: Boolean(user.email_verified_at),
+      credits: wallet.balances.total,
+      plan: subscription?.plan_key === 'pro' ? 'Max' : subscription ? 'Pro' : hasPaidCredit ? 'Satuan' : 'Gratis',
+      createdAt: user.created_at,
+    };
+  });
+  res.json({ users });
+});
+
+app.post('/api/admin/credits/grant', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, asyncHandler(async (req, res) => {
+  const input = adminCreditGrantSchema.parse(req.body || {});
+  const prior = db.prepare('SELECT * FROM admin_credit_grants WHERE idempotency_key = ?').get(input.idempotencyKey);
+  if (prior) {
+    return res.json({
+      grantId: prior.id,
+      recipientCount: Number(prior.recipient_count || 0),
+      amount: Number(prior.amount),
+      duplicate: true,
+    });
+  }
+
+  let recipients;
+  if (input.audience === 'user') {
+    recipients = db.prepare(`
+      SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND role != 'admin' LIMIT 1
+    `).all(input.userId);
+  } else if (input.audience === 'paid') {
+    recipients = db.prepare(`
+      SELECT user.id
+      FROM users user
+      WHERE user.deleted_at IS NULL AND user.role != 'admin' AND (
+        EXISTS (
+          SELECT 1 FROM subscriptions subscription
+          WHERE subscription.user_id = user.id AND subscription.status = 'active' AND subscription.ends_at > ?
+        )
+        OR EXISTS (
+          SELECT 1 FROM wallet_entries entry
+          WHERE entry.user_id = user.id AND entry.bucket = 'paid' AND entry.amount > 0
+        )
+      )
+      ORDER BY user.created_at
+    `).all(now());
+  } else {
+    recipients = db.prepare(`
+      SELECT id FROM users
+      WHERE deleted_at IS NULL AND role != 'admin' AND email_verified_at IS NOT NULL
+      ORDER BY created_at
+    `).all();
+  }
+  if (!recipients.length) throw new HttpError(404, 'Tidak ada user yang cocok dengan target kredit.', 'ADMIN_CREDIT_TARGET_EMPTY');
+
+  const grantId = nanoid();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare(`
+      INSERT INTO admin_credit_grants (
+        id, admin_user_id, idempotency_key, audience, target_user_id,
+        amount, reason, recipient_count, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      grantId,
+      req.user.id,
+      input.idempotencyKey,
+      input.audience,
+      input.audience === 'user' ? input.userId : null,
+      input.amount,
+      input.reason,
+      recipients.length,
+      now(),
+    );
+    for (const recipient of recipients) {
+      grantCredit({
+        userId: recipient.id,
+        bucket: 'admin',
+        amount: input.amount,
+        reason: input.reason,
+        referenceType: 'admin_credit_grant',
+        referenceId: grantId,
+      });
+      notifyUser(recipient.id, {
+        kind: 'wallet',
+        title: `${input.amount} kredit ditambahkan`,
+        body: input.reason,
+        href: '/app/wallet',
+      });
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch {}
+    if (String(error?.message || '').includes('idempotency_key')) {
+      const duplicate = db.prepare('SELECT * FROM admin_credit_grants WHERE idempotency_key = ?').get(input.idempotencyKey);
+      return res.json({
+        grantId: duplicate.id,
+        recipientCount: Number(duplicate.recipient_count || 0),
+        amount: Number(duplicate.amount),
+        duplicate: true,
+      });
+    }
+    throw error;
+  }
+  audit(req.user.id, 'admin.credit_granted', 'admin_credit_grant', grantId, {
+    audience: input.audience,
+    amount: input.amount,
+    recipientCount: recipients.length,
+  });
+  publishAdminEvent('credit', { grantId, audience: input.audience, recipientCount: recipients.length, createdAt: now() });
+  return res.status(201).json({ grantId, recipientCount: recipients.length, amount: input.amount, duplicate: false });
+}));
+
+app.get('/api/admin/alerts', requireAuth, requireAdmin, (req, res) => {
+  const status = z.enum(['open', 'resolved', 'all']).catch('open').parse(req.query.status);
+  const alerts = db.prepare(`
+    SELECT alert.*, user.email, user.full_name
+    FROM admin_alerts alert
+    LEFT JOIN users user ON user.id = alert.user_id
+    WHERE (? = 'all' OR alert.status = ?)
+    ORDER BY CASE alert.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+      alert.created_at DESC
+    LIMIT 200
+  `).all(status, status).map((alert) => ({
+    id: alert.id,
+    kind: alert.kind,
+    severity: alert.severity,
+    userId: alert.user_id || null,
+    userEmail: alert.email || '',
+    userName: alert.full_name || '',
+    documentId: alert.document_id || null,
+    jobId: alert.job_id || null,
+    summary: alert.summary,
+    errorCode: alert.error_code || '',
+    status: alert.status,
+    createdAt: alert.created_at,
+    resolvedAt: alert.resolved_at || null,
+  }));
+  res.json({ alerts });
+});
+
+app.put('/api/admin/alerts/:id', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, (req, res) => {
+  const input = adminAlertStatusSchema.parse(req.body || {});
+  const result = db.prepare(`
+    UPDATE admin_alerts
+    SET status = ?, resolved_at = CASE WHEN ? = 'resolved' THEN ? ELSE NULL END,
+      resolved_by_user_id = CASE WHEN ? = 'resolved' THEN ? ELSE NULL END
+    WHERE id = ?
+  `).run(input.status, input.status, now(), input.status, req.user.id, req.params.id);
+  if (!result.changes) throw new HttpError(404, 'Alert admin tidak ditemukan.', 'ADMIN_ALERT_NOT_FOUND');
+  audit(req.user.id, 'admin.alert_updated', 'admin_alert', req.params.id, { status: input.status });
+  publishAdminEvent('alert-updated', { id: req.params.id, status: input.status, updatedAt: now() });
+  res.json({ ok: true });
+});
+
 app.get('/api/admin/overview', requireAuth, requireAdmin, (req, res) => {
   const stats = {
     users: Number(db.prepare('SELECT COUNT(*) AS count FROM users WHERE deleted_at IS NULL').get().count),
@@ -2558,6 +4161,7 @@ app.get('/api/admin/overview', requireAuth, requireAdmin, (req, res) => {
     aiCalls24h: Number(db.prepare("SELECT COUNT(*) AS count FROM ai_usage_events WHERE datetime(created_at) >= datetime('now', '-24 hours')").get().count),
     aiTokens24h: Number(db.prepare("SELECT COALESCE(SUM(total_tokens), 0) AS count FROM ai_usage_events WHERE status = 'success' AND datetime(created_at) >= datetime('now', '-24 hours')").get().count),
     aiErrors24h: Number(db.prepare("SELECT COUNT(*) AS count FROM ai_usage_events WHERE status = 'error' AND datetime(created_at) >= datetime('now', '-24 hours')").get().count),
+    openAdminAlerts: Number(db.prepare("SELECT COUNT(*) AS count FROM admin_alerts WHERE status = 'open'").get().count),
   };
   const storage = db.prepare(`
     SELECT
@@ -2588,8 +4192,13 @@ app.get('/api/admin/overview', requireAuth, requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/ai/usage', requireAuth, requireAdmin, (req, res) => {
-  const days = Math.max(1, Math.min(90, Number(req.query.days || 30) || 30));
+  const query = z.object({
+    days: z.coerce.number().int().min(1).max(90).catch(30),
+    userId: z.string().trim().max(80).catch(''),
+  }).parse(req.query);
+  const days = query.days;
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const userFilter = query.userId || '';
   const totals = db.prepare(`
     SELECT COUNT(*) AS calls,
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful,
@@ -2598,24 +4207,71 @@ app.get('/api/admin/ai/usage', requireAuth, requireAdmin, (req, res) => {
       COALESCE(SUM(output_tokens), 0) AS output_tokens,
       COALESCE(SUM(total_tokens), 0) AS total_tokens,
       COALESCE(ROUND(AVG(latency_ms)), 0) AS average_latency_ms
-    FROM ai_usage_events WHERE created_at >= ?
-  `).get(since);
+    FROM ai_usage_events WHERE created_at >= ? AND (? = '' OR user_id = ?)
+  `).get(since, userFilter, userFilter);
   const breakdown = db.prepare(`
     SELECT purpose, mode, model, status, COUNT(*) AS calls,
       COALESCE(SUM(total_tokens), 0) AS total_tokens,
       COALESCE(ROUND(AVG(latency_ms)), 0) AS average_latency_ms
-    FROM ai_usage_events WHERE created_at >= ?
+    FROM ai_usage_events WHERE created_at >= ? AND (? = '' OR user_id = ?)
     GROUP BY purpose, mode, model, status
     ORDER BY calls DESC, purpose ASC
-  `).all(since);
+  `).all(since, userFilter, userFilter);
   const daily = db.prepare(`
     SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS calls,
       COALESCE(SUM(total_tokens), 0) AS total_tokens,
       SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errors
-    FROM ai_usage_events WHERE created_at >= ?
+    FROM ai_usage_events WHERE created_at >= ? AND (? = '' OR user_id = ?)
     GROUP BY substr(created_at, 1, 10) ORDER BY day ASC
-  `).all(since);
-  res.json({ days, since, totals, breakdown, daily });
+  `).all(since, userFilter, userFilter);
+  const byUser = db.prepare(`
+    SELECT usage.user_id, user.email, user.full_name,
+      COUNT(*) AS calls,
+      COALESCE(SUM(usage.total_tokens), 0) AS total_tokens,
+      SUM(CASE WHEN usage.status = 'error' THEN 1 ELSE 0 END) AS errors,
+      COALESCE(ROUND(AVG(usage.latency_ms)), 0) AS average_latency_ms
+    FROM ai_usage_events usage
+    LEFT JOIN users user ON user.id = usage.user_id
+    WHERE usage.created_at >= ? AND usage.user_id IS NOT NULL
+      AND (? = '' OR usage.user_id = ?)
+    GROUP BY usage.user_id, user.email, user.full_name
+    ORDER BY calls DESC LIMIT 100
+  `).all(since, userFilter, userFilter).map((row) => ({
+    userId: row.user_id,
+    email: row.email || '',
+    fullName: row.full_name || '',
+    calls: Number(row.calls || 0),
+    totalTokens: Number(row.total_tokens || 0),
+    errors: Number(row.errors || 0),
+    averageLatencyMs: Number(row.average_latency_ms || 0),
+  }));
+  const recent = db.prepare(`
+    SELECT usage.id, usage.user_id, user.email, user.full_name,
+      usage.purpose, usage.mode, usage.provider, usage.model, usage.status,
+      usage.input_tokens, usage.output_tokens, usage.total_tokens,
+      usage.latency_ms, usage.error_code, usage.created_at
+    FROM ai_usage_events usage
+    LEFT JOIN users user ON user.id = usage.user_id
+    WHERE usage.created_at >= ? AND (? = '' OR usage.user_id = ?)
+    ORDER BY usage.created_at DESC LIMIT 200
+  `).all(since, userFilter, userFilter).map((row) => ({
+    id: row.id,
+    userId: row.user_id || null,
+    email: row.email || '',
+    fullName: row.full_name || '',
+    purpose: row.purpose,
+    mode: row.mode,
+    provider: row.provider,
+    model: row.model,
+    status: row.status,
+    inputTokens: Number(row.input_tokens || 0),
+    outputTokens: Number(row.output_tokens || 0),
+    totalTokens: Number(row.total_tokens || 0),
+    latencyMs: Number(row.latency_ms || 0),
+    errorCode: row.error_code || '',
+    createdAt: row.created_at,
+  }));
+  res.json({ days, since, userId: userFilter || null, totals, breakdown, daily, byUser, recent });
 });
 
 app.post('/api/admin/integrations/check', requireAuth, requireCsrf, requireAdmin, integrationCheckLimiter, asyncHandler(async (req, res) => {
@@ -2910,6 +4566,7 @@ app.use((err, req, res, _next) => {
 });
 
 recoverInterruptedJobs();
+recoverFailedGenerationSessions();
 queueMicrotask(drainJobQueue);
 setInterval(() => { drainJobQueue().catch((error) => console.error('[jobs]', error)); }, config.jobPollMs).unref();
 setInterval(() => { cleanupExpiredResources().catch((error) => console.error('[retention]', error)); }, config.retentionSweepMinutes * 60 * 1000).unref();

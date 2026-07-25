@@ -23,6 +23,7 @@ server/public-media/feature-updates/*
 
 # Generated test and build artifacts
 output/
+.tmp/
 .playwright-cli/
 .vercel/
 .wrangler/

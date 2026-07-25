@@ -1,20 +1,25 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import AdmZip from 'adm-zip';
 import { reportSectionIssues } from '../server/src/report-quality.js';
 
 const base = process.env.E2E_BASE_URL || 'http://localhost:4000';
 const device = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-let cookie = '';
+const cookies = new Map();
 let csrf = '';
 
 function headers(extra = {}) {
-  return { 'x-laprakin-device': device, ...(cookie ? { cookie } : {}), ...(csrf ? { 'x-laprakin-csrf': csrf } : {}), ...extra };
+  return { 'x-laprakin-device': device, ...(cookies.size ? { cookie: [...cookies.entries()].map(([name, value]) => `${name}=${value}`).join('; ') } : {}), ...(csrf ? { 'x-laprakin-csrf': csrf } : {}), ...extra };
 }
 
 async function request(path, options = {}) {
   const response = await fetch(`${base}/api${path}`, { ...options, headers: headers(options.headers) });
-  const setCookie = response.headers.get('set-cookie');
-  if (setCookie) cookie = setCookie.split(';')[0];
+  const setCookies = response.headers.getSetCookie?.() || [response.headers.get('set-cookie')].filter(Boolean);
+  setCookies.forEach((setCookie) => {
+    const [nameValue] = setCookie.split(';');
+    const separator = nameValue.indexOf('=');
+    if (separator > 0) cookies.set(nameValue.slice(0, separator), nameValue.slice(separator + 1));
+  });
   const type = response.headers.get('content-type') || '';
   const payload = type.includes('application/json') ? await response.json() : await response.text();
   if (!response.ok) {
@@ -115,6 +120,15 @@ evidenceForm.append('files', new Blob(['Konfigurasi interface GigabitEthernet0/0
 const evidenceUpload = await request(`/documents/${document.id}/files`, { method: 'POST', body: evidenceForm });
 assert.equal(evidenceUpload.files.length, 1);
 
+const screenshotForm = new FormData();
+screenshotForm.append('category', 'evidence');
+screenshotForm.append('sourceDeclaration', 'own');
+screenshotForm.append('files', new Blob([
+  await readFile(new URL('./fixtures/routing-evidence.png', import.meta.url)),
+], { type: 'image/png' }), 'hasil-routing.png');
+const screenshotUpload = await request(`/documents/${document.id}/files`, { method: 'POST', body: screenshotForm });
+assert.equal(screenshotUpload.files.length, 1);
+
 const templateForm = new FormData();
 templateForm.append('category', 'template');
 templateForm.append('sourceDeclaration', 'template_allowed');
@@ -150,6 +164,11 @@ if (scan?.jobId) {
   assert.equal(scanDone.status, 'completed', scanDone.error_message || scanDone.message);
 }
 
+await request('/subscriptions/manual', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ plan: 'monthly' }),
+});
 const exported = await request(`/documents/${document.id}/export`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
@@ -170,8 +189,8 @@ const documentXml = archive.readAsText('word/document.xml');
 const stylesXml = archive.readAsText('word/styles.xml');
 const footerXml = archive.getEntries().filter((entry) => /^word\/footer\d+\.xml$/.test(entry.entryName)).map((entry) => entry.getData().toString('utf8')).join('\n');
 assert.match(stylesXml, /Times New Roman/, 'Font dokumen harus mengikuti profil laprak.');
-assert.match(stylesXml, /w:color w:val="000000"/, 'Style dokumen harus memakai teks hitam.');
-assert.match(documentXml, /w:pgMar[^>]+w:top="1417"[^>]+w:right="1417"[^>]+w:bottom="1417"[^>]+w:left="1417"/, 'Margin DOCX harus 2,5 cm.');
+assert.match(documentXml, /w:pgMar[^>]+w:top="1417"[^>]+w:right="1417"[^>]+w:bottom="1304"[^>]+w:left="1531"/, 'Margin DOCX harus tetap mengikuti template default.');
+assert.equal((documentXml.match(/<wp:anchor\b/g) || []).length, 1, 'Logo cover wajib tetap memakai satu anchor asli.');
 assert.doesNotMatch(documentXml, /w:color w:val="(?:2F5496|4472C4|0563C1|0000FF)"/i, 'Konten DOCX tidak boleh memakai warna biru.');
 assert.doesNotMatch(footerXml, /Laprakin draft/i, 'Footer tidak boleh memakai branding draft generik.');
 
@@ -195,10 +214,14 @@ const reset = await request('/auth/reset-password', {
 csrf = reset.csrfToken;
 assert.equal(reset.user.email, email);
 
-const changed = await request('/auth/password', {
-  method: 'PUT',
+const changeRequested = await request('/auth/password-change-request', {
+  method: 'POST',
+});
+assert.ok(changeRequested.developmentResetToken, 'Perubahan kata sandi wajib menerbitkan token verifikasi email.');
+const changed = await request('/auth/reset-password', {
+  method: 'POST',
   headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ currentPassword: 'KataSandi-Baru-2026', newPassword: 'KataSandi-Akhir-2026' }),
+  body: JSON.stringify({ token: changeRequested.developmentResetToken, password: 'KataSandi-Akhir-2026' }),
 });
 csrf = changed.csrfToken;
 assert.equal(changed.user.email, email);
@@ -213,4 +236,4 @@ const relogin = await request('/auth/login', {
 csrf = relogin.csrfToken;
 assert.equal(relogin.user.email, email);
 
-console.log('E2E passed: auth · profile · source/evidence · timeline · quality gate · DOCX black style · restore · password security');
+console.log('E2E passed: auth, profile, evidence, timeline, quality gate, template DOCX, restore, and email-verified password changes.');

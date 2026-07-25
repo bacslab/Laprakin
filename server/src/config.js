@@ -1,10 +1,53 @@
 import dotenv from 'dotenv';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(directory, '../.env') });
-const nodeEnv = process.env.NODE_ENV || 'development';
+const environmentDirectory = path.resolve(directory, '..');
+const inheritedEnvironment = new Set(Object.keys(process.env));
+const runtimeEnvironment = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+
+function loadEnvironmentFile(filename, protectedKeys = null) {
+  const filePath = path.join(environmentDirectory, filename);
+  if (!fs.existsSync(filePath)) return;
+  const parsed = dotenv.parse(fs.readFileSync(filePath));
+  for (const [key, value] of Object.entries(parsed)) {
+    if (process.env[key] === undefined) process.env[key] = value;
+    if (protectedKeys) protectedKeys.add(key);
+  }
+}
+
+if (runtimeEnvironment === 'production') {
+  loadEnvironmentFile('.env.production.local');
+  loadEnvironmentFile('.env.local');
+  loadEnvironmentFile('.env.production');
+  loadEnvironmentFile('.env');
+} else {
+  const developmentKeys = new Set(inheritedEnvironment);
+  loadEnvironmentFile('.env.development.local', developmentKeys);
+  loadEnvironmentFile('.env.local', developmentKeys);
+  loadEnvironmentFile('.env.development', developmentKeys);
+
+  const productionLocalPath = path.join(environmentDirectory, '.env.production.local');
+  if (fs.existsSync(productionLocalPath)) {
+    const productionLocal = dotenv.parse(fs.readFileSync(productionLocalPath));
+    for (const [key, value] of Object.entries(productionLocal)) {
+      if (/^GEMINI_(?:API_KEY|MODEL(?:_.+)?)$/.test(key) && !developmentKeys.has(key)) {
+        process.env[key] = value;
+        developmentKeys.add(key);
+      }
+    }
+  }
+
+  loadEnvironmentFile('.env');
+
+  for (const key of ['NODE_ENV', 'PORT', 'SERVE_STATIC', 'APP_URL', 'API_URL', 'ALLOWED_ORIGINS', 'TRUST_PROXY_HOPS', 'AI_REQUIRED']) {
+    if (!developmentKeys.has(key)) delete process.env[key];
+  }
+}
+
+const nodeEnv = runtimeEnvironment;
 const publicMediaDir = path.resolve(process.env.LAPRAKIN_PUBLIC_MEDIA_DIR || path.resolve(directory, '../public-media'));
 const manualEmailAuthOnly = process.env.MANUAL_EMAIL_AUTH_ONLY
   ? process.env.MANUAL_EMAIL_AUTH_ONLY !== 'false'
@@ -35,11 +78,12 @@ export const config = {
   tokenSecret: process.env.TOKEN_HMAC_SECRET || process.env.JWT_SECRET || 'dev-token-secret-change-me',
   adminEmail: (process.env.ADMIN_EMAIL || 'hilmimubarok2006@gmail.com').trim().toLowerCase(),
   geminiKey: process.env.GEMINI_API_KEY || '',
+  geminiKeyValid: /^AIza[0-9A-Za-z_-]{20,}$/.test(process.env.GEMINI_API_KEY || ''),
   geminiModel: process.env.GEMINI_MODEL || process.env.GEMINI_MODEL_BASIC || 'gemini-3.5-flash-lite',
   geminiModelBasic: process.env.GEMINI_MODEL_BASIC || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
   geminiModelThinking: process.env.GEMINI_MODEL_THINKING || 'gemini-3.6-flash',
   geminiModelXtraThink: process.env.GEMINI_MODEL_XTRATHINK || 'gemini-3.6-flash',
-  geminiModelDocument: process.env.GEMINI_MODEL_DOCUMENT || 'gemini-3.5-flash',
+  geminiModelDocument: process.env.GEMINI_MODEL_DOCUMENT || 'gemini-3.6-flash',
   geminiModelSupport: process.env.GEMINI_MODEL_SUPPORT || 'gemini-3.5-flash-lite',
   aiRequired: process.env.AI_REQUIRED ? process.env.AI_REQUIRED !== 'false' : nodeEnv === 'production',
   aiRequestTimeoutMs: boundedInt(process.env.AI_REQUEST_TIMEOUT_MS, 45000, 5000, 120000),
@@ -131,7 +175,7 @@ export function productionConfigChecks() {
     { name: 'allowed origins', ok: originsReady, detail: originsReady ? `${config.allowedOrigins.length} origin HTTPS` : 'ALLOWED_ORIGINS wajib HTTPS dan memuat origin APP_URL' },
     { name: 'reverse proxy trust', ok: config.trustProxyHops >= 1, detail: config.trustProxyHops >= 1 ? `${config.trustProxyHops} hop` : 'TRUST_PROXY_HOPS minimal 1 di belakang Cloudflare/reverse proxy' },
     { name: 'application secrets', ok: secretsReady, detail: secretsReady ? '3 secret unik, minimal 32 karakter' : 'JWT_SECRET, DEVICE_HMAC_SECRET, dan TOKEN_HMAC_SECRET wajib unik dan minimal 32 karakter' },
-    { name: 'AI required and credential', ok: config.aiRequired && Boolean(config.geminiKey), detail: config.aiRequired && config.geminiKey ? 'AI_REQUIRED=true dan key tersedia' : 'Set AI_REQUIRED=true dan GEMINI_API_KEY' },
+    { name: 'AI required and credential', ok: config.aiRequired && config.geminiKeyValid, detail: config.aiRequired && config.geminiKeyValid ? 'AI_REQUIRED=true dan API key Gemini valid' : 'Set AI_REQUIRED=true dan gunakan API key Gemini berformat AIza...' },
     { name: 'stable AI models', ok: modelsStable, detail: modelsStable ? [...new Set(configuredModels)].join(', ') : 'Model preview/latest/experimental tidak diizinkan' },
     { name: 'verified email authentication', ok: smtpReady, detail: smtpReady ? 'Registrasi email terverifikasi aktif; Google OAuth dapat berjalan berdampingan' : 'SMTP production wajib untuk verifikasi email manual' },
     { name: 'Google OAuth credential', ok: googleCredentialsReady, detail: config.googleOauthRequired ? (googleCredentialsReady ? 'Credential Google tersedia' : 'Client ID dan client secret wajib tersedia') : 'Google OAuth dinonaktifkan' },

@@ -23,11 +23,16 @@ export class AiProviderError extends Error {
 }
 
 export function isAiConfigured() {
-  return Boolean(config.geminiKey);
+  return config.geminiKeyValid;
+}
+
+function isDocumentPurpose(purpose = '') {
+  const normalized = String(purpose || '').toLowerCase();
+  return normalized === 'document' || normalized.startsWith('document_');
 }
 
 export function aiModelFor(mode = 'basic', purpose = 'chat') {
-  if (purpose === 'document') return config.geminiModelDocument;
+  if (isDocumentPurpose(purpose)) return config.geminiModelDocument;
   if (purpose === 'support') return config.geminiModelSupport;
   if (mode === 'xtrathink') return config.geminiModelXtraThink;
   if (mode === 'thinking') return config.geminiModelThinking;
@@ -113,9 +118,14 @@ function providerError(status, payload) {
   const providerCode = String(payload?.error?.status || `HTTP_${status}`).slice(0, 80);
   const retryable = RETRYABLE_STATUS.has(status);
   const publicStatus = status === 429 ? 429 : 502;
+  const wrongCredentialType = status === 401 && !/^AIza[0-9A-Za-z_-]{20,}$/.test(config.geminiKey);
   const message = status === 429
     ? 'Kapasitas AI sedang penuh. Coba lagi sebentar.'
-    : 'Provider AI belum dapat menyelesaikan permintaan ini.';
+    : wrongCredentialType
+      ? 'GEMINI_API_KEY bukan API key Gemini yang valid. Buat key di Google AI Studio; token OAuth seperti AQ.A tidak dapat dipakai.'
+      : status === 401
+        ? 'GEMINI_API_KEY ditolak Google. Periksa kembali key atau buat key baru di Google AI Studio.'
+        : 'Provider AI belum dapat menyelesaikan permintaan ini.';
   return new AiProviderError(message, { code: `GEMINI_${providerCode}`, status: publicStatus, retryable });
 }
 
@@ -123,11 +133,11 @@ function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function requestGemini({ model, body }) {
+async function requestGemini({ model, body, timeoutMs = config.aiRequestTimeoutMs }) {
   let lastError;
   for (let attempt = 0; attempt < config.aiMaxRetries; attempt += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), config.aiRequestTimeoutMs);
+    const timeout = setTimeout(() => controller.abort(), Math.max(5000, Math.min(120000, Number(timeoutMs) || config.aiRequestTimeoutMs)));
     try {
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -192,44 +202,65 @@ export async function generateAiContent({
   maxOutputTokens = 1200,
   responseMimeType = 'text/plain',
   responseJsonSchema,
+  requestTimeoutMs = config.aiRequestTimeoutMs,
 }) {
   if (!config.geminiKey) {
     throw new HttpError(503, 'Provider AI belum dikonfigurasi.', 'AI_NOT_CONFIGURED');
   }
-  const model = aiModelFor(mode, purpose);
-  const usageEventId = reserveUsage({ userId, purpose, mode, model });
-  const generationConfig = { maxOutputTokens };
-  const thinkingConfig = aiThinkingConfigFor({ model, mode, purpose });
-  if (thinkingConfig) generationConfig.thinkingConfig = thinkingConfig;
-  if (responseJsonSchema) {
-    generationConfig.responseFormat = {
-      text: {
-        mimeType: responseFormatMimeType(responseMimeType || 'application/json'),
-        schema: responseJsonSchema,
-      },
-    };
-  } else if (responseMimeType && responseMimeType !== 'text/plain') {
-    generationConfig.responseFormat = { text: { mimeType: responseFormatMimeType(responseMimeType) } };
+  if (!config.geminiKeyValid) {
+    throw new HttpError(503, 'GEMINI_API_KEY harus berupa API key dari Google AI Studio dengan awalan AIza.', 'AI_CREDENTIAL_INVALID');
   }
-  const body = {
-    contents,
-    generationConfig,
-    safetySettings: SAFETY_SETTINGS,
+  const model = aiModelFor(mode, purpose);
+  const candidateModels = isDocumentPurpose(purpose)
+    ? [...new Set([model, config.geminiModelThinking, config.geminiModelBasic].filter(Boolean))]
+    : [model];
+  const usageEventId = reserveUsage({ userId, purpose, mode, model });
+  const bodyForModel = (selectedModel) => {
+    const generationConfig = { maxOutputTokens };
+    const thinkingConfig = aiThinkingConfigFor({ model: selectedModel, mode, purpose });
+    if (thinkingConfig) generationConfig.thinkingConfig = thinkingConfig;
+    if (responseJsonSchema) {
+      generationConfig.responseFormat = {
+        text: {
+          mimeType: responseFormatMimeType(responseMimeType || 'application/json'),
+          schema: responseJsonSchema,
+        },
+      };
+    } else if (responseMimeType && responseMimeType !== 'text/plain') {
+      generationConfig.responseFormat = { text: { mimeType: responseFormatMimeType(responseMimeType) } };
+    }
+    const body = { contents, generationConfig, safetySettings: SAFETY_SETTINGS };
+    if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
+    return body;
   };
-  if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
 
   const startedAt = Date.now();
   try {
-    const payload = await requestGemini({ model, body });
-    if (safetyBlockReason(payload)) {
-      throw new AiProviderError('Permintaan tidak dapat diproses karena kebijakan keamanan AI.', { code: 'AI_SAFETY_BLOCKED', status: 422 });
+    let payload;
+    let selectedModel = model;
+    let lastProviderError;
+    for (let index = 0; index < candidateModels.length; index += 1) {
+      selectedModel = candidateModels[index];
+      try {
+        payload = await requestGemini({ model: selectedModel, body: bodyForModel(selectedModel), timeoutMs: requestTimeoutMs });
+        if (safetyBlockReason(payload)) {
+          throw new AiProviderError('Permintaan tidak dapat diproses karena kebijakan keamanan AI.', { code: 'AI_SAFETY_BLOCKED', status: 422 });
+        }
+        if (!responseText(payload)) {
+          throw new AiProviderError('Provider AI tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502, retryable: true });
+        }
+        break;
+      } catch (error) {
+        lastProviderError = error;
+        const modelFallbackAllowed = /^(?:GEMINI_(?:NOT_FOUND|UNAVAILABLE|RESOURCE_EXHAUSTED)|AI_(?:TIMEOUT|EMPTY_RESPONSE))$/.test(String(error?.code || ''));
+        if ((!error?.retryable && !modelFallbackAllowed) || index === candidateModels.length - 1) throw error;
+      }
     }
+    if (!payload) throw lastProviderError || new AiProviderError('Provider AI gagal tanpa respons.');
+    if (selectedModel !== model) db.prepare('UPDATE ai_usage_events SET model = ? WHERE id = ?').run(selectedModel, usageEventId);
     const text = responseText(payload);
-    if (!text) {
-      throw new AiProviderError('Provider AI tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502 });
-    }
     finishUsage(usageEventId, { status: 'success', usage: payload.usageMetadata, latencyMs: Date.now() - startedAt });
-    return { text, model, usage: payload.usageMetadata || {} };
+    return { text, model: selectedModel, usage: payload.usageMetadata || {} };
   } catch (error) {
     finishUsage(usageEventId, { status: 'error', latencyMs: Date.now() - startedAt, errorCode: error?.code || 'AI_PROVIDER_ERROR' });
     throw error;

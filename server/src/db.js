@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   full_name TEXT DEFAULT '',
+  nickname TEXT DEFAULT '',
   nim TEXT DEFAULT '',
   class_name TEXT DEFAULT '',
   department_key TEXT DEFAULT '',
@@ -95,6 +96,7 @@ CREATE TABLE IF NOT EXISTS evidence_mappings (
   step_title TEXT DEFAULT '',
   section_type TEXT DEFAULT 'implementation',
   caption TEXT DEFAULT '',
+  description TEXT DEFAULT '',
   display_order INTEGER DEFAULT 0,
   confidence REAL DEFAULT 0,
   status TEXT DEFAULT 'suggested',
@@ -395,6 +397,7 @@ ensureColumn('documents', 'is_pinned', 'INTEGER DEFAULT 0');
 ensureColumn('documents', 'review_seconds', 'INTEGER DEFAULT 0');
 ensureColumn('documents', 'last_reviewed_at', 'TEXT');
 ensureColumn('documents', 'revision_count', 'INTEGER DEFAULT 0');
+ensureColumn('exports', 'content_signature', "TEXT DEFAULT ''");
 ensureColumn('users', 'google_sub', 'TEXT');
 ensureColumn('users', 'auth_provider', "TEXT DEFAULT 'password'");
 ensureColumn('payment_orders', 'quantity', 'INTEGER NOT NULL DEFAULT 1');
@@ -468,6 +471,7 @@ export function toUser(row) {
     id: row.id,
     email: row.email,
     fullName: row.full_name,
+    nickname: row.nickname || '',
     nim: row.nim,
     className: row.class_name,
     departmentKey: row.department_key,
@@ -475,6 +479,7 @@ export function toUser(row) {
     role: row.role,
     authProvider: row.auth_provider || 'password',
     emailVerified: Boolean(row.email_verified_at),
+    onboardingDismissed: Boolean(row.onboarding_dismissed),
     createdAt: row.created_at,
   };
 }
@@ -563,6 +568,7 @@ CREATE TABLE IF NOT EXISTS chat_attachments (
   detected_mime TEXT,
   size_bytes INTEGER NOT NULL,
   sha256 TEXT,
+  message_id TEXT,
   created_at TEXT NOT NULL,
   deleted_at TEXT,
   FOREIGN KEY(session_id) REFERENCES chat_sessions(id),
@@ -760,4 +766,181 @@ CREATE TABLE IF NOT EXISTS job_events (
 
 CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_job_events_document ON job_events(document_id, created_at);
+`);
+
+// V23: report-grounded quiz access. The correct answers stay server-side and
+// every passed attempt is bound to the exact generated report content.
+db.exec(`
+CREATE TABLE IF NOT EXISTS document_quizzes (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL,
+  owner_user_id TEXT NOT NULL,
+  content_signature TEXT NOT NULL,
+  questions_json TEXT NOT NULL,
+  question_count INTEGER NOT NULL DEFAULT 5,
+  pass_score INTEGER NOT NULL DEFAULT 70,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(document_id, owner_user_id, content_signature),
+  FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE,
+  FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+  id TEXT PRIMARY KEY,
+  quiz_id TEXT NOT NULL,
+  document_id TEXT NOT NULL,
+  owner_user_id TEXT NOT NULL,
+  content_signature TEXT NOT NULL,
+  question_ids_json TEXT NOT NULL,
+  answers_json TEXT NOT NULL DEFAULT '[]',
+  score INTEGER,
+  passed INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(quiz_id) REFERENCES document_quizzes(id) ON DELETE CASCADE,
+  FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE,
+  FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_quizzes_signature
+  ON document_quizzes(document_id, owner_user_id, content_signature);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_document
+  ON quiz_attempts(document_id, owner_user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_passed
+  ON quiz_attempts(document_id, owner_user_id, content_signature, passed);
+`);
+
+// V24: durable chat workflow and idempotent structured actions.
+ensureColumn('users', 'onboarding_dismissed', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('users', 'nickname', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('chat_sessions', 'workflow_state', "TEXT NOT NULL DEFAULT 'NEW_CHAT'");
+ensureColumn('chat_sessions', 'clarification_count', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('chat_sessions', 'source_recommendation_shown', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('chat_sessions', 'first_message_analyzed', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('chat_sessions', 'generated_title', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('chat_sessions', 'document_type', "TEXT NOT NULL DEFAULT 'lab_report'");
+ensureColumn('chat_sessions', 'course_name', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('chat_sessions', 'practice_topic', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('chat_sessions', 'source_status_json', "TEXT NOT NULL DEFAULT '{}'");
+ensureColumn('chat_sessions', 'context_summary', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('chat_sessions', 'missing_critical_context', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('chat_attachments', 'processing_status', "TEXT NOT NULL DEFAULT 'ready'");
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS chat_session_actions (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  owner_user_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  action_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  UNIQUE(session_id, owner_user_id, idempotency_key),
+  FOREIGN KEY(session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_session_actions_session
+  ON chat_session_actions(session_id, owner_user_id, created_at);
+`);
+
+// V25: server-issued device identity and durable one-device registration guard.
+db.exec(`
+CREATE TABLE IF NOT EXISTS registration_guards (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  device_cookie_hash TEXT NOT NULL UNIQUE,
+  client_device_hash TEXT UNIQUE,
+  browser_hash TEXT NOT NULL,
+  network_hash TEXT NOT NULL,
+  network_browser_hash TEXT NOT NULL,
+  email_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'reserved',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  verified_at TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_registration_guards_user
+  ON registration_guards(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_registration_guards_browser
+  ON registration_guards(browser_hash, created_at);
+CREATE INDEX IF NOT EXISTS idx_registration_guards_network
+  ON registration_guards(network_hash, created_at);
+CREATE INDEX IF NOT EXISTS idx_registration_guards_network_browser
+  ON registration_guards(network_browser_hash, created_at);
+`);
+
+// V26: one credit reservation and one AI-generated work plan per Laprak chat.
+ensureColumn('chat_sessions', 'processing_credit_bucket', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('chat_sessions', 'processing_credit_reserved_at', 'TEXT');
+ensureColumn('chat_sessions', 'processing_credit_refunded_at', 'TEXT');
+ensureColumn('chat_sessions', 'work_plan_json', "TEXT NOT NULL DEFAULT '{}'");
+ensureColumn('chat_sessions', 'work_plan_generated_at', 'TEXT');
+
+// V27: bind uploaded files to the user message that submitted them and keep grounded visual notes.
+ensureColumn('chat_attachments', 'message_id', 'TEXT');
+ensureColumn('evidence_mappings', 'description', "TEXT NOT NULL DEFAULT ''");
+db.exec(`CREATE INDEX IF NOT EXISTS idx_chat_attachments_message ON chat_attachments(session_id, message_id, created_at);`);
+
+// V28: project groups are virtual, but their pinned state belongs to the account.
+db.exec(`
+CREATE TABLE IF NOT EXISTS project_pins (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT NOT NULL,
+  project_key TEXT NOT NULL,
+  project_name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(owner_user_id, project_key),
+  FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_pins_owner
+  ON project_pins(owner_user_id, updated_at DESC);
+`);
+
+// V29: auditable admin credit distribution and privacy-safe operational alerts.
+db.exec(`
+CREATE TABLE IF NOT EXISTS admin_credit_grants (
+  id TEXT PRIMARY KEY,
+  admin_user_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  audience TEXT NOT NULL,
+  target_user_id TEXT,
+  amount INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  recipient_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(admin_user_id) REFERENCES users(id),
+  FOREIGN KEY(target_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS admin_alerts (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  user_id TEXT,
+  document_id TEXT,
+  job_id TEXT,
+  summary TEXT NOT NULL,
+  error_code TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  resolved_by_user_id TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE SET NULL,
+  FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE SET NULL,
+  FOREIGN KEY(resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_credit_grants_created
+  ON admin_credit_grants(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_alerts_status
+  ON admin_alerts(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_alerts_user
+  ON admin_alerts(user_id, created_at DESC);
 `);
