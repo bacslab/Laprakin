@@ -1,0 +1,14 @@
+[Unit]
+Description=Laprakin operational watchdog
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/bash /usr/local/bin/laprakin-watchdog.sh
+Nice=10
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

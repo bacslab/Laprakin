@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Backup dir dan key file sengaja berada di luar APP_DIR: proses deploy merotasi
+# /opt/laprakin ke /opt/laprakin-rollback-*, sehingga arsip dan kunci enkripsi di
+# dalamnya akan terlantar dan skrip membuat kunci baru yang membuat arsip lama
+# tidak dapat didekripsi.
 APP_DIR="${LAPRAKIN_APP_DIR:-/opt/laprakin}"
-BACKUP_DIR="${LAPRAKIN_BACKUP_DIR:-$APP_DIR/server/backups}"
-KEY_FILE="${LAPRAKIN_BACKUP_KEY_FILE:-$APP_DIR/server/.backup-key}"
-RETENTION_DAYS="${LAPRAKIN_BACKUP_RETENTION_DAYS:-7}"
+BACKUP_DIR="${LAPRAKIN_BACKUP_DIR:-/var/backups/laprakin}"
+KEY_FILE="${LAPRAKIN_BACKUP_KEY_FILE:-/var/backups/laprakin/.backup-key}"
+RETENTION_DAYS="${LAPRAKIN_BACKUP_RETENTION_DAYS:-30}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 ARCHIVE="$BACKUP_DIR/laprakin-$STAMP.tar.gz.enc"
 STAGING="$(mktemp -d)"

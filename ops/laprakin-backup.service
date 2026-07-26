@@ -8,7 +8,11 @@ Type=oneshot
 User=laprakin
 Group=laprakin
 WorkingDirectory=/opt/laprakin
-ExecStart=/opt/laprakin/ops/backup-laprakin.sh
+# Dipanggil lewat bash karena deploy dari archive dapat menghapus bit executable.
+ExecStart=/bin/bash /opt/laprakin/ops/backup-laprakin.sh
+Environment=LAPRAKIN_BACKUP_DIR=/var/backups/laprakin
+Environment=LAPRAKIN_BACKUP_KEY_FILE=/var/backups/laprakin/.backup-key
+Environment=LAPRAKIN_BACKUP_RETENTION_DAYS=30
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

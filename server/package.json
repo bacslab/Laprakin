@@ -3,6 +3,9 @@
   "version": "20.5.0-beta.1",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js"

@@ -16,6 +16,10 @@ services:
       - laprakin_uploads:/app/server/uploads
       - laprakin_public_media:/app/server/public-media
     restart: unless-stopped
+    # VM production hanya punya ~892 MB RAM. Batas ini menahan lonjakan generate
+    # dokumen agar OOM killer mengenai container saja, bukan nginx/sshd di host.
+    mem_limit: 600m
+    cpus: 1.5
 
 volumes:
   laprakin_data:

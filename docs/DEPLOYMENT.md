@@ -137,9 +137,10 @@ Backup minimal mencakup:
 
 Simpan backup terenkripsi. Jangan menyimpan file laporan atau database user pada repository Git.
 
-Repository menyediakan `ops/backup-laprakin.sh` dan systemd timer untuk snapshot SQLite yang konsisten, upload privat, serta media CMS. Backup dienkripsi AES-256-CBC/PBKDF2 dan disimpan tujuh hari secara default.
+Repository menyediakan `ops/backup-laprakin.sh` dan systemd timer untuk snapshot SQLite yang konsisten, upload privat, serta media CMS. Backup dienkripsi AES-256-CBC/PBKDF2 dan disimpan 30 hari secara default.
 
 ```bash
+sudo install -d -o laprakin -g laprakin -m 700 /var/backups/laprakin
 sudo install -m 0644 ops/laprakin-backup.service /etc/systemd/system/
 sudo install -m 0644 ops/laprakin-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -147,7 +148,59 @@ sudo systemctl enable --now laprakin-backup.timer
 sudo systemctl start laprakin-backup.service
 ```
 
-File key lokal dibuat otomatis sebagai `server/.backup-key` dengan permission `0600`. Salin key tersebut ke password manager/secret vault yang terpisah, lalu sinkronkan archive dari `server/backups/` ke object storage privat. Backup lokal pada disk VM yang sama bukan pengganti backup offsite.
+### Arsip dan kunci enkripsi berada di luar direktori aplikasi
+
+Arsip disimpan di `/var/backups/laprakin/` dan kuncinya di `/var/backups/laprakin/.backup-key`, **bukan** di dalam `/opt/laprakin`. Ini wajib: proses deploy merotasi `/opt/laprakin` menjadi `/opt/laprakin-rollback-*`, sehingga arsip dan kunci yang berada di dalamnya akan terlantar. Karena skrip membuat kunci baru bila file kunci tidak ditemukan, kondisi itu membuat seluruh arsip lama **permanen tidak dapat didekripsi**.
+
+Unit systemd memanggil skrip lewat `/bin/bash` karena deploy dari archive dapat menghapus bit executable (`status=203/EXEC` bila dipanggil langsung).
+
+Salin `.backup-key` ke password manager/secret vault terpisah, dan sinkronkan arsip ke object storage privat. Backup lokal pada disk VM yang sama bukan pengganti backup offsite.
+
+### Lapisan Azure
+
+Selain backup aplikasi di atas, VM dilindungi Recovery Services vault `rsv-laprakin-prod` (resource group `RG-LAPRAKIN-PROD`, region `australiaeast`) dengan `DefaultPolicy` harian. Snapshot manual dapat dibuat kapan saja; sertakan `--location australiaeast` secara eksplisit karena policy region subscription menolak permintaan tanpa lokasi.
+
+```bash
+az snapshot create -g RG-LAPRAKIN-PROD -n snap-laprakin-$(date +%Y%m%d) \
+  --source disk-laprakin-prod-au --location australiaeast --sku Standard_LRS
+```
+
+### Uji restore
+
+Restore diverifikasi dengan mendekripsi arsip terbaru ke direktori sementara, lalu memeriksa `PRAGMA integrity_check` pada SQLite hasil ekstraksi. Lakukan minimal sekali setiap kali skrip backup atau skema database berubah.
+
+## 5a. Monitoring dan alert
+
+Dua lapis, karena keduanya buta terhadap hal yang berbeda.
+
+**Azure Monitor** memantau metrik host dan mengirim email lewat action group `ag-laprakin-ops`:
+
+| Alert | Kondisi | Severity |
+| --- | --- | --- |
+| `alert-laprakin-vm-down` | `VmAvailabilityMetric < 1` selama 5 menit | 0 |
+| `alert-laprakin-memory-low` | memori tersedia < 100 MB selama 15 menit | 1 |
+| `alert-laprakin-cpu-high` | CPU > 85% selama 15 menit | 2 |
+| `alert-laprakin-cpu-credits-low` | kredit burstable B-series < 20 | 2 |
+
+**Watchdog lokal** (`ops/laprakin-watchdog.sh`, timer tiap 15 menit) memeriksa empat hal yang tidak terlihat dari Azure: ruang disk root, kesegaran arsip backup, container aplikasi berjalan, dan `/api/health/ready` mengembalikan `ok:true`. Notifikasi hanya dikirim saat status berubah, plus pesan pemulihan saat normal kembali. `laprakin-backup.service` juga memiliki `OnFailure=` yang mengirim 20 baris log terakhir bila backup gagal.
+
+```bash
+sudo install -o root -g root -m 750 ops/laprakin-notify.sh /usr/local/bin/
+sudo install -o root -g root -m 750 ops/laprakin-watchdog.sh /usr/local/bin/
+sudo install -m 0644 ops/laprakin-watchdog.service ops/laprakin-watchdog.timer ops/laprakin-backup-failure.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now laprakin-watchdog.timer
+```
+
+Skrip ops dipasang ke `/usr/local/bin`, bukan dijalankan dari `/opt/laprakin`, agar tetap ada selama jendela deploy ketika direktori aplikasi sedang dirotasi.
+
+### OPS_ALERT_EMAIL wajib diisi
+
+Tujuan notifikasi dibaca dari `OPS_ALERT_EMAIL`, bukan `ADMIN_EMAIL`. Keduanya sengaja dipisah: `ADMIN_EMAIL` menentukan akun mana yang dipromosikan menjadi admin aplikasi setiap login, sehingga mengubahnya demi notifikasi akan sekaligus mengubah hak akses. Skrip menolak mengirim ke alamat `@example.test`/`@example.com` agar placeholder tidak lolos diam-diam.
+
+### Yang masih belum tercakup
+
+Uptime check dari luar jaringan Azure. Bila VM dan Azure Monitor sama-sama bermasalah, tidak ada pihak ketiga yang memberi tahu. Perlu layanan eksternal (UptimeRobot, Better Uptime, atau sejenisnya) yang menembak `https://laprakin.app/api/health/ready`.
 
 ## 6. QRIS production checklist
 

@@ -7,6 +7,9 @@
     "client",
     "server"
   ],
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"npm run dev --workspace @laprakin/server\" \"npm run dev --workspace @laprakin/client\"",
     "build": "npm run build --workspace @laprakin/client",

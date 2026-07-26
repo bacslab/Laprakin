@@ -1,0 +1,8 @@
+[Unit]
+Description=Notify the operator when the Laprakin backup fails
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/bash -c '/usr/local/bin/laprakin-notify.sh "Backup gagal" "laprakin-backup.service gagal. 20 baris log terakhir:\n\n$(journalctl -u laprakin-backup.service -n 20 --no-pager)"'
+NoNewPrivileges=true
