@@ -9150,3 +9150,13 @@ dan spesifisitasnya identik. */
 .institution-logo-actions{display:flex;gap:8px;flex-wrap:wrap}
 .settings-note{margin:0;padding:12px 14px;border:1px dashed var(--workspace-line);border-radius:10px;font-size:.73rem;line-height:1.55;color:var(--workspace-muted)}
 .settings-note b{color:var(--workspace-text);font-weight:600}
+
+/* ── Perataan kartu pricing ────────────────────────────────────────────────
+Badge "Rekomendasi" sebelumnya ikut alur normal, sehingga nama plan, harga, dan
+tombol pada kartu Pro turun sekitar 35px dibanding kartu lain. Setiap kartu kini
+menyediakan slot badge setinggi sama agar seluruh baris sejajar. */
+.pricing-recommended-badge{height:20px;display:inline-flex;align-items:center;margin:0 0 10px}
+.pricing-compact-card:not(.is-recommended)::before{content:"";display:block;height:20px;margin:0 0 10px}
+/* Tombol kembali pada checkout membawa label agar tujuannya jelas. */
+.pricing-compact-nav button{display:inline-flex;align-items:center;gap:7px}
+.pricing-compact-nav button span{font-size:.74rem;font-weight:600}

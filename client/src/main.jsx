@@ -1123,7 +1123,9 @@ function PublicPricingPage() {
   };
 
   return <div className={`pricing-compact-page ${isCheckoutPage ? 'pricing-checkout-page' : ''} ${resolvedTheme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
-    <header className="pricing-compact-nav"><button type="button" onClick={() => navigate(user ? '/app' : '/')} aria-label="Kembali"><ArrowLeft size={18}/></button></header>
+    {/* Dari halaman checkout, Kembali harus mengembalikan ke daftar plan supaya
+    user dapat mengganti pilihan; hanya dari daftar plan ia keluar ke workspace. */}
+    <header className="pricing-compact-nav"><button type="button" onClick={() => (isCheckoutPage ? navigate('/pricing') : navigate(user ? '/app' : '/'))} aria-label="Kembali"><ArrowLeft size={18}/>{isCheckoutPage && <span>Pilih plan lain</span>}</button></header>
     <main className="pricing-compact-main">
       <section className="pricing-compact-intro" aria-labelledby="pricing-compact-title">
         <span>Pilihan Laprakin</span>
