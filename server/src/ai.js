@@ -187,6 +187,20 @@ function safetyBlockReason(payload) {
   return SAFETY_FINISH_REASONS.has(finishReason) ? finishReason : '';
 }
 
+/**
+ * Gemini memotong output begitu maxOutputTokens tercapai dan tetap membalas 200.
+ * Tanpa pemeriksaan ini, respons JSON yang terpotong diperlakukan sebagai sukses
+ * dan baru meledak saat JSON.parse di sisi pemanggil.
+ *
+ * Pada Gemini 3 token berpikir ikut dihitung ke dalam maxOutputTokens, sehingga
+ * permintaan dengan thinkingLevel medium/high jauh lebih mudah terpotong.
+ */
+function isTruncated(payload) {
+  return String(payload?.candidates?.[0]?.finishReason || '') === 'MAX_TOKENS';
+}
+
+const MAX_OUTPUT_TOKEN_CEILING = 32768;
+
 function responseFormatMimeType(responseMimeType) {
   if (responseMimeType === 'application/json') return 'APPLICATION_JSON';
   if (responseMimeType === 'text/plain') return 'TEXT_PLAIN';
@@ -215,8 +229,8 @@ export async function generateAiContent({
     ? [...new Set([model, config.geminiModelThinking, config.geminiModelBasic].filter(Boolean))]
     : [model];
   const usageEventId = reserveUsage({ userId, purpose, mode, model });
-  const bodyForModel = (selectedModel) => {
-    const generationConfig = { maxOutputTokens };
+  const bodyForModel = (selectedModel, outputTokenBudget = maxOutputTokens) => {
+    const generationConfig = { maxOutputTokens: outputTokenBudget };
     const thinkingConfig = aiThinkingConfigFor({ model: selectedModel, mode, purpose });
     if (thinkingConfig) generationConfig.thinkingConfig = thinkingConfig;
     if (responseJsonSchema) {
@@ -235,28 +249,54 @@ export async function generateAiContent({
   };
 
   const startedAt = Date.now();
-  try {
+  const structuredResponse = Boolean(responseJsonSchema) || responseMimeType === 'application/json';
+
+  async function attemptWithBudget(outputTokenBudget) {
     let payload;
     let selectedModel = model;
     let lastProviderError;
     for (let index = 0; index < candidateModels.length; index += 1) {
       selectedModel = candidateModels[index];
       try {
-        payload = await requestGemini({ model: selectedModel, body: bodyForModel(selectedModel), timeoutMs: requestTimeoutMs });
+        payload = await requestGemini({
+          model: selectedModel,
+          body: bodyForModel(selectedModel, outputTokenBudget),
+          timeoutMs: requestTimeoutMs,
+        });
         if (safetyBlockReason(payload)) {
           throw new AiProviderError('Permintaan tidak dapat diproses karena kebijakan keamanan AI.', { code: 'AI_SAFETY_BLOCKED', status: 422 });
         }
+        // Output terpotong diperiksa sebelum cek teks kosong: pada thinkingLevel
+        // tinggi, seluruh budget dapat habis untuk berpikir sehingga bagian teks
+        // benar-benar kosong dan pesan errornya akan menyesatkan.
+        if (structuredResponse && isTruncated(payload)) return { payload, selectedModel, truncated: true };
         if (!responseText(payload)) {
           throw new AiProviderError('Provider AI tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502, retryable: true });
         }
-        break;
+        return { payload, selectedModel, truncated: false };
       } catch (error) {
         lastProviderError = error;
         const modelFallbackAllowed = /^(?:GEMINI_(?:NOT_FOUND|UNAVAILABLE|RESOURCE_EXHAUSTED)|AI_(?:TIMEOUT|EMPTY_RESPONSE))$/.test(String(error?.code || ''));
         if ((!error?.retryable && !modelFallbackAllowed) || index === candidateModels.length - 1) throw error;
       }
     }
-    if (!payload) throw lastProviderError || new AiProviderError('Provider AI gagal tanpa respons.');
+    throw lastProviderError || new AiProviderError('Provider AI gagal tanpa respons.');
+  }
+
+  try {
+    let attempt = await attemptWithBudget(maxOutputTokens);
+    // Sekali naikkan budget saat respons terstruktur terpotong. Mengulang dengan
+    // budget yang sama selalu menghasilkan pemotongan yang sama.
+    if (attempt.truncated && maxOutputTokens < MAX_OUTPUT_TOKEN_CEILING) {
+      attempt = await attemptWithBudget(Math.min(MAX_OUTPUT_TOKEN_CEILING, maxOutputTokens * 3));
+    }
+    if (attempt.truncated) {
+      throw new AiProviderError(
+        'Jawaban AI terpotong sebelum lengkap. Kurangi jumlah bahan pada satu permintaan lalu coba lagi.',
+        { code: 'AI_OUTPUT_TRUNCATED', status: 502, retryable: false },
+      );
+    }
+    const { payload, selectedModel } = attempt;
     if (selectedModel !== model) db.prepare('UPDATE ai_usage_events SET model = ? WHERE id = ?').run(selectedModel, usageEventId);
     const text = responseText(payload);
     finishUsage(usageEventId, { status: 'success', usage: payload.usageMetadata, latencyMs: Date.now() - startedAt });

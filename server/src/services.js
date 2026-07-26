@@ -1221,7 +1221,7 @@ Aturan:
       mode: aiMode,
       systemInstruction,
       contents: [{ role: 'user', parts: [{ text: prompt }, ...attachments.imageParts] }],
-      maxOutputTokens: 1000,
+      maxOutputTokens: 2600,
       responseMimeType: 'application/json',
       responseJsonSchema,
       requestTimeoutMs: 60000,
@@ -1372,7 +1372,11 @@ Mode respons: ${modeInstruction}`;
     mode: aiMode,
     systemInstruction,
     contents: [...history, { role: 'user', parts: [{ text: userText }, ...attachments.imageParts] }],
-    maxOutputTokens: 420,
+    // maxOutputTokens adalah batas atas, bukan reservasi, sehingga menaikkannya
+    // tidak menambah biaya bila model menjawab pendek. Anggaran 420 membuat
+    // keputusan router terpotong saat mode thinking dipakai, dan alur jatuh ke
+    // balasan generik alih-alih melanjutkan ke GENERATE.
+    maxOutputTokens: 1600,
     responseMimeType: 'application/json',
     responseJsonSchema: {
       type: 'OBJECT',
@@ -1485,7 +1489,7 @@ Aturan:
 - Buat title room chat ringkas 3-8 kata yang merangkum dokumen dan permintaan utama.
 - Jangan menjalankan revisi di tahap ini.`,
     contents: [{ role: 'user', parts: [{ text: context }] }],
-    maxOutputTokens: 420,
+    maxOutputTokens: 1600,
     responseMimeType: 'application/json',
     responseJsonSchema: {
       type: 'OBJECT',
@@ -2231,7 +2235,10 @@ async function analyzeEvidenceImages({ document, user, images, mappings, progres
     .slice(0, 24);
   if (!pending.length) return refreshMappings();
 
-  const batchSize = 6;
+  // Empat gambar per permintaan, bukan enam: setiap entri membawa deskripsi 2-4
+  // kalimat dan mode thinking ikut memakan budget output, sehingga batch besar
+  // rutin terpotong di tengah JSON.
+  const batchSize = 4;
   let processed = 0;
   for (let offset = 0; offset < pending.length; offset += batchSize) {
     const batch = pending.slice(offset, offset + batchSize);
@@ -2292,7 +2299,7 @@ Aturan:
       mode: 'thinking',
       systemInstruction: 'Kamu adalah pemeriksa bukti visual laporan praktikum. Deskripsikan hanya fakta visual yang dapat diverifikasi dan jangan mengarang.',
       contents: [{ role: 'user', parts: requestParts }],
-      maxOutputTokens: 3200,
+      maxOutputTokens: 9000,
       responseMimeType: 'application/json',
       responseJsonSchema,
       requestTimeoutMs: 120000,
