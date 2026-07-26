@@ -1595,6 +1595,16 @@ const upload = multer({
   },
 });
 
+const institutionLogoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    const allowed = new Set(['image/png', 'image/jpeg']);
+    if (!allowed.has(file.mimetype)) return callback(new HttpError(400, 'Logo institusi hanya mendukung PNG atau JPG.', 'INSTITUTION_LOGO_TYPE'));
+    return callback(null, true);
+  },
+});
+
 app.get('/api/health', (_req, res) => {
   const queue = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE status IN ('queued', 'running')").get().count;
   res.json({
@@ -2372,16 +2382,6 @@ function sendPrivateFile(res, storagePath) {
   }
   return res.sendFile(target);
 }
-
-const institutionLogoUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
-  fileFilter: (_req, file, callback) => {
-    const allowed = new Set(['image/png', 'image/jpeg']);
-    if (!allowed.has(file.mimetype)) return callback(new HttpError(400, 'Logo institusi hanya mendukung PNG atau JPG.', 'INSTITUTION_LOGO_TYPE'));
-    return callback(null, true);
-  },
-});
 
 const featureUpdateMediaUpload = multer({
   storage: multer.memoryStorage(),
