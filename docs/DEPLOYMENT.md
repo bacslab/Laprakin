@@ -1,6 +1,6 @@
-# Deployment Notes — Laprakin V21 QRIS
+# Deployment Notes - Laprakin V22 Production Private Beta
 
-Dokumen ini untuk **private beta single-instance**. Jangan membuka aplikasi untuk publik sebelum item keamanan, legal, dan operasional di bawah benar-benar ditangani.
+Dokumen ini untuk **private beta single-instance**. Production saat ini berjalan di `https://laprakin.app` melalui Docker Compose pada VPS. Jangan membuka aplikasi untuk publik luas sebelum item keamanan, legal, payment, monitoring, dan operasional di bawah benar-benar ditangani.
 
 ## 1. Environment production minimal
 
@@ -70,11 +70,24 @@ docker compose up -d --build
 
 Gunakan reverse proxy TLS (misalnya Caddy, Nginx, Cloudflare Tunnel, atau platform deployment pilihanmu) di depan port 4000. Paksa HTTPS untuk domain publik.
 
+### Production VPS saat ini
+
+- Domain publik: `https://laprakin.app`.
+- Runtime: Docker Compose single-instance.
+- Revision production terakhir yang terdokumentasi: `a9a2c92`.
+- Health check publik: `https://laprakin.app/api/health/ready`.
+- Health ready yang sehat mengembalikan database `ready`, worker `idle`, AI `configured`, dan Google OAuth `configured`.
+- Static media tutorial harus tersaji sebagai `video/webm`, bukan fallback `text/html`.
+- Source rollback terakhir disimpan di VPS sebagai `/opt/laprakin-rollback-20260725T184021Z`.
+- Repository di server production bukan working tree Git; deployment dilakukan dari archive source revision yang sudah dipush.
+
 ### Render Blueprint
 
 Repository menyediakan `render.yaml` untuk satu web service Docker di region Singapore dengan persistent disk. Saat membuat Blueprint, isi seluruh variable yang ditandai `sync: false` langsung di dashboard Render. Jangan menaruh nilainya di repository.
 
 Persistent disk memakai mount `/var/data/laprakin` untuk database, upload privat, dan media CMS. Deployment tanpa disk persisten hanya cocok untuk preview karena data akan hilang ketika instance diganti atau restart.
+
+Catatan: deployment production aktif saat ini bukan Render. Render blueprint tetap disimpan sebagai opsi deployment alternatif.
 
 ## 3. Before public beta
 
@@ -101,6 +114,10 @@ Persistent disk memakai mount `/var/data/laprakin` untuk database, upload privat
 - [ ] `/api/health/ready` mengembalikan `ai: configured` dan `googleOauth: configured`.
 - [ ] `NODE_ENV=production npm run verify:production` lulus menggunakan secret dan domain production yang sebenarnya.
 - [ ] Admin memantau `/api/admin/ai/usage` untuk lonjakan call, token, latency, dan error provider.
+- [ ] Admin memantau `/api/admin/alerts` atau SSE `/api/admin/events` untuk job gagal dan credit recovery.
+- [ ] Endpoint admin credit grant diuji dengan target satu user, semua user, dan user paid.
+- [ ] Contract test template DOCX lulus setelah template default atau logic export diubah.
+- [ ] Quiz/download gate diuji untuk user Free, credit satuan, dan subscription.
 - [ ] `ADMIN_EMAIL` memakai akun khusus admin dan password manager; jangan memakai akun harian.
 - [ ] MFA admin atau identity-aware proxy aktif sebelum akses admin dibuka ke internet.
 - [ ] Antivirus/malware scanner untuk upload aktif sebelum menerima file publik berskala besar.

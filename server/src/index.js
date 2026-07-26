@@ -174,6 +174,12 @@ const profileSchema = z.object({
     .optional(),
   nim: z.string().trim().max(40).optional(),
   className: z.string().trim().max(40).optional(),
+  institutionName: z.string().trim().max(120).optional(),
+  institutionLogoUrl: z.string().trim().max(500).optional(),
+  facultyName: z.string().trim().max(120).optional(),
+  studyProgramName: z.string().trim().max(120).optional(),
+  lecturerName: z.string().trim().max(150).optional(),
+  lecturerNip: z.string().trim().max(60).optional(),
   departmentKey: z.string().trim().max(24).optional(),
   studyProgramKey: z.string().trim().max(48).optional(),
 });
@@ -1938,7 +1944,7 @@ app.post('/api/product-updates/:id/receipt', requireAuth, requireCsrf, asyncHand
 
 app.put('/api/profile', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
   const input = profileSchema.parse(req.body || {});
-  const current = db.prepare('SELECT full_name, nickname, nim, class_name, department_key, study_program_key FROM users WHERE id = ?').get(req.user.id);
+  const current = db.prepare('SELECT full_name, nickname, nim, class_name, institution_name, institution_logo_url, faculty_name, study_program_name, lecturer_name, lecturer_nip, department_key, study_program_key FROM users WHERE id = ?').get(req.user.id);
   const departmentKey = input.departmentKey ?? current.department_key;
   const studyProgramKey = input.studyProgramKey ?? current.study_program_key;
   const program = studyProgramKey ? programs.find((item) => item.key === studyProgramKey) : null;
@@ -1949,13 +1955,19 @@ app.put('/api/profile', requireAuth, requireCsrf, asyncHandler(async (req, res) 
 
   db.prepare(`
     UPDATE users SET
-      full_name = ?, nickname = ?, nim = ?, class_name = ?, department_key = ?, study_program_key = ?, updated_at = ?
+      full_name = ?, nickname = ?, nim = ?, class_name = ?, institution_name = ?, institution_logo_url = ?, faculty_name = ?, study_program_name = ?, lecturer_name = ?, lecturer_nip = ?, department_key = ?, study_program_key = ?, updated_at = ?
     WHERE id = ?
   `).run(
     input.fullName ?? current.full_name,
     input.nickname ?? current.nickname,
     input.nim ?? current.nim,
     input.className ?? current.class_name,
+    input.institutionName ?? current.institution_name,
+    input.institutionLogoUrl ?? current.institution_logo_url,
+    input.facultyName ?? current.faculty_name,
+    input.studyProgramName ?? current.study_program_name,
+    input.lecturerName ?? current.lecturer_name,
+    input.lecturerNip ?? current.lecturer_nip,
     program?.department || departmentKey,
     program?.key || '',
     now(),
@@ -3001,10 +3013,12 @@ app.post('/api/chat/sessions/:id/document', requireAuth, requireCsrf, asyncHandl
     allowExternalAi: sessionConfiguration.allowExternalAi !== false,
     sourceMode: workflow.sourceMode === 'missing' ? 'unavailable' : workflow.sourceMode,
     evidenceMode: workflow.evidenceMode === 'missing' ? 'unavailable' : workflow.evidenceMode,
+    lecturerName: sessionConfiguration.lecturerName || req.user.lecturer_name || '',
+    lecturerNip: sessionConfiguration.lecturerNip || req.user.lecturer_nip || '',
     instructions: [sessionConfiguration.instructions || '', sessionConfiguration.customStructure ? `Struktur khusus: ${sessionConfiguration.customStructure}` : '', ...messages.map((message) => message.content)].filter(Boolean).join('\n').slice(0, 3000),
   };
-  db.prepare(`INSERT INTO documents (id, owner_user_id, title, course_name, module_title, document_profile, recipe_json, priority, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'normal', 'draft', ?, ?)`)
-    .run(id, req.user.id, title, sessionConfiguration.courseName || '', sessionConfiguration.moduleTitle || '', sessionConfiguration.documentProfile || (session.structure_mode === 'custom' ? 'proyek' : 'langkah'), JSON.stringify(recipe), timestamp, timestamp);
+  db.prepare(`INSERT INTO documents (id, owner_user_id, title, course_name, module_title, lecturer_name, academic_year, document_profile, recipe_json, priority, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal', 'draft', ?, ?)`)
+    .run(id, req.user.id, title, sessionConfiguration.courseName || '', sessionConfiguration.moduleTitle || '', recipe.lecturerName || '', sessionConfiguration.academicYear || '2025/2026', sessionConfiguration.documentProfile || (session.structure_mode === 'custom' ? 'proyek' : 'langkah'), JSON.stringify(recipe), timestamp, timestamp);
   const attachments = db.prepare(`SELECT * FROM chat_attachments WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL ORDER BY created_at`).all(session.id, req.user.id);
   for (const attachment of attachments) {
     copyChatAttachmentToDocument(id, req.user.id, attachment);

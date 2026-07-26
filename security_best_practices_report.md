@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Audit dilakukan pada frontend React, API Express, auth cookie/JWT, CSRF, SQLite access, upload, CMS admin, Docker, dan dependency production. Tidak ditemukan critical vulnerability yang terkonfirmasi. Dependency audit saat laporan dibuat menunjukkan **0 vulnerability**. Beberapa kontrol production tetap membutuhkan infrastruktur eksternal sebelum public launch.
+Audit dilakukan pada frontend React, API Express, auth cookie/JWT, CSRF, SQLite access, upload, CMS/admin ops, AI usage telemetry, Docker, DOCX export, dan dependency production. Tidak ditemukan critical vulnerability yang terkonfirmasi. Dependency audit saat laporan dibuat menunjukkan **0 vulnerability**. Beberapa kontrol production tetap membutuhkan infrastruktur eksternal sebelum public launch.
 
 ## Fixed Findings
 
@@ -44,6 +44,25 @@ Audit dilakukan pada frontend React, API Express, auth cookie/JWT, CSRF, SQLite 
 - **Impact:** API key, OAuth client secret, session secret, payment server key, atau SMTP password yang tidak sengaja ter-bundle dapat diambil dari browser.
 - **Fix:** Gate production memindai seluruh output `client/dist` terhadap credential backend aktif tanpa mencetak nilai secret.
 
+### SEC-007 — Medium — Dependency advisory removal
+
+- **Location:** `client/src/router.jsx`, `package.json`.
+- **Evidence:** Versi React Router yang diuji masih memiliki advisory dependency.
+- **Impact:** Dependency rentan dapat ikut masuk production walaupun rute aplikasi sederhana.
+- **Fix:** Menghapus `react-router-dom` dan menggantinya dengan router internal kecil yang hanya menerima path lokal.
+
+### SEC-008 — Medium — Admin operations privacy
+
+- **Location:** `server/src/index.js`, `docs/ADMIN_PRIVACY.md`.
+- **Impact:** Monitoring AI dan alert operasional dapat berisiko menyimpan isi user jika tidak dibatasi.
+- **Fix:** Admin AI usage hanya metadata; admin alerts dan credit grant dicatat dengan audit log tanpa prompt, output AI, isi file, atau dokumen user.
+
+### SEC-009 — Medium — Credit recovery on failed document job
+
+- **Location:** `server/src/index.js`, `server/src/services.js`.
+- **Impact:** User kehilangan credit bila job generate gagal setelah debit.
+- **Fix:** Job error membuat admin alert dan melakukan refund otomatis; kegagalan refund sendiri membuat alert critical.
+
 ## Open Production Requirements
 
 ### SEC-101 — High — Admin belum memiliki MFA bawaan
@@ -76,6 +95,10 @@ Audit dilakukan pada frontend React, API Express, auth cookie/JWT, CSRF, SQLite 
 - Node syntax and database migration load.
 - Smoke test API.
 - Integration test CMS: role isolation, draft isolation, fake image rejection, valid image upload, publish delivery, receipt deduplication, archive.
+- Template DOCX contract test: cover/template preservation, no body identity section, dynamic cover patching.
+- Admin ops integration test: credit grant target user/all/paid, idempotency, AI usage metadata-only, alert resolve/reopen, SSE ready event.
+- E2E workflow: auth, upload evidence, document generation, template DOCX export, restore/version, and email-verified password change.
+- Production health check at `https://laprakin.app/api/health/ready`.
 - `npm audit --omit=dev`: 0 vulnerability.
 
 ## Scope Limitation

@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS users (
   nickname TEXT DEFAULT '',
   nim TEXT DEFAULT '',
   class_name TEXT DEFAULT '',
+  institution_name TEXT DEFAULT '',
+  institution_logo_url TEXT DEFAULT '',
+  faculty_name TEXT DEFAULT '',
+  study_program_name TEXT DEFAULT '',
+  lecturer_name TEXT DEFAULT '',
+  lecturer_nip TEXT DEFAULT '',
   department_key TEXT DEFAULT '',
   study_program_key TEXT DEFAULT '',
   role TEXT DEFAULT 'student',
@@ -474,9 +480,16 @@ export function toUser(row) {
     nickname: row.nickname || '',
     nim: row.nim,
     className: row.class_name,
+    institutionName: row.institution_name || '',
+    institutionLogoUrl: row.institution_logo_url || '',
+    facultyName: row.faculty_name || '',
+    studyProgramName: row.study_program_name || '',
+    lecturerName: row.lecturer_name || '',
+    lecturerNip: row.lecturer_nip || '',
     departmentKey: row.department_key,
     studyProgramKey: row.study_program_key,
     role: row.role,
+    referralCode: row.referral_code || '',
     authProvider: row.auth_provider || 'password',
     emailVerified: Boolean(row.email_verified_at),
     onboardingDismissed: Boolean(row.onboarding_dismissed),
@@ -814,6 +827,12 @@ CREATE INDEX IF NOT EXISTS idx_quiz_attempts_passed
 // V24: durable chat workflow and idempotent structured actions.
 ensureColumn('users', 'onboarding_dismissed', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('users', 'nickname', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('users', 'institution_name', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('users', 'institution_logo_url', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('users', 'faculty_name', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('users', 'study_program_name', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('users', 'lecturer_name', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('users', 'lecturer_nip', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('chat_sessions', 'workflow_state', "TEXT NOT NULL DEFAULT 'NEW_CHAT'");
 ensureColumn('chat_sessions', 'clarification_count', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('chat_sessions', 'source_recommendation_shown', 'INTEGER NOT NULL DEFAULT 0');

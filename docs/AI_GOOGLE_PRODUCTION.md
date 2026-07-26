@@ -32,11 +32,16 @@
 - Request AI memiliki timeout, retry terbatas untuk error sementara, quota per user, serta metering token/latency tanpa menyimpan prompt atau output.
 - Lampiran dipotong berdasarkan batas karakter/ukuran. Prompt sistem melarang fabrikasi data dan memperlakukan isi file sebagai input tidak tepercaya.
 - Dokumen memakai structured JSON output dan tetap divalidasi sebelum disimpan.
+- Prompt dokumen diarahkan khusus untuk laprak/dokumen akademik, memprioritaskan bahan user, tidak banyak bertanya bila konteks cukup, dan hanya meminta klarifikasi ketika dokumen tidak bisa dikerjakan tanpa jawaban user.
+- Generator dokumen memakai quality gate agar tidak membuat section identitas praktikum di body, tidak mengarang bukti, dan memberi penjelasan kontekstual setelah gambar.
+- Export DOCX memakai template default `server/assets/templates/default-laprak.docx` dan mempertahankan cover, style, media, header/footer, dan section properties.
+- Quiz dokumen dibuat dari isi laprak yang sudah jadi; jawaban dibuat singkat dan tidak disusun sebagai pertanyaan sulit.
 - Google login memakai Authorization Code, state, nonce, PKCE S256, one-time state, signature RS256, cache JWKS, audience/issuer/expiry/nonce/authorized-party checks, serta timeout jaringan.
 - Akun Google-only dapat membuat kata sandi melalui link email tanpa memutus koneksi Google.
 - State OAuth, token reset yang kedaluwarsa, dan telemetry AI lama dibersihkan otomatis oleh retention worker.
 - Homepage, Privacy Policy, dan Terms of Service tersedia sebagai route publik pada domain production.
 - Production gagal start bila credential wajib belum lengkap atau model memakai alias preview/latest/deprecated.
+- Admin console dapat melihat AI usage metadata-only dan admin alerts tanpa prompt/output/file content.
 
 ## Environment production
 
@@ -69,7 +74,9 @@ Pin model stable eksplisit. Jangan memakai alias `latest`, model `preview`, `exp
 7. Pantau `GET /api/admin/ai/usage?days=30`. Endpoint hanya mengembalikan jumlah call, token, latency, model, dan error—tanpa prompt atau output.
 8. Periksa tabel `ai_usage_events` hanya berisi metadata operasional—tidak boleh ada prompt, isi file, atau output AI.
 9. Uji backup/restore database, upload, dan public media.
-10. Jalankan DAST pada staging yang identik dengan production dan lakukan review manual otorisasi horizontal untuk setiap resource user.
+10. Jalankan `npm run test:template-docx` setelah perubahan template/export.
+11. Jalankan `npm run test:admin-ops` setelah perubahan admin usage, credit grant, atau alerts.
+12. Jalankan DAST pada staging yang identik dengan production dan lakukan review manual otorisasi horizontal untuk setiap resource user.
 
 Tidak ada sistem yang dapat dijamin “100% tidak bisa ditembus”. Target production yang benar adalah defense-in-depth, pengujian berulang, patch dependency, monitoring, incident response, dan bukti bahwa kontrol kritis bekerja.
 

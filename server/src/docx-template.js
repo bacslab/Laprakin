@@ -164,9 +164,8 @@ function patchCoverElements(elements, slots) {
 
   const lecturerIndex = lecturerLabelIndex >= 0 ? nextTextIndex(patched, lecturerLabelIndex + 1, authorLabelIndex >= 0 ? authorLabelIndex : patched.length) : -1;
   if (lecturerIndex >= 0) {
-    const current = paragraphLines(patched[lecturerIndex]);
-    const nipLine = slots.lecturerNip ? `NIP : ${slots.lecturerNip}` : (current[1] || 'NIP : -');
-    patched[lecturerIndex] = replaceParagraphLines(patched[lecturerIndex], [slots.lecturerName || current[0] || '-', nipLine]);
+    const nipLine = slots.lecturerNip ? `NIP : ${slots.lecturerNip}` : 'NIP : -';
+    patched[lecturerIndex] = replaceParagraphLines(patched[lecturerIndex], [slots.lecturerName || '-', nipLine]);
   }
 
   const authorIndex = authorLabelIndex >= 0 ? nextTextIndex(patched, authorLabelIndex + 1, academicIndex >= 0 ? academicIndex : patched.length) : -1;
@@ -177,8 +176,12 @@ function patchCoverElements(elements, slots) {
   }
 
   if (academicIndex >= 0) {
-    const current = paragraphLines(patched[academicIndex]);
-    patched[academicIndex] = replaceParagraphLines(patched[academicIndex], current.map((line) => patchAcademicLine(line, slots)));
+    patched[academicIndex] = replaceParagraphLines(patched[academicIndex], [
+      `PROGRAM STUDI ${String(slots.studyProgram || '-').toUpperCase()}`,
+      String(slots.department || 'FAKULTAS / JURUSAN').toUpperCase(),
+      String(slots.institutionName || 'INSTITUSI').toUpperCase(),
+      `TAHUN AKADEMIK ${slots.academicYear || '-'}`,
+    ]);
   }
   return patched;
 }
@@ -206,6 +209,27 @@ function ensureContentType(contentTypesXml, extension) {
     /<\/Types>/i,
     `<Default Extension="${extension}" ContentType="${contentTypeForExtension(extension)}"/></Types>`,
   );
+}
+
+function replaceCoverImage(templateZip, coverElements, logoBuffer, extension = 'png') {
+  if (!logoBuffer?.length) return;
+  const embedId = coverElements.join('').match(/\br:embed="([^"]+)"/i)?.[1];
+  if (!embedId) return;
+  let relationships = templateZip.readAsText('word/_rels/document.xml.rels');
+  let contentTypes = templateZip.readAsText('[Content_Types].xml');
+  const relationship = [...relationships.matchAll(RELATIONSHIP_TAG)].map((match) => match[0])
+    .find((tag) => relationshipAttribute(tag, 'Id') === embedId);
+  if (!relationship) return;
+  const target = relationshipAttribute(relationship, 'Target');
+  if (!target || /^https?:\/\//i.test(target)) return;
+  const safeExtension = ['png', 'jpg', 'jpeg'].includes(String(extension).toLowerCase()) ? String(extension).toLowerCase() : 'png';
+  const nextTarget = `media/institution-logo.${safeExtension}`;
+  const updatedRelationship = relationship.replace(/\bTarget="[^"]+"/i, `Target="${nextTarget}"`);
+  relationships = relationships.replace(relationship, updatedRelationship);
+  contentTypes = ensureContentType(contentTypes, safeExtension);
+  templateZip.addFile(`word/${nextTarget}`, Buffer.from(logoBuffer));
+  templateZip.updateFile('word/_rels/document.xml.rels', Buffer.from(relationships));
+  templateZip.updateFile('[Content_Types].xml', Buffer.from(contentTypes));
 }
 
 function mergeBodyRelationships(templateZip, reportZip, bodyXml) {
@@ -281,10 +305,12 @@ export function mergeReportWithTemplate({ reportBuffer, templateBuffer, slots })
   const reportElements = splitTopLevelElements(reportParts.body);
   const boundary = detectCoverBoundary(templateElements);
   const coverElements = patchCoverElements(templateElements.slice(0, boundary), slots);
+  replaceCoverImage(templateZip, coverElements, slots.institutionLogoBuffer, slots.institutionLogoExtension);
   const templateSection = [...templateElements].reverse().find((element) => /^<w:sectPr\b/i.test(element.trim())) || '';
   const reportBody = reportElements.filter((element) => !/^<w:sectPr\b/i.test(element.trim())).join('');
   const mergedReportBody = mergeBodyRelationships(templateZip, reportZip, reportBody);
-  const mergedXml = `${templateParts.prefix}${coverElements.join('')}${mergedReportBody}${templateSection}${templateParts.suffix}`;
+  const coverPageBreak = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+  const mergedXml = `${templateParts.prefix}${coverElements.join('')}${coverPageBreak}${mergedReportBody}${templateSection}${templateParts.suffix}`;
   templateZip.updateFile('word/document.xml', Buffer.from(mergedXml));
   return templateZip.toBuffer();
 }

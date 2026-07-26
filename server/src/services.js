@@ -1344,7 +1344,11 @@ Mode respons: ${modeInstruction}`;
     `Nama user: ${String(user.full_name || user.fullName || '').slice(0, 100) || '-'}`,
     `NPM/NIM user: ${String(user.nim || '').slice(0, 40) || '-'}`,
     `Kelas user: ${String(user.class_name || user.className || '').slice(0, 40) || '-'}`,
-    `Jurusan/prodi: ${session.department_key || '-'} / ${session.study_program_key || '-'}`,
+    `Univ/institusi: ${String(user.institution_name || user.institutionName || '').slice(0, 120) || '-'}`,
+    `Fakultas/Jurusan: ${String(user.faculty_name || user.facultyName || session.department_key || '').slice(0, 120) || '-'}`,
+    `Program studi: ${String(user.study_program_name || user.studyProgramName || session.study_program_key || '').slice(0, 120) || '-'}`,
+    `Dosen pengampu: ${String(chatConfig.lecturerName || user.lecturer_name || user.lecturerName || '').slice(0, 150) || '-'}`,
+    `NIP dosen: ${String(chatConfig.lecturerNip || user.lecturer_nip || user.lecturerNip || '').slice(0, 60) || '-'}`,
     `Mata kuliah: ${chatConfig.courseName || '-'}`,
     `Modul/konteks: ${chatConfig.moduleTitle || '-'}`,
     `Profil dokumen: ${chatConfig.documentProfile || session.structure_mode || 'langkah'}`,
@@ -2639,7 +2643,7 @@ function cleanQuizQuestion(question, sectionContentByTitle) {
     String(question?.question || '').trim().length < 12
     || String(question?.question || '').trim().length > 160
     || options.length !== 4
-    || options.some((option) => !option || option.split(/\s+/).length > 5)
+    || options.some((option) => !option || option.split(/\s+/).length > 8)
     || new Set(options.map(normalizedGrounding)).size !== 4
     || !Number.isInteger(correctIndex)
     || correctIndex < 0
@@ -2660,7 +2664,7 @@ function cleanQuizQuestion(question, sectionContentByTitle) {
 }
 
 function fallbackQuizQuestions(sections, targetCount) {
-  const stopWords = new Set(['yang', 'dengan', 'untuk', 'dari', 'pada', 'dalam', 'adalah', 'atau', 'akan', 'telah', 'dapat', 'hasil', 'bagian', 'proses', 'secara', 'sebagai']);
+  const stopWords = new Set(['yang', 'dengan', 'untuk', 'dari', 'pada', 'dalam', 'adalah', 'atau', 'akan', 'telah', 'dapat', 'hasil', 'bagian', 'proses', 'secara', 'sebagai', 'praktikum', 'laporan', 'analisis', 'implementasi', 'dimulai', 'mengidentifikasi', 'menunjukkan', 'digunakan', 'melakukan', 'berdasarkan']);
   const candidates = sections.flatMap((section) => String(section.content || '')
     .split(/(?<=[.!?])\s+|\n+/)
     .map((sentence) => sentence.replace(/\s+/g, ' ').trim())
@@ -2670,7 +2674,7 @@ function fallbackQuizQuestions(sections, targetCount) {
       const words = sentence.match(/\b[\p{L}\p{N}-]{4,}\b/gu) || [];
       return [...preferred, ...words]
         .map((answer) => answer.trim())
-        .filter((answer) => answer.split(/\s+/).length <= 5 && !stopWords.has(answer.toLocaleLowerCase('id-ID')))
+        .filter((answer) => answer.split(/\s+/).length <= 8 && !stopWords.has(answer.toLocaleLowerCase('id-ID')) && /[A-Z0-9]|\d|(?:ether|wlan|port|interface|server|client|router|dhcp|ip|dns)/i.test(answer))
         .slice(0, 3)
         .map((answer) => ({ sectionTitle: section.title, sourceQuote: sentence, answer }));
     }));
@@ -2679,7 +2683,9 @@ function fallbackQuizQuestions(sections, targetCount) {
   );
   if (usable.length < 4) return [];
   return usable.slice(0, targetCount).map((candidate) => {
-    const distractors = usable.filter((item) => normalizedGrounding(item.answer) !== normalizedGrounding(candidate.answer)).slice(0, 3);
+    const candidateType = /\d/.test(candidate.answer) ? 'number' : /^[A-Z0-9-]{2,}$/i.test(candidate.answer) ? 'code' : 'text';
+    const sameType = usable.filter((item) => normalizedGrounding(item.answer) !== normalizedGrounding(candidate.answer) && (/\d/.test(item.answer) ? 'number' : /^[A-Z0-9-]{2,}$/i.test(item.answer) ? 'code' : 'text') === candidateType);
+    const distractors = [...sameType, ...usable.filter((item) => normalizedGrounding(item.answer) !== normalizedGrounding(candidate.answer))].slice(0, 3);
     const options = shuffled([candidate.answer, ...distractors.map((item) => item.answer)]);
     const clue = candidate.sourceQuote.replace(candidate.answer, '____').slice(0, 118).trim();
     return {
@@ -2689,9 +2695,30 @@ function fallbackQuizQuestions(sections, targetCount) {
       correctIndex: options.indexOf(candidate.answer),
       sourceQuote: candidate.sourceQuote,
       sectionTitle: candidate.sectionTitle,
-      explanation: `Jawaban tersebut tertulis pada bagian “${candidate.sectionTitle}”.`,
+      explanation: `Jawaban tersebut tertulis pada bagian ${candidate.sectionTitle}.`,
     };
   });
+}
+
+async function fetchInstitutionLogo(url = '') {
+  const value = String(url || '').trim();
+  if (!/^https?:\/\//i.test(value)) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(value, { signal: controller.signal, redirect: 'follow' });
+    if (!response.ok) return null;
+    const type = String(response.headers.get('content-type') || '').toLowerCase();
+    const extension = type.includes('jpeg') || type.includes('jpg') ? 'jpg' : type.includes('png') ? 'png' : '';
+    if (!extension) return null;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (!bytes.length || bytes.length > 1_500_000) return null;
+    return { buffer: bytes, extension };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function buildDocumentQuizPool(documentId, userId, sections, targetCount) {
@@ -2736,8 +2763,10 @@ Aturan keras:
 - sourceQuote harus kutipan verbatim dari satu bagian laporan.
 - Jawaban benar harus berupa teks yang muncul verbatim di sourceQuote.
 - Gunakan tingkat kesulitan mudah dan pertanyaan langsung.
-- Setiap opsi wajib sangat singkat, idealnya 1-3 kata dan maksimal 5 kata.
-- Buat empat opsi, satu jawaban benar, dan distraktor singkat dari istilah atau nilai lain yang memang ada pada laporan.
+- Setiap opsi wajib singkat, idealnya 1-4 kata dan maksimal 8 kata.
+- Buat empat opsi, satu jawaban benar, dan tiga distraktor yang satu jenis dengan jawaban benar.
+- Jika jawaban benar berupa angka/IP/interface/command, distraktor juga harus angka/IP/interface/command yang muncul di laporan.
+- Jangan memakai opsi generic seperti praktikum, dimulai, mengidentifikasi, laporan, analisis, atau kata kerja umum.
 - Jangan memakai pengetahuan eksternal dan jangan menanyakan identitas mahasiswa.`,
         contents: [{
           role: 'user',
@@ -3240,20 +3269,26 @@ export async function buildDocumentDocxBuffer(documentId, userId, { enforceExpor
   const recipe = parseJson(document.recipe_json, {});
   const lecturerNip = parameters.find((parameter) => /nip.*dosen|dosen.*nip/i.test(`${parameter.parameterKey} ${parameter.label}`))?.value
     || recipe.lecturerNip
+    || user.lecturer_nip
     || '';
+  const institutionLogo = await fetchInstitutionLogo(user.institution_logo_url);
   const buffer = mergeReportWithTemplate({
     reportBuffer,
     templateBuffer: template.buffer,
     slots: {
       courseName: document.course_name,
       moduleTitle: document.module_title || document.title,
-      lecturerName: document.lecturer_name,
+      lecturerName: document.lecturer_name || recipe.lecturerName || user.lecturer_name || '',
       lecturerNip,
       fullName: user.full_name,
       studentId: user.nim,
       className: user.class_name,
-      studyProgram: programLabel(user.study_program_key),
-      department: departmentLabel(user.department_key),
+      studyProgram: user.study_program_name || programLabel(user.study_program_key),
+      department: user.faculty_name || departmentLabel(user.department_key),
+      institutionName: user.institution_name || 'INSTITUSI',
+      institutionLogoUrl: user.institution_logo_url || '',
+      institutionLogoBuffer: institutionLogo?.buffer || null,
+      institutionLogoExtension: institutionLogo?.extension || '',
       academicYear: document.academic_year || '2025/2026',
     },
   });
@@ -3348,7 +3383,7 @@ export function processReferralSubscriptionReward(inviteeUserId) {
     userId: referral.referrer_user_id,
     bucket: 'referral',
     amount: 5,
-    reason: 'Bonus referral: invitee mulai subscription bulanan',
+    reason: 'Bonus referral: invitee belanja minimal Rp29.900 atau mulai subscription',
     referenceType: 'referral',
     referenceId: referral.id,
     availableAt,
@@ -3361,7 +3396,7 @@ export function processReferralSubscriptionReward(inviteeUserId) {
   `).run(availableAt ? 'pending_hold' : 'rewarded', entryId, now(), referral.id);
 
   audit(referral.referrer_user_id, 'referral.reward_created', 'referral', referral.id, { availableAt });
-  notify(referral.referrer_user_id, 'wallet', availableAt ? 'Bonus referral sedang menunggu' : 'Bonus referral +5 credit', availableAt ? 'Bonus referral akan aktif setelah masa hold selesai.' : 'Teman yang kamu undang memiliki subscription aktif. +5 credit masuk ke wallet.', '/app/wallet');
+  notify(referral.referrer_user_id, 'wallet', availableAt ? 'Bonus referral sedang menunggu' : 'Bonus referral +5 credit', availableAt ? 'Bonus referral akan aktif setelah masa hold selesai.' : 'Teman yang kamu undang sudah belanja minimal Rp29.900 atau aktif Pro. +5 credit masuk ke wallet.', '/app/wallet');
 }
 
 export function dataExportForUser(userId) {

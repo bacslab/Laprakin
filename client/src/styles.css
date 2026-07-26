@@ -8945,3 +8945,152 @@ body[data-laprakin-theme='dark'] .toast .icon-button:hover{background:#e2e4de!im
   .workspace .message.user{min-width:min(280px,88%)!important;max-width:88%!important}
   .workspace .account-popover.account-popover-fixed,.workspace.left-collapsed .account-popover.account-popover-fixed{left:12px!important;right:auto!important;width:min(248px,calc(100vw - 24px))!important;max-width:calc(100vw - 24px)!important}
 }
+
+/* V70: targeted UX fixes from local QA. */
+.auth-topbar{border-bottom:0!important}
+.auth-page{height:100dvh!important;min-height:100dvh!important;overflow:hidden!important}
+.auth-page .google-button{display:flex!important;align-items:center!important;justify-content:center!important;gap:10px!important}
+.auth-page .google-button b{display:none!important}
+.auth-page .google-logo{width:18px;height:18px;flex:0 0 auto}
+
+.workspace .workspace-header{
+  grid-template-columns:minmax(0,1fr) auto auto!important;
+}
+.workspace .workspace-plan{
+  justify-self:end!important;
+  border-color:transparent!important;
+  background:transparent!important;
+  transition:background-color .16s ease,color .16s ease!important;
+}
+.workspace .workspace-plan:hover{
+  border-color:transparent!important;
+  background:color-mix(in srgb,var(--workspace-text) 8%,transparent)!important;
+  color:var(--workspace-text)!important;
+}
+.workspace .workspace-plan:hover b{text-decoration:underline;text-underline-offset:3px}
+.workspace .workspace-plan:hover span{text-decoration:none!important}
+
+.pricing-compact-card{
+  cursor:default!important;
+  transition:background-color .16s ease,border-color .16s ease!important;
+}
+.pricing-compact-card:hover{
+  transform:none!important;
+  border-color:color-mix(in srgb,var(--pricing-text) 18%,var(--pricing-line))!important;
+  background:color-mix(in srgb,var(--pricing-surface) 96%,var(--pricing-text))!important;
+}
+.pricing-compact-symbol{display:none!important}
+.pricing-compact-card.is-recommended{border-color:color-mix(in srgb,var(--pricing-accent) 60%,var(--pricing-line))!important}
+.pricing-recommended-badge{
+  width:max-content;
+  margin:0 0 10px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:color-mix(in srgb,var(--pricing-accent) 16%,transparent);
+  color:var(--pricing-text);
+  font-size:.55rem;
+  font-weight:800;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.pricing-checkout-page .pricing-compact-main{width:min(720px,calc(100vw - 36px))}
+.pricing-checkout-page .pricing-compact-checkout{width:100%;margin-top:20px}
+
+.workspace .docx-preview-host{
+  overflow:auto!important;
+  padding:16px!important;
+  background:#bdbdb9!important;
+}
+.workspace .docx-render-root{
+  width:816px!important;
+  transform-origin:top center!important;
+  margin:0 auto!important;
+}
+.workspace .docx-preview-host .docx-wrapper{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  gap:18px!important;
+}
+.workspace .docx-preview-host .docx-wrapper>section{
+  margin:0 auto!important;
+  box-shadow:0 2px 12px rgba(0,0,0,.24)!important;
+  page-break-after:always!important;
+  break-after:page!important;
+}
+
+.chat-brief-panel{
+  width:min(760px,100%);
+  display:grid;
+  grid-template-columns:1.1fr 1fr 1fr;
+  gap:10px;
+  margin:14px 0 8px;
+  padding:14px;
+  border:1px solid var(--workspace-line);
+  border-radius:14px;
+  background:color-mix(in srgb,var(--workspace-card) 88%,transparent);
+}
+.chat-brief-panel>div{grid-column:1/-1;display:grid;gap:2px}
+.chat-brief-panel small{color:var(--workspace-muted);font-size:10px}
+.chat-brief-panel b{color:var(--workspace-text);font-size:13px}
+.chat-brief-panel label{display:grid;gap:6px;color:var(--workspace-muted);font-size:10px;font-weight:700}
+.chat-brief-panel input{
+  width:100%;
+  height:36px;
+  border:1px solid var(--workspace-line);
+  border-radius:9px;
+  padding:0 10px;
+  background:var(--workspace-panel);
+  color:var(--workspace-text);
+  font:650 11px "Plus Jakarta Sans",system-ui,sans-serif;
+}
+
+.quiz-workspace-panel{
+  width:min(760px,100%);
+  margin:0 auto;
+  display:grid;
+  gap:14px;
+  align-self:center;
+}
+.quiz-workspace-panel>header{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+}
+.quiz-workspace-panel>header h2{margin:2px 0 5px;color:var(--workspace-text);font-size:24px;letter-spacing:-.04em}
+.quiz-workspace-panel>header p{margin:0;color:var(--workspace-muted);font-size:12px;line-height:1.5}
+.quiz-workspace-panel>header button{
+  border:1px solid var(--workspace-line);
+  border-radius:10px;
+  background:var(--workspace-panel);
+  color:var(--workspace-text);
+  padding:10px 12px;
+  font-weight:750;
+}
+.quiz-workspace-panel .quiz-player,
+.quiz-workspace-panel .quiz-gate,
+.quiz-workspace-panel .quiz-result{
+  width:100%!important;
+  margin:0!important;
+  border-radius:16px!important;
+}
+
+.notification-popover{background:var(--workspace-panel)!important;border-color:var(--workspace-line)!important}
+.notification-list article{
+  border:1px solid var(--workspace-line)!important;
+  border-radius:12px!important;
+  background:color-mix(in srgb,var(--workspace-card) 72%,var(--workspace-text) 4%)!important;
+  padding:10px!important;
+}
+.notification-list article>span{background:#ef4444!important}
+.notification-read{color:#ef4444!important}
+
+.academic-settings-wide{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+}
+.academic-settings-wide .button{grid-column:1/-1}
+
+@media(max-width:980px){
+  .chat-brief-panel,.academic-settings-wide{grid-template-columns:1fr!important}
+}

@@ -1,3 +1,10 @@
+## V37 - Laprak Template, Admin Ops, and Production Private Beta
+
+- Added the default DOCX template contract for laprak export: cover preservation, dynamic cover fields, no body identity section, and contextual explanation after every image.
+- Added admin operations documentation for credit grants, metadata-only AI usage, realtime alerts, and credit recovery when document jobs fail.
+- Documented production private beta deployment on `laprakin.app`, active revision `a9a2c92`, health checks, static media verification, and rollback source.
+- Updated security notes for email-verified password changes, dependency audit status, router dependency removal, admin privacy, and document guardrails.
+- Updated beta checklist with template DOCX tests, admin ops tests, quiz/download gate checks, and production health/media checks.
 
 ## V36 — Compact Pricing Header & Aligned Actions
 - Added a concise pricing headline and helper text above the plan cards.

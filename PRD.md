@@ -9,12 +9,13 @@ Laprakin bukan sekadar chat AI umum. Produk menggabungkan:
 - workspace berbasis percakapan;
 - pengelolaan file, chat, project, dan dokumen;
 - konfigurasi akademik yang terstruktur;
+- template DOCX default yang mempertahankan cover kampus;
 - mode AI bertingkat;
 - proses review dan revisi;
-- export dokumen;
+- versi dokumen, preview, quiz singkat, dan export dokumen;
 - credit satuan dan subscription;
 - pembayaran QRIS dinamis Midtrans;
-- admin console dan CMS landing;
+- admin console, CMS landing, credit grant, dan alert operasional;
 - perlindungan privasi serta integritas akademik.
 
 Nilai utama Laprakin adalah mengurangi pekerjaan administratif penyusunan dokumen tanpa mengambil alih tanggung jawab akademik pengguna.
@@ -476,7 +477,7 @@ Persyaratan:
 - validasi server-side;
 - password disimpan dengan bcrypt;
 - email harus unik;
-- verifikasi email sebelum fitur sensitif tertentu;
+- verifikasi email wajib sebelum pengguna dapat memakai workspace/generate;
 - rate limiting;
 - pesan error tidak membocorkan informasi akun.
 
@@ -617,19 +618,20 @@ Desain composer mengacu pada pola chat modern:
 
 Shortcut awal:
 
-- Code;
-- Learn;
-- Create;
-- From Drive;
-- From Gmail.
+- Laprak;
+- Proposal;
+- Makalah;
+- Tugas akhir;
+- Jurnal.
 
-Shortcut yang belum terintegrasi harus diberi status jelas dan tidak berpura-pura sudah terkoneksi.
+Shortcut harus mengarah ke mode dokumen akademik yang benar-benar didukung. Integrasi eksternal yang belum tersedia tidak boleh ditampilkan sebagai fitur aktif.
 
 ### 13.3 Input
 
 - Enter mengirim;
 - Shift+Enter membuat baris baru;
 - paste gambar membuat attachment;
+- drag and drop file membuat attachment;
 - textarea auto-grow hingga batas tertentu;
 - state disabled saat request berjalan;
 - draft input tidak hilang karena popup atau perubahan minor.
@@ -655,7 +657,9 @@ Backend harus:
 - menyimpan metadata;
 - melakukan scanning/inspection bila tersedia;
 - menolak file berbahaya;
-- tidak mengekspos path server.
+- tidak mengekspos path server;
+- menampilkan thumbnail/preview nyata untuk PDF, DOCX, gambar, dan file teks bila ekstraksi preview tersedia;
+- tidak langsung memproses file saat dipilih atau di-drop; pemrosesan dimulai setelah user mengirim chat.
 
 ### 13.5 Attachment Kind
 
@@ -730,9 +734,9 @@ Backend harus menyediakan lapisan routing AI agar masing-masing mode dapat dipet
 
 Credential provider tidak boleh berada di client.
 
-### 14.6 Known Implementation Gap
+### 14.6 Status Implementasi
 
-Jika mode saat ini baru menyimpan metadata dan belum benar-benar merutekan ke model berbeda, deployment production belum dianggap selesai. Routing provider/model wajib diimplementasikan sebelum klaim kualitas mode dipublikasikan.
+Backend saat ini sudah memiliki routing model/mode server-side untuk Basic, Thinking, XtraThink, Document, dan Support. Mode tetap harus diuji ulang setiap kali konfigurasi provider berubah, dan klaim kualitas mode hanya boleh mengikuti konfigurasi server yang benar-benar aktif.
 
 ---
 
@@ -844,14 +848,19 @@ Sharing dapat disiapkan sebagai fitur bertahap. Bila belum tersedia, UI tidak bo
 
 ### 17.3 Struktur Laporan
 
-Default minimal:
+Default laporan praktikum mengikuti template DOCX default yang disimpan di `server/assets/templates/default-laprak.docx`. Cover harus dipertahankan dari template, termasuk posisi logo, alignment, section break, margin, header/footer, dan style Word. Sistem hanya boleh mengganti field dinamis seperti mata kuliah, modul/topik, dosen, NIP, identitas user, kelas, prodi, jurusan, dan tahun akademik.
 
-- implementasi/langkah kerja;
-- output/hasil;
+Bagian isi tidak boleh membuat ulang identitas praktikum. Identitas user hanya tampil di cover. Struktur isi default:
+
+- pendahuluan atau dasar teori singkat bila dibutuhkan oleh instruksi/template;
+- alat dan bahan bila tersedia dari modul;
+- langkah kerja/implementasi;
+- hasil dan pembahasan;
+- analisis output;
 - kesimpulan;
-- lampiran.
+- lampiran bila diperlukan.
 
-Struktur harus dapat dikustomisasi.
+Struktur harus dapat dikustomisasi dari template yang diunggah user. Template custom dianalisis sebagai struktur dan format, bukan diubah destruktif.
 
 ### 17.4 Pembuatan Dokumen
 
@@ -867,6 +876,8 @@ Flow:
 8. sistem membuat versi;
 9. pengguna export.
 
+Jika konteks sudah cukup, AI harus mengeksekusi pekerjaan dan hanya bertanya ketika dokumen benar-benar tidak bisa disusun tanpa jawaban user. Setiap chat yang menghasilkan atau merevisi dokumen wajib memiliki document card. Revisi harus divalidasi agar tetap dalam konteks dokumen sebelum job edit dibuat.
+
 ### 17.5 Evidence Mapping
 
 Setiap file/screenshot dapat dipetakan ke:
@@ -878,12 +889,17 @@ Setiap file/screenshot dapat dipetakan ke:
 - display order;
 - status review.
 
+Untuk laporan praktikum, setiap gambar/screenshot yang masuk ke isi wajib memiliki caption dan penjelasan setelah gambar. Penjelasan harus menyebut apa yang tampak pada gambar, hubungannya dengan langkah praktikum, dan arti hasilnya. Sistem tidak boleh menduplikasi gambar atau membuat deskripsi umum seperti "Gambar X, deskripsi gambar" tanpa konteks.
+
 ### 17.6 Parameter dan Template Inspection
 
 - parameter dokumen dapat dibuat/diubah;
 - template yang diunggah dapat dianalisis;
 - sistem tidak boleh mengubah template secara destruktif tanpa konfirmasi;
-- pengguna dapat melihat hasil inspection.
+- pengguna dapat melihat hasil inspection;
+- cover template harus dipreservasi byte-safe sejauh memungkinkan;
+- merge DOCX harus menjaga media, relationship, style, theme, section properties, header, dan footer dari template;
+- template default wajib melewati quality check agar cover tetap sama dan isi dimulai tanpa halaman kosong tambahan.
 
 ### 17.7 Task dan Note
 
@@ -900,7 +916,8 @@ Setiap file/screenshot dapat dipetakan ke:
 - melihat timestamp dan label;
 - restore versi;
 - restore tidak menghapus histori lama;
-- audit restore.
+- audit restore;
+- preview dokumen menampilkan pilihan versi/revisi melalui dropdown pada sidebar preview.
 
 ### 17.9 Review Checklist
 
@@ -929,6 +946,17 @@ Ketentuan:
 - nama file aman;
 - export tidak mengubah dokumen sumber;
 - status export dan error terlihat jelas.
+
+### 17.11 Quiz Sebelum Unduh
+
+Quiz adalah validasi singkat pemahaman dokumen, bukan ujian sulit.
+
+- Wajib untuk user Free dan user yang memakai credit satuan.
+- User subscription dapat langsung unduh atau menyelesaikan quiz.
+- Pertanyaan hanya berasal dari isi laprak yang sudah dibuat.
+- Jawaban dominan singkat, idealnya 1-5 kata atau pilihan ringkas.
+- UI mengikuti tema aktif, kontras jelas, tidak memakai warna-warni yang keluar dari design system.
+- Ambang lulus dan retry harus configurable server-side.
 
 ---
 
@@ -1329,7 +1357,9 @@ Dashboard minimal:
 - feedback terbuka;
 - risk event;
 - job gagal;
-- storage usage.
+- storage usage;
+- usage AI per model/mode, token, latency, dan error tanpa prompt/output;
+- alert operasional realtime untuk kegagalan generate/export dan kasus credit terpotong tanpa dokumen berhasil dibuat.
 
 ### 24.3 Feedback
 
@@ -1377,6 +1407,7 @@ Mencatat:
 
 - login admin;
 - perubahan CMS;
+- pemberian credit admin;
 - feedback status/reply;
 - risk review;
 - retention run;
@@ -1384,7 +1415,29 @@ Mencatat:
 - support access;
 - perubahan role.
 
-### 24.7 Retention
+### 24.7 Credit Grant
+
+Admin dapat menambah credit melalui console dengan target:
+
+- satu user spesifik;
+- seluruh user;
+- user paid.
+
+Grant harus memakai CSRF, role guard admin, audit log, alasan administratif, idempotency key, dan tidak boleh menerima harga atau entitlement dari browser.
+
+### 24.8 Admin Alerts
+
+Admin menerima alert realtime untuk kejadian yang membutuhkan tindakan:
+
+- job generate/export gagal;
+- refund credit otomatis gagal;
+- credit sudah didebit tetapi dokumen tidak valid atau tidak terbentuk;
+- provider AI timeout/error berulang;
+- error server yang berdampak pada user.
+
+Alert hanya menyimpan metadata operasional dan dapat ditandai resolved/reopened.
+
+### 24.9 Retention
 
 - preview jumlah data yang akan dihapus;
 - run manual dengan konfirmasi;
@@ -1442,6 +1495,9 @@ Mencatat:
 - Feedback Items;
 - Feedback Replies;
 - Risk Events;
+- Admin Credit Grants;
+- Admin Alerts;
+- AI Usage Events;
 - CMS Entries;
 - Audit Logs;
 - Email Outbox.
@@ -1494,6 +1550,10 @@ Mencatat:
 - `/api/wallet/*`;
 - `/api/feedback`;
 - `/api/support/*`;
+- `/api/admin/credits/grant`;
+- `/api/admin/ai/usage`;
+- `/api/admin/alerts`;
+- `/api/admin/events`;
 - `/api/admin/*`.
 
 ### 26.4 Ownership
@@ -1627,6 +1687,8 @@ Tidak boleh ada horizontal scroll tidak disengaja.
 - mode selected/locked clicked;
 - document created;
 - generation started/completed/failed;
+- document version created/restored;
+- quiz started/passed/failed;
 - export completed;
 - checkout created;
 - payment settled/expired/failed;
@@ -1648,7 +1710,11 @@ Tidak boleh ada horizontal scroll tidak disengaja.
 - user ID hashed/pseudonymous bila perlu;
 - order ID;
 - job ID;
+- model/mode;
+- token estimate;
+- latency;
 - error code;
+- alert ID bila dibuat;
 - tidak mencatat secret.
 
 ---
@@ -1711,18 +1777,30 @@ Tidak boleh ada horizontal scroll tidak disengaja.
 ### 31.3 Chat
 
 - User dapat mengirim teks dan file.
+- File yang dipilih/di-drop tidak diproses sebelum user menekan Enter/kirim.
+- Lampiran user tampil di sisi user dengan thumbnail/preview nyata bila tersedia.
 - Mode dikunci server-side.
 - Chat menu rename/move/pin/archive/delete berfungsi.
 - Search Recents berfungsi.
 - Tidak ada label “Belum dikelompokkan”.
+- Chat yang menghasilkan dokumen selalu menampilkan alur berpikir ringkas, jawaban AI, lalu document card.
+- AI hanya bertanya ketika konteks wajib tidak tersedia; jika konteks cukup, AI menjalankan penyusunan/revisi.
 
-### 31.4 Projects
+### 31.4 Dokumen
+
+- DOCX export memakai template default dan tidak membuat bagian Identitas Praktikum di body.
+- Cover default tetap sama dari template kecuali field dinamis.
+- Setiap gambar di body memiliki caption dan penjelasan kontekstual setelah gambar.
+- Preview dokumen dapat memilih versi/revisi dari dropdown.
+- User Free/credit wajib melewati quiz singkat sebelum unduh; user subscription dapat langsung unduh.
+
+### 31.5 Projects
 
 - User dapat membuat project dengan custom dialog.
 - Chat dapat dipindahkan ke project.
 - Project detail menampilkan chat dan sumber.
 
-### 31.5 Pricing
+### 31.6 Pricing
 
 - Hanya satu halaman `/pricing`.
 - Plan dan satuan terlihat tanpa login.
@@ -1730,7 +1808,7 @@ Tidak boleh ada horizontal scroll tidak disengaja.
 - Quote berasal dari backend.
 - Riwayat transaksi hanya di Settings → Billing.
 
-### 31.6 Payment
+### 31.7 Payment
 
 - QRIS satu-satunya metode.
 - Nominal tidak dapat dimanipulasi.
@@ -1738,12 +1816,15 @@ Tidak boleh ada horizontal scroll tidak disengaja.
 - Duplicate webhook tidak menambah credit dua kali.
 - Status pending/success/fail/expired/cancel jelas.
 
-### 31.7 Admin
+### 31.8 Admin
 
 - CMS dapat mengganti media tanpa edit source.
 - Testimonial hanya dari feedback berizin.
 - Audit log mencatat tindakan admin.
 - Admin tidak dapat membuka isi privat dari monitoring biasa.
+- Admin dapat memberi credit ke satu user, semua user, atau user paid dengan idempotency dan audit.
+- Admin dapat melihat usage AI metadata-only per user/model/mode tanpa prompt/output.
+- Admin menerima alert realtime untuk kegagalan generate/export dan credit recovery.
 
 ---
 
@@ -1758,6 +1839,8 @@ Tidak boleh ada horizontal scroll tidak disengaja.
 - fulfilment idempotency;
 - validation schema;
 - permission checks.
+- template DOCX merge contract;
+- quiz access policy.
 
 ### 32.2 Integration Test
 
@@ -1770,12 +1853,17 @@ Tidak boleh ada horizontal scroll tidak disengaja.
 - duplicate webhook;
 - refund/expire;
 - CMS upload;
-- admin role.
+- admin role;
+- admin credit grant;
+- admin alert resolve/reopen;
+- AI usage metadata-only.
 
 ### 32.3 E2E
 
 - landing → pricing → login → checkout;
 - register → chat → upload → document → export;
+- upload evidence → generate DOCX → quiz/download gate;
+- email-verified password change;
 - pin/rename/move/archive/delete chat;
 - create project;
 - language/theme switch;
@@ -1797,6 +1885,8 @@ Tidak boleh ada horizontal scroll tidak disengaja.
 - webhook spoofing;
 - amount manipulation;
 - duplicate fulfilment;
+- dependency audit;
+- leaked secret scan;
 - brute force;
 - XSS in chat/feedback/CMS;
 - path traversal.
@@ -1824,7 +1914,20 @@ Tidak boleh ada horizontal scroll tidak disengaja.
 - monitoring/log aggregation;
 - migration strategy dari SQLite ketika concurrency meningkat.
 
-### 33.3 No-NPM Package
+### 33.3 Current Production Deployment
+
+Status implementasi saat ini:
+
+- production berjalan di `https://laprakin.app`;
+- origin production memakai Docker Compose single-instance pada VPS;
+- revision production terakhir yang terdokumentasi: `a9a2c92`;
+- `/api/health/ready` harus mengembalikan database `ready`, worker `idle`, AI `configured`, dan Google OAuth `configured`;
+- static tutorial media harus tersaji sebagai file media asli, bukan fallback HTML SPA;
+- source rollback production disimpan di server deploy agar rollback cepat dapat dilakukan bila health check gagal.
+
+Deployment production saat ini tetap kategori single-instance. Untuk skala publik besar, database, queue, dan object storage harus dipisahkan.
+
+### 33.4 No-NPM Package
 
 Paket lokal Windows dapat menyertakan:
 
@@ -1836,7 +1939,7 @@ Paket lokal Windows dapat menyertakan:
 
 Tetap membutuhkan Node.js 22+. Paket no-NPM bukan pengganti deployment production yang benar.
 
-### 33.4 Required Secrets
+### 33.5 Required Secrets
 
 - JWT secret;
 - device/token HMAC secret;
@@ -1849,34 +1952,44 @@ Tetap membutuhkan Node.js 22+. Paket no-NPM bukan pengganti deployment productio
 
 ## 34. Rollout Plan
 
-### Phase 1 — Internal Readiness
+Status saat ini: fitur inti sudah dipush ke `main` dan dideploy ke production `laprakin.app` sebagai private beta single-instance.
 
-- validasi workflow chat/document;
-- test payment sandbox;
-- visual regression landing;
-- security review;
-- admin CMS;
-- test backup/restore.
+### Phase 1 - Internal Readiness
 
-### Phase 2 — Closed Beta
+Status: selesai untuk baseline saat ini.
+
+- workflow chat/document sudah divalidasi melalui E2E lokal;
+- template DOCX default dan quality gate sudah memiliki test kontrak;
+- admin CMS, admin credit grant, AI usage, dan admin alert sudah tersedia;
+- dependency audit production menunjukkan 0 vulnerability saat verifikasi terakhir;
+- backup/rollback production tersedia pada deployment VPS.
+
+### Phase 2 - Closed Beta
+
+Status: aktif/berjalan.
 
 - user terbatas;
 - monitor generation quality;
 - collect feedback;
 - tune pricing/credit;
 - monitor QRIS fulfilment;
-- perbaiki onboarding.
+- perbaiki onboarding;
+- pantau admin alert untuk kegagalan generate/export dan credit recovery.
 
-### Phase 3 — Public Beta
+### Phase 3 - Public Beta
+
+Status: sebagian aktif. AI dan Google OAuth production sudah terkonfigurasi; pembukaan publik tetap menunggu kesiapan operasional, payment production, policy final, dan monitoring eksternal yang konsisten.
 
 - production Midtrans;
-- production SMTP;
-- AI provider routing aktif;
-- published privacy/terms;
+- production SMTP dengan deliverability monitoring;
+- published privacy/terms/academic policy;
 - support process;
-- uptime monitoring.
+- uptime monitoring eksternal;
+- incident response sederhana.
 
-### Phase 4 — Scale
+### Phase 4 - Scale
+
+Status: belum menjadi prioritas sebelum traffic stabil.
 
 - database migration bila perlu;
 - object storage;
@@ -1888,34 +2001,35 @@ Tetap membutuhkan Node.js 22+. Paket no-NPM bukan pengganti deployment productio
 
 ## 35. Risks dan Mitigasi
 
-| Risiko                       | Dampak            | Mitigasi                                                         |
-| ---------------------------- | ----------------- | ---------------------------------------------------------------- |
-| Hasil AI tidak sesuai modul  | Trust turun       | Prioritaskan bahan user, review checklist, mode/provider routing |
-| Pengguna membuat bukti palsu | Risiko akademik   | Guardrail, larangan eksplisit, minta bahan nyata                 |
-| Harga dimanipulasi frontend  | Kerugian          | Server-side catalog dan quote                                    |
-| Webhook duplicate            | Credit ganda      | Fulfilment idempoten dan unique constraint                       |
-| File berbahaya               | Security incident | MIME validation, scan, isolated storage                          |
-| Landing berat                | Conversion turun  | Optimasi image/video, lazy load                                  |
-| Admin membuka data privat    | Privacy breach    | Metadata-only admin, support access audited                      |
-| AI mode hanya kosmetik       | Misleading        | Provider abstraction dan test output wajib                       |
-| SQLite lock saat skala naik  | Downtime          | Migration plan ke DB production                                  |
-| Nama merchant terlihat       | Komplain branding | Jelaskan aturan QRIS/PJP secara jujur                            |
+| Risiko                              | Dampak            | Mitigasi                                                         |
+| ----------------------------------- | ----------------- | ---------------------------------------------------------------- |
+| Hasil AI tidak sesuai modul         | Trust turun       | Prioritaskan bahan user, review checklist, mode/provider routing |
+| Pengguna membuat bukti palsu        | Risiko akademik   | Guardrail, larangan eksplisit, minta bahan nyata                 |
+| Harga dimanipulasi frontend         | Kerugian          | Server-side catalog dan quote                                    |
+| Webhook duplicate                   | Credit ganda      | Fulfilment idempoten dan unique constraint                       |
+| File berbahaya                      | Security incident | MIME validation, scan, isolated storage                          |
+| Landing berat                       | Conversion turun  | Optimasi image/video, lazy load                                  |
+| Admin membuka data privat           | Privacy breach    | Metadata-only admin, support access audited                      |
+| AI mode hanya kosmetik              | Misleading        | Provider abstraction dan test output wajib                       |
+| SQLite lock saat skala naik         | Downtime          | Migration plan ke DB production                                  |
+| Nama merchant terlihat              | Komplain branding | Jelaskan aturan QRIS/PJP secara jujur                            |
+| Credit terdebit tapi dokumen gagal  | Trust turun       | Refund otomatis, admin alert realtime, dan audit job             |
+| Template cover bergeser             | Trust turun       | Contract test DOCX, preservasi media/section/style, preview      |
 
 ---
 
-## 36. Known Gaps yang Harus Diselesaikan Sebelum Production
+## 36. Known Gaps Menuju Public Beta Lebih Luas
 
-- Hubungkan Basic/Thinking/XtraThink ke model atau konfigurasi inferensi yang benar-benar berbeda.
-- Pastikan seluruh token oranye lama telah dihapus dari source, bukan hanya dioverride.
-- Ganti semua media placeholder dengan asset nyata melalui CMS tanpa mockup palsu.
-- Uji visual landing dengan overlay terhadap Figma pada viewport 1440 px.
-- Lengkapi media responsive untuk mobile.
-- Konfigurasi Midtrans dan test webhook dari internet publik.
-- Konfigurasi SMTP production.
-- Audit seluruh route admin dan ownership.
-- Tentukan kebijakan refund dan pencabutan entitlement.
-- Pastikan i18n memakai key-based translation pada seluruh UI.
-- Finalisasi Terms, Privacy Policy, dan Academic Integrity Policy.
+- Finalisasi Midtrans production dan uji webhook dari internet publik.
+- Pastikan SMTP production dipantau dengan deliverability dan bounce handling.
+- Tambahkan monitoring eksternal/uptime alert di luar health endpoint internal.
+- Uji visual landing dan workspace pada perangkat nyata yang lebih luas.
+- Lengkapi policy final: Terms, Privacy Policy, dan Academic Integrity Policy.
+- Tentukan kebijakan refund dan pencabutan entitlement secara legal/operasional.
+- Siapkan migrasi dari SQLite/job in-process ke database dan queue terpisah saat traffic naik.
+- Evaluasi kebutuhan object storage privat untuk upload dan export.
+- Lanjutkan audit route admin/ownership setiap kali endpoint baru ditambahkan.
+- Pastikan i18n memakai key-based translation pada seluruh UI sebelum lokalisasi diperluas.
 
 ---
 

@@ -403,7 +403,7 @@ function activatePaidOrder(order) {
     throw error;
   }
 
-  if (subscriptionItem) processReferralSubscriptionReward(order.user_id);
+  if (subscriptionItem || Number(order.amount_idr || 0) >= 29900) processReferralSubscriptionReward(order.user_id);
   audit(order.user_id, 'payment.fulfilled', 'payment_order', order.id, {
     plan: order.plan_key,
     amountIdr: order.amount_idr,

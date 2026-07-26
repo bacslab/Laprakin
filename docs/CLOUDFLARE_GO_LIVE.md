@@ -4,7 +4,8 @@ Status saat runbook ini dibuat:
 
 - Gemini Basic, Thinking, XtraThink, Support, dan Document structured output sudah lolos request live.
 - Google OAuth localhost sudah menukar authorization code, memverifikasi ID token, membuat akun Google terverifikasi, dan membuka workspace.
-- Production publik belum dinyatakan siap selama domain HTTPS, SMTP, Midtrans, dan secret production belum terpasang.
+- Production private beta saat ini aktif di `https://laprakin.app` melalui VPS Docker Compose.
+- Public beta luas tetap menunggu kesiapan SMTP, Midtrans production, policy final, monitoring eksternal, dan proses support.
 
 ## 1. Cutover DNS
 
@@ -29,6 +30,7 @@ Referensi: [Cloudflare Full (strict)](https://developers.cloudflare.com/ssl/orig
 1. Jalankan `npm run prepare:production-env` untuk membuat `server/.env.production.local` yang diabaikan Git dan berisi tiga secret aplikasi acak. Script tidak mencetak secret dan menolak menimpa file yang sudah ada.
 2. Salin nilainya ke secret store platform, lalu hapus file lokal bila sudah tidak dibutuhkan.
 3. Ganti `example.test` dengan hostname final yang sama pada `APP_URL`, `API_URL`, `ALLOWED_ORIGINS`, dan callback Google.
+   Untuk deployment aktif saat ini gunakan `https://laprakin.app`.
 4. Set `AI_REQUIRED=true` dan `GOOGLE_OAUTH_REQUIRED=true` agar server gagal start bila integrasi wajib hilang.
 5. Aktifkan SMTP production serta Midtrans production sebelum membuka registrasi dan checkout publik.
 

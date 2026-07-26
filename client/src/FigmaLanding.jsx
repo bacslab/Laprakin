@@ -502,7 +502,6 @@ export default function FigmaLanding({ navigate }) {
       <nav aria-label="Navigasi landing page">
         <button type="button" data-cursor="GO" onClick={() => goTo('cara-pakai')}>Cara pakai</button>
         <button type="button" data-cursor="GO" onClick={() => goTo('fitur')}>Fitur</button>
-        <button type="button" data-cursor="OPEN" onClick={() => navigate('/pricing')}>Harga</button>
         <button type="button" data-cursor="GO" onClick={() => goTo('faq')}>FAQ</button>
       </nav>
       <div className="fg-navbar-actions">

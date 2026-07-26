@@ -1,4 +1,4 @@
-# Security & Academic Guardrails — Laprakin V3
+# Security & Academic Guardrails - Laprakin V4
 
 ## Implemented baseline
 
@@ -16,6 +16,13 @@
 - CMS feature update menggunakan draft/publish, CSRF, audit log, dan receipt per user.
 - Upload gambar CMS diverifikasi dari signature file, bukan hanya ekstensi/MIME browser.
 - CSP, clickjacking protection, origin allowlist, dan pesan error production yang generik.
+- Email verification wajib sebelum user memakai workspace/generate.
+- Ganti password berjalan melalui verifikasi email, bukan perubahan langsung dari settings.
+- Admin credit grant memakai role guard, CSRF, idempotency, alasan administratif, dan audit log.
+- AI usage log hanya menyimpan metadata operasional, bukan prompt, output, atau isi file.
+- Admin alert realtime dibuat untuk kegagalan generate/export dan kasus credit recovery.
+- Dependency production diaudit dengan `npm audit --omit=dev`; hasil verifikasi terakhir 0 vulnerability.
+- Routing frontend memakai router internal yang hanya menerima path lokal.
 
 ## Batas yang perlu dipahami
 
@@ -33,3 +40,10 @@ Laprakin tidak boleh:
 - menjanjikan nilai atau persetujuan dosen.
 
 Jika bahan kurang, generator fallback harus menggunakan marker `[PERLU DIISI USER]` alih-alih mengarang fakta.
+
+## Guardrail dokumen
+
+- Template cover default dipreservasi; sistem hanya mengganti field dinamis yang memang disediakan.
+- Body dokumen tidak boleh membuat section identitas praktikum atau biodata user.
+- Setiap gambar/screenshot yang masuk ke body wajib memiliki caption dan penjelasan kontekstual.
+- Export ditolak jika marker data, bukti palsu, gambar tanpa penjelasan, atau section identitas body masih ditemukan.

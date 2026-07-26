@@ -528,7 +528,7 @@ const workspaceAccents = [
 const defaultChatConfig = {
   title: 'Laprak baru',
   structureMode: 'guided',
-  configuration: { courseName: '', moduleTitle: '', documentProfile: 'langkah', customStructure: '', instructions: '', tone: 'semi-formal', perspective: 'saya', allowExternalAi: true },
+  configuration: { courseName: '', moduleTitle: '', lecturerName: '', lecturerNip: '', documentProfile: 'langkah', customStructure: '', instructions: '', tone: 'semi-formal', perspective: 'saya', allowExternalAi: true },
 };
 const previewTestimonials = [
   { quote: '“Saya baru ingin lihat bentuk ulasannya dulu. Nantinya kutipan asli hanya tampil setelah pengguna menyetujui publikasi.”', name: 'Preview ulasan beta', label: 'Bukan testimoni pengguna' },
@@ -614,6 +614,15 @@ function Button({ children, to, variant = 'primary', className = '', type = 'but
   return <button className={classes} type={type} onClick={onClick} disabled={disabled} title={title}>{children}</button>;
 }
 
+function GoogleLogo() {
+  return <svg className="google-logo" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
+    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+  </svg>;
+}
+
 function IconButton({ label, children, className = '', onClick, disabled = false, type = 'button' }) {
   return <button type={type} className={`icon-button ${className}`} title={label} aria-label={label} onClick={onClick} disabled={disabled}>{children}</button>;
 }
@@ -691,7 +700,7 @@ function AppProvider({ children }) {
 
 function App() {
   const location = useLocation();
-  return <AppErrorBoundary resetKey={location.pathname}><AppProvider><I18nRuntime><div className="route-transition"><Routes><Route path="/" element={<Landing />} /><Route path="/auth" element={<AuthPage />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/pricing" element={<PublicPricingPage />} /><Route path="/billing" element={<PricingRedirect />} /><Route path="/app/billing" element={<PricingRedirect />} /><Route path="/admin/*" element={<ProtectedAdmin />} /><Route path="/app/*" element={<ProtectedApp />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></div></I18nRuntime></AppProvider></AppErrorBoundary>;
+  return <AppErrorBoundary resetKey={location.pathname}><AppProvider><I18nRuntime><div className="route-transition"><Routes><Route path="/" element={<Landing />} /><Route path="/auth" element={<AuthPage />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/pricing" element={<PublicPricingPage />} /><Route path="/checkout" element={<PublicPricingPage />} /><Route path="/billing" element={<PricingRedirect />} /><Route path="/app/billing" element={<PricingRedirect />} /><Route path="/admin/*" element={<ProtectedAdmin />} /><Route path="/app/*" element={<ProtectedApp />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></div></I18nRuntime></AppProvider></AppErrorBoundary>;
 }
 
 function Landing() {
@@ -856,7 +865,7 @@ function AuthPage() {
           <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => changeMode('register')}>Daftar</button>
         </div>}
         {googleEnabled && formModes && <>
-          <button type="button" className="google-button" onClick={() => { window.location.href = `${import.meta.env.VITE_API_URL || '/api'}/auth/google/start?next=${encodeURIComponent(safeNext || '/app')}`; }}><b>G</b> Lanjutkan dengan Google</button>
+          <button type="button" className="google-button" onClick={() => { window.location.href = `${import.meta.env.VITE_API_URL || '/api'}/auth/google/start?next=${encodeURIComponent(safeNext || '/app')}`; }}><GoogleLogo /> Lanjutkan dengan Google</button>
           <div className="auth-divider"><span>atau gunakan email</span></div>
         </>}
         {success && <div className="auth-notice success"><CheckCircle2 size={15} />{success}</div>}
@@ -885,6 +894,7 @@ function PublicPricingPage() {
   const { user, prefs, setNotice, refreshSession } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
+  const isCheckoutPage = location.pathname === '/checkout';
   const resolvedTheme = useResolvedTheme(prefs.theme || 'system');
   const params = new URLSearchParams(location.search);
   const normalizePlan = (value) => value === 'single' ? 'credit' : ['credit', 'monthly', 'pro'].includes(value) ? value : '';
@@ -960,7 +970,7 @@ function PublicPricingPage() {
       features: ['Tanpa subscription', `${pricing.single?.revisionsPerReport || 5} revisi per laprak`, 'Aktif hingga 180 hari'],
     },
     {
-      key: 'monthly', label: 'Pro', note: 'Untuk laprak harian', price: formatCurrency(pricing.monthly?.price || 29900), suffix: '/ 30 hari',
+      key: 'monthly', label: 'Pro', note: 'Untuk laprak harian', recommended: true, price: formatCurrency(pricing.monthly?.price || 29900), suffix: '/ 30 hari',
       features: [`${pricing.monthly?.credits || 12} credit / 30 hari`, 'Mode Thinking terbuka', `${pricing.monthly?.storageGb || 1} GB penyimpanan`],
     },
     {
@@ -973,7 +983,7 @@ function PublicPricingPage() {
     const query = new URLSearchParams();
     query.set('plan', key);
     if (key === 'credit') query.set('quantity', String(quantity));
-    navigate(`/pricing?${query.toString()}`, { replace: true });
+    navigate(`${isCheckoutPage ? '/checkout' : '/pricing'}?${query.toString()}`, { replace: true });
   };
 
   const selectProduct = (key) => {
@@ -985,13 +995,16 @@ function PublicPricingPage() {
       const query = new URLSearchParams();
       query.set('plan', key);
       if (key === 'credit') query.set('quantity', String(creditQuantity));
-      const next = `/pricing?${query.toString()}`;
+      const next = `/checkout?${query.toString()}`;
       navigate(`/auth?next=${encodeURIComponent(next)}`);
       return;
     }
     setError('');
     setSelected(key);
-    updateSelectedUrl(key);
+    const query = new URLSearchParams();
+    query.set('plan', key);
+    if (key === 'credit') query.set('quantity', String(creditQuantity));
+    navigate(`/checkout?${query.toString()}`);
   };
 
   const updateCreditQuantity = (nextQuantity) => {
@@ -1077,33 +1090,34 @@ function PublicPricingPage() {
     canceled: 'Checkout dibatalkan. Belum ada produk yang ditambahkan.',
   };
 
-  return <div className={`pricing-compact-page ${resolvedTheme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
+  return <div className={`pricing-compact-page ${isCheckoutPage ? 'pricing-checkout-page' : ''} ${resolvedTheme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
     <header className="pricing-compact-nav"><button type="button" onClick={() => navigate(user ? '/app' : '/')} aria-label="Kembali"><ArrowLeft size={18}/></button></header>
     <main className="pricing-compact-main">
       <section className="pricing-compact-intro" aria-labelledby="pricing-compact-title">
         <span>Pilihan Laprakin</span>
-        <h1 id="pricing-compact-title">Pilih plan yang pas buat kamu.</h1>
-        <p>Mulai gratis, beli credit satuan, atau pilih akses bulanan sesuai ritme praktikum.</p>
+        <h1 id="pricing-compact-title">{isCheckoutPage ? 'Selesaikan pembayaran.' : 'Pilih plan yang pas buat kamu.'}</h1>
+        <p>{isCheckoutPage ? 'Cek ringkasan pembelian, lalu lanjutkan ke QRIS Midtrans.' : 'Mulai gratis, beli credit satuan, atau pilih akses bulanan sesuai ritme praktikum.'}</p>
       </section>
-      <section className="pricing-compact-grid" aria-label="Pilihan plan Laprakin">
+      {!isCheckoutPage && <section className="pricing-compact-grid" aria-label="Pilihan plan Laprakin">
         {cards.map((card) => {
           const isFree = card.key === 'free';
           const isCurrent = card.key === currentPlanKey;
           const isSelected = card.key === selected;
           const actionLabel = isFree ? (user ? 'Masuk workspace' : 'Mulai gratis') : isSelected && user ? 'Dipilih' : `Pilih ${card.label}`;
-          return <article key={card.key} className={`pricing-compact-card ${isSelected ? 'is-selected' : ''} ${isCurrent ? 'is-current' : ''}`} onClick={() => !isFree && selectProduct(card.key)}>
-            <div className="pricing-compact-card-head"><span className="pricing-compact-symbol" aria-hidden="true"><Sparkles size={14}/></span><div><b>{card.label}</b><small>{isCurrent ? 'Plan aktif' : card.note}</small></div></div>
+          return <article key={card.key} className={`pricing-compact-card ${card.recommended ? 'is-recommended' : ''} ${isSelected ? 'is-selected' : ''} ${isCurrent ? 'is-current' : ''}`}>
+            {card.recommended && <span className="pricing-recommended-badge">Rekomendasi</span>}
+            <div className="pricing-compact-card-head"><div><b>{card.label}</b><small>{isCurrent ? 'Plan aktif' : card.note}</small></div></div>
             <div className="pricing-compact-price"><strong>{card.price}</strong>{card.suffix && <span>{card.suffix}</span>}</div>
             <div className="pricing-compact-action-slot">
-              {card.key === 'credit' ? <div className="pricing-compact-quantity" onClick={(event) => event.stopPropagation()}><span>Jumlah</span><div><button type="button" aria-label="Kurangi credit" onClick={() => updateCreditQuantity(creditQuantity - 1)}>−</button><b>{creditQuantity}</b><button type="button" aria-label="Tambah credit" onClick={() => updateCreditQuantity(creditQuantity + 1)}>+</button></div></div> : <span className="pricing-compact-quantity-placeholder" aria-hidden="true" />}
+              {card.key === 'credit' ? <div className="pricing-compact-quantity" onClick={(event) => event.stopPropagation()}><span>Jumlah</span><div><button type="button" aria-label="Kurangi credit" onClick={() => updateCreditQuantity(creditQuantity - 1)}>-</button><b>{creditQuantity}</b><button type="button" aria-label="Tambah credit" onClick={() => updateCreditQuantity(creditQuantity + 1)}>+</button></div></div> : <span className="pricing-compact-quantity-placeholder" aria-hidden="true" />}
             </div>
-            <button type="button" className={isCurrent || isFree ? 'is-quiet' : ''} onClick={(event) => { event.stopPropagation(); selectProduct(card.key); }}>{actionLabel}{!isFree && <ArrowRight size={15}/>}</button>
+            <button type="button" className={isCurrent || isFree ? 'is-quiet' : ''} onClick={() => selectProduct(card.key)}>{actionLabel}{!isFree && <ArrowRight size={15}/>}</button>
             <div className="pricing-compact-divider" />
             <ul>{card.features.map((feature) => <li key={feature}><Check size={13}/><span>{feature}</span></li>)}</ul>
           </article>;
         })}
-      </section>
-      {user && selected && <section className="pricing-compact-checkout" aria-live="polite"><div><small>Checkout QRIS</small><b>{quoteBusy ? 'Menghitung…' : quote?.displayTotal || 'Rp0'}</b><span>{quote?.items?.map((item) => `${item.label}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`).join(' + ') || 'Produk pilihan'}</span></div><Button onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>{busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? 'Bayar dengan QRIS' : 'Gateway belum aktif'}</Button></section>}
+      </section>}
+      {user && selected && isCheckoutPage && <section className="pricing-compact-checkout" aria-live="polite"><div><small>Checkout QRIS</small><b>{quoteBusy ? 'Menghitung...' : quote?.displayTotal || 'Rp0'}</b><span>{quote?.items?.map((item) => `${item.label}${item.quantity > 1 ? ` x${item.quantity}` : ""}`).join(' + ') || 'Produk pilihan'}</span></div><Button onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>{busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? 'Bayar dengan QRIS' : 'Gateway belum aktif'}</Button></section>}
       {activeOrder && <section className={`pricing-compact-status ${activeOrder.status || 'pending'}`}><div><b>{activeOrder.statusLabel || 'Status pembayaran'}</b><p>{statusCopy[activeOrder.status] || 'Status pembayaran sedang diproses.'}</p></div>{['created', 'pending'].includes(activeOrder.status) ? <button type="button" onClick={() => refreshOrder(activeOrder.id, true)} disabled={busy}><RefreshCw size={14}/>Refresh</button> : <CheckCircle2 size={20}/>}</section>}
       {error && <div className="pricing-compact-error"><CircleAlert size={16}/><span>{error}</span>{checkoutRecoveryUrl && <a href={checkoutRecoveryUrl}>Buka checkout QRIS</a>}</div>}
     </main>
@@ -1216,7 +1230,7 @@ function Workspace() {
   const resolvedTheme = useResolvedTheme(prefs.theme || 'system');
   const location = useLocation(); const navigate = useNavigate(); const uploadRef = useRef(null);
   const [sessions, setSessions] = useState([]); const [active, setActive] = useState(null); const [messages, setMessages] = useState([]); const [attachments, setAttachments] = useState([]); const [documentState, setDocumentState] = useState(null); const [workflow, setWorkflow] = useState(null); const [activeJob, setActiveJob] = useState(null);
-  const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
+  const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
   const actionInFlightRef = useRef(false);
   const tutorialAutoOpenedRef = useRef(false);
   const [productUpdate, setProductUpdate] = useState(null);
@@ -1256,7 +1270,7 @@ function Workspace() {
   const projectParam = new URLSearchParams(location.search).get('project') || '';
   useEffect(() => { if (location.pathname === '/app/billing') navigate('/pricing', { replace: true }); }, [location.pathname, navigate]);
   const activeProgram = programs.find((item) => item.key === user.studyProgramKey);
-  const identityComplete = Boolean(user.fullName && user.nim && user.className && user.departmentKey && user.studyProgramKey);
+  const identityComplete = Boolean(user.fullName && user.nim && user.className && user.institutionName && (user.facultyName || user.departmentKey) && (user.studyProgramName || user.studyProgramKey));
   useEffect(() => {
     if (!identityComplete || user.onboardingDismissed || tutorialAutoOpenedRef.current) return;
     tutorialAutoOpenedRef.current = true;
@@ -1460,6 +1474,12 @@ function Workspace() {
           fullName: identity.fullName.trim(),
           nim: identity.nim.trim(),
           className: identity.className.trim(),
+          institutionName: identity.institutionName.trim(),
+          institutionLogoUrl: identity.institutionLogoUrl.trim(),
+          facultyName: identity.facultyName.trim(),
+          studyProgramName: identity.studyProgramName.trim(),
+          lecturerName: identity.lecturerName.trim(),
+          lecturerNip: identity.lecturerNip.trim(),
           departmentKey: identity.departmentKey,
           studyProgramKey: identity.studyProgramKey,
         },
@@ -1542,6 +1562,8 @@ function Workspace() {
     const content = input.trim() || 'Saya sudah menambahkan bahan untuk laprak ini.';
     const files = [...pendingLandingFiles];
     if (!identityComplete) {
+      setInput('');
+      setPendingLandingFiles([]);
       setIdentityIntake({ session: current, content, files, kind: attachmentKind });
       return;
     }
@@ -1730,6 +1752,9 @@ function Workspace() {
   };
   const startDocumentQuiz = async () => {
     if (!active?.document_id) return null;
+    setRightOpen(false);
+    setDocumentOpen(true);
+    setQuizMode(true);
     setBusy(true);
     try {
       return await api(`/documents/${active.document_id}/quiz`, { method: 'POST' });
@@ -1748,6 +1773,7 @@ function Workspace() {
       const nextDocument = await api(`/documents/${active.document_id}`);
       setDocumentState(nextDocument);
       setNotice(result.passed ? `Nilai ${result.score}%. Download sudah terbuka.` : `Nilai ${result.score}%. Minimal ${result.passScore}%; kamu bisa coba lagi dengan soal baru.`);
+      if (result.passed) setQuizMode(false);
       return result;
     } catch (err) {
       setNotice(err.message);
@@ -1817,7 +1843,7 @@ function Workspace() {
     FINAL: 'Selesai',
   }[workflow?.state] || 'Workspace laprak';
   const headerSubtitle = active
-    ? [workflow?.courseName || active.configuration?.courseName, workflow?.practiceTopic || active.configuration?.moduleTitle, workflowStatusLabel].filter(Boolean).join(' · ')
+    ? [workflow?.courseName || active.configuration?.courseName, workflow?.practiceTopic || active.configuration?.moduleTitle, user.studyProgramName || activeProgram?.label, workflowStatusLabel].filter(Boolean).join(' ? ')
     : 'Mulai dengan teks, bahan, atau link yang kamu punya.';
   const workspaceAccent = workspaceAccents.find((item) => item.key === prefs.accent) || workspaceAccents[0];
   const recordProductUpdate = async (action) => {
@@ -1891,8 +1917,8 @@ function Workspace() {
     <IconButton className="mobile-nav-toggle" label="Buka navigasi" onClick={() => setLeftCollapsed(false)}><Menu size={17} /></IconButton>
     <main className="workspace-main">
       {page === 'chat' && <>
-        <header className="workspace-header"><div className={`header-title ${active ? '' : 'is-empty'}`}><b>{active?.title || 'Chat Laprakin'}</b><small>{headerSubtitle}</small></div>{!hasSubscriptionPlan && <button className="workspace-plan" onClick={() => navigate('/pricing')} title="Buka billing"><span>{workspacePlanLabel}</span><i>·</i><b>Upgrade</b></button>}<div className="header-actions"><button className={`header-config-button ${rightOpen ? 'active' : ''}`} onClick={() => { setDocumentOpen(false); setRightOpen((value) => !value); }}><SlidersHorizontal size={15} /><span>Konfigurasi</span></button><IconButton label="Buka tutorial" className="tutorial-button" onClick={() => { setTutorialFirstUse(false); setTutorialOpen(true); }}><HelpCircle size={16} /></IconButton><IconButton label={prefs.theme === 'system' ? 'Tema mengikuti sistem' : resolvedTheme === 'dark' ? 'Gunakan mode terang' : 'Gunakan dark mode'} className="theme-button" onClick={() => setPrefs((value) => ({ ...value, theme: value.theme === 'system' ? (resolvedTheme === 'dark' ? 'light' : 'dark') : value.theme === 'dark' ? 'light' : 'system' }))}>{prefs.theme === 'system' ? <Monitor size={16} /> : resolvedTheme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</IconButton><IconButton label="Notifikasi" onClick={() => setModal('notifications')}><Bell size={16} /></IconButton></div></header>
-        <ChatSurface active={active} messages={messages} attachments={attachments} documentState={documentState} workflow={workflow} activeJob={activeJob} user={user} input={input} setInput={setInput} busy={busy || actionBusy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} removeAttachment={removeAttachment} updateAttachmentCategory={updateAttachmentCategory} createDocument={createDocument} onWorkflowAction={performChatAction} contextOpen={contextOpen} setContextOpen={setContextOpen} config={config} updateConfig={updateConfig} pendingFiles={pendingLandingFiles} onPasteImages={pasteImagesIntoChat} onAddPendingFiles={addPendingFiles} onRemovePending={(index) => setPendingLandingFiles((items) => items.filter((_, itemIndex) => itemIndex !== index))} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={() => navigate('/pricing')} onOpenDocument={() => { setRightOpen(false); setDocumentOpen(true); }} />
+        <header className="workspace-header"><div className={`header-title ${active ? '' : 'is-empty'}`}><b>{active?.title || 'Chat Laprakin'}</b><small>{headerSubtitle}</small></div>{!hasSubscriptionPlan && <button className="workspace-plan" onClick={() => navigate('/pricing')} title="Buka billing"><span>{workspacePlanLabel}</span><i>?</i><b>Upgrade</b></button>}<div className="header-actions"><button className={`header-config-button ${rightOpen ? 'active' : ''}`} onClick={() => { setDocumentOpen(false); setRightOpen((value) => !value); }}><SlidersHorizontal size={15} /><span>Konfigurasi</span></button><IconButton label="Buka tutorial" className="tutorial-button" onClick={() => { setTutorialFirstUse(false); setTutorialOpen(true); }}><HelpCircle size={16} /></IconButton><IconButton label={prefs.theme === 'system' ? 'Tema mengikuti sistem' : resolvedTheme === 'dark' ? 'Gunakan mode terang' : 'Gunakan dark mode'} className="theme-button" onClick={() => setPrefs((value) => ({ ...value, theme: value.theme === 'system' ? (resolvedTheme === 'dark' ? 'light' : 'dark') : value.theme === 'dark' ? 'light' : 'system' }))}>{prefs.theme === 'system' ? <Monitor size={16} /> : resolvedTheme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</IconButton><IconButton label="Notifikasi" onClick={() => setModal('notifications')}><Bell size={16} /></IconButton></div></header>
+        <ChatSurface active={active} messages={messages} attachments={attachments} documentState={documentState} workflow={workflow} activeJob={activeJob} user={user} input={input} setInput={setInput} busy={busy || actionBusy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} removeAttachment={removeAttachment} updateAttachmentCategory={updateAttachmentCategory} createDocument={createDocument} onWorkflowAction={performChatAction} contextOpen={contextOpen} setContextOpen={setContextOpen} config={config} updateConfig={updateConfig} pendingFiles={pendingLandingFiles} onPasteImages={pasteImagesIntoChat} onAddPendingFiles={addPendingFiles} onRemovePending={(index) => setPendingLandingFiles((items) => items.filter((_, itemIndex) => itemIndex !== index))} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={() => navigate('/pricing')} onOpenDocument={() => { setRightOpen(false); setDocumentOpen(true); }} quizMode={quizMode} onCloseQuiz={() => setQuizMode(false)} onStartQuiz={startDocumentQuiz} onSubmitQuiz={submitDocumentQuiz} />
       </>}
       {page === 'documents' && <DocumentLibrary documents={documents} onRefresh={loadDocuments} onOpen={(doc) => { const session = sessions.find((item) => item.document_id === doc.id); if (session) openSession(session.id); else setNotice('Dokumen ini belum memiliki ruang chat yang bisa dibuka.'); }} />}
     {page === 'projects' && <ProjectsPage
@@ -1910,15 +1936,31 @@ function Workspace() {
     {page === 'chat' && <aside className={`right-config ${documentOpen ? 'right-document' : ''}`}>
       {documentOpen
         ? <DocumentSidePanel documentState={documentState} activeJob={activeJob} workflow={workflow} busy={busy || actionBusy} user={user} onClose={() => setDocumentOpen(false)} onAction={documentAction} onDownload={downloadExport} onRestoreVersion={restoreDocumentVersion} onStartQuiz={startDocumentQuiz} onSubmitQuiz={submitDocumentQuiz} />
-        : <div className="config-inner"><div className="right-head"><div><b>Konfigurasi chat</b><small>Hanya untuk laprak ini.</small></div><IconButton label="Tutup konfigurasi" onClick={() => setRightOpen(false)}><PanelRightClose size={16} /></IconButton></div>{active ? <><div className="right-body"><label>Nama laprak<input value={config.title} onChange={(event) => updateConfig({ title: event.target.value })} /></label><label>Mata kuliah<input value={config.configuration.courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Opsional" /></label><label>Modul atau konteks<input value={config.configuration.moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Opsional" /></label><label>Jenis struktur<CustomSelect value={config.configuration.documentProfile} onChange={(value) => updateConfig({ configuration: { documentProfile: value } })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></label><div className="structure-choice"><button className={config.structureMode === 'guided' ? 'active' : ''} onClick={() => updateConfig({ structureMode: 'guided' })}><LayoutTemplate size={15} /><span><b>Struktur prodi</b><small>Dipakai otomatis.</small></span></button><button className={config.structureMode === 'custom' ? 'active' : ''} onClick={() => updateConfig({ structureMode: 'custom' })}><SlidersHorizontal size={15} /><span><b>Struktur khusus</b><small>Hanya bila tugas berbeda.</small></span></button></div>{config.structureMode === 'custom' && <label>Susunan bagian<textarea value={config.configuration.customStructure} onChange={(event) => updateConfig({ configuration: { customStructure: event.target.value } })} placeholder="Pendahuluan, hasil, pembahasan, kesimpulan" /></label>}<label>Instruksi tambahan<textarea value={config.configuration.instructions} onChange={(event) => updateConfig({ configuration: { instructions: event.target.value } })} placeholder="Contoh: fokus ke analisis hasil." /></label></div><div className="right-foot"><Button onClick={saveConfig} disabled={busy}><Save size={14} />Simpan</Button><small>Jurusan, prodi, gaya penulisan, dan billing ada di Settings. Dark mode bisa diubah dari header workspace.</small></div></> : <div className="empty-config"><PanelRightOpen size={20} /><b>Buat chat laprak dulu.</b><p>Panel ini baru dipakai untuk mengubah konteks tugas yang sedang dibuka.</p></div>}</div>}
+        : <div className="config-inner"><div className="right-head"><div><b>Konfigurasi chat</b><small>Hanya untuk laprak ini.</small></div><IconButton label="Tutup konfigurasi" onClick={() => setRightOpen(false)}><PanelRightClose size={16} /></IconButton></div>{active ? <><div className="right-body"><label>Nama laprak<input value={config.title} onChange={(event) => updateConfig({ title: event.target.value })} /></label><label>Mata kuliah<input value={config.configuration.courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Opsional" /></label><label>Modul atau konteks<input value={config.configuration.moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Opsional" /></label><label>Dosen pengampu <small>opsional</small><input value={config.configuration.lecturerName || ''} onChange={(event) => updateConfig({ configuration: { lecturerName: event.target.value } })} placeholder="Nama dosen" /></label><label>NIP dosen <small>opsional</small><input value={config.configuration.lecturerNip || ''} onChange={(event) => updateConfig({ configuration: { lecturerNip: event.target.value } })} placeholder="NIP jika ada" /></label><label>Jenis struktur<CustomSelect value={config.configuration.documentProfile} onChange={(value) => updateConfig({ configuration: { documentProfile: value } })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></label><div className="structure-choice"><button className={config.structureMode === 'guided' ? 'active' : ''} onClick={() => updateConfig({ structureMode: 'guided' })}><LayoutTemplate size={15} /><span><b>Struktur prodi</b><small>Dipakai otomatis.</small></span></button><button className={config.structureMode === 'custom' ? 'active' : ''} onClick={() => updateConfig({ structureMode: 'custom' })}><SlidersHorizontal size={15} /><span><b>Struktur khusus</b><small>Hanya bila tugas berbeda.</small></span></button></div>{config.structureMode === 'custom' && <label>Susunan bagian<textarea value={config.configuration.customStructure} onChange={(event) => updateConfig({ configuration: { customStructure: event.target.value } })} placeholder="Pendahuluan, hasil, pembahasan, kesimpulan" /></label>}<label>Instruksi tambahan<textarea value={config.configuration.instructions} onChange={(event) => updateConfig({ configuration: { instructions: event.target.value } })} placeholder="Contoh: fokus ke analisis hasil." /></label></div><div className="right-foot"><Button onClick={saveConfig} disabled={busy}><Save size={14} />Simpan</Button><small>Jurusan, prodi, gaya penulisan, dan billing ada di Settings. Dark mode bisa diubah dari header workspace.</small></div></> : <div className="empty-config"><PanelRightOpen size={20} /><b>Buat chat laprak dulu.</b><p>Panel ini baru dipakai untuk mengubah konteks tugas yang sedang dibuka.</p></div>}</div>}
     </aside>}
     {['settings','settings-billing','settings-general','settings-personalization','settings-academic','settings-storage','settings-security','settings-archived'].includes(modal) && <SettingsModal initialTab={modal === 'settings-billing' ? 'billing' : modal === 'settings-general' ? 'general' : modal === 'settings-personalization' ? 'personalization' : modal === 'settings-academic' ? 'academic' : modal === 'settings-storage' ? 'storage' : modal === 'settings-security' ? 'security' : modal === 'settings-archived' ? 'archived' : 'general'} onClose={() => setModal(null)} onSaved={refreshSession} onArchivedChanged={loadSessions} onOpenBilling={() => { setModal(null); navigate('/pricing'); }} prefs={prefs} setPrefs={setPrefs} />}{modal === 'help' && <HelpModal onClose={() => setModal(null)} />}{modal === 'feedback' && <FeedbackModal onClose={() => setModal(null)} />}{modal === 'notifications' && <NotificationModal onClose={() => setModal(null)} />}{identityIntake && <IdentityIntakeModal user={user} busy={busy} onSave={completeIdentityIntake} onBack={() => setIdentityIntake(null)} />}{tutorialOpen && <WorkspaceTutorial onClose={closeTutorial} />}{productUpdate && <ProductUpdatePopup update={productUpdate} onReceipt={recordProductUpdate} onClose={closeProductUpdate} />}
   </div>;
 }
 
 function AccountPopover({ onOpen, onLogout, onClose, showUpgrade = true }) {
-  const { user } = useApp();
-  return <div className="account-popover account-popover-fixed" onMouseDown={(event) => event.stopPropagation()}><div className="account-popover-head"><span className="account-popover-avatar" aria-hidden="true">{userInitials(user)}</span><div><b>{user?.fullName || 'Akun Laprakin'}</b><small>Workspace pribadi</small></div></div><div className="account-popover-divider" />{showUpgrade && <button onClick={() => onOpen('billing')}><Sparkles size={15} />Upgrade plan<ChevronRight size={14} /></button>}<button onClick={() => onOpen('settings-personalization')}><Sliders size={15} />Personalisasi</button><button onClick={() => onOpen('settings-academic')}><UserRound size={15} />Jurusan & prodi</button><button onClick={() => onOpen('settings-general')}><Settings2 size={15} />Settings</button><div className="account-popover-divider" /><button onClick={() => onOpen('help')}><HelpCircle size={15} />Help<ChevronRight size={14} /></button><button className="logout-item" onClick={onLogout}><LogOut size={15} />Log out<ChevronRight size={14} /></button></div>;
+  const { user, setNotice } = useApp();
+  const ref = useRef(null);
+  useEffect(() => {
+    const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose?.(); };
+    window.addEventListener('mousedown', closeOutside);
+    return () => window.removeEventListener('mousedown', closeOutside);
+  }, [onClose]);
+  const copyReferral = async () => {
+    const code = user?.referralCode || '';
+    if (!code) return setNotice('Kode referral belum tersedia.');
+    try {
+      await navigator.clipboard?.writeText(code);
+      setNotice('Kode referral disalin. Bonus aktif jika teman belanja minimal Rp29.900 atau subscribe Pro.');
+    } catch {
+      setNotice(`Kode referral: ${code}. Bonus aktif jika teman belanja minimal Rp29.900 atau subscribe Pro.`);
+    }
+  };
+  return <div ref={ref} className="account-popover account-popover-fixed" onMouseDown={(event) => event.stopPropagation()}><div className="account-popover-head"><span className="account-popover-avatar" aria-hidden="true">{userInitials(user)}</span><div><b>{user?.fullName || 'Akun Laprakin'}</b><small>Workspace pribadi</small></div></div><div className="account-popover-divider" />{showUpgrade && <button onClick={() => onOpen('billing')}><Sparkles size={15} />Upgrade plan<ChevronRight size={14} /></button>}<button onClick={copyReferral}><Megaphone size={15} />Referral <small>min. Rp29.900</small></button><button onClick={() => onOpen('settings-personalization')}><Sliders size={15} />Personalisasi</button><button onClick={() => onOpen('settings-academic')}><UserRound size={15} />Jurusan & prodi</button><button onClick={() => onOpen('settings-general')}><Settings2 size={15} />Settings</button><div className="account-popover-divider" /><button onClick={() => onOpen('help')}><HelpCircle size={15} />Help<ChevronRight size={14} /></button><button className="logout-item" onClick={onLogout}><LogOut size={15} />Log out<ChevronRight size={14} /></button></div>;
 }
 
 function SessionGroup({ group, items, activeId, page, onOpen, renamingId, setRenamingId, onRename, draggingSession, setDraggingSession, onDropSession, onDropGroup, folders = [], onPin, onMove, onArchive, onDelete }) {
@@ -2039,15 +2081,21 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
     fullName: user.fullName || '',
     nim: user.nim || '',
     className: user.className || '',
+    institutionName: user.institutionName || '',
+    institutionLogoUrl: user.institutionLogoUrl || '',
+    facultyName: user.facultyName || '',
+    studyProgramName: user.studyProgramName || '',
+    lecturerName: user.lecturerName || '',
+    lecturerNip: user.lecturerNip || '',
     departmentKey: user.departmentKey || '',
     studyProgramKey: user.studyProgramKey || '',
   });
-  const availablePrograms = programs.filter((item) => item.department === form.departmentKey);
   const valid = form.fullName.trim().length >= 2
     && form.nim.trim().length >= 3
     && form.className.trim().length >= 1
-    && form.departmentKey
-    && form.studyProgramKey;
+    && form.institutionName.trim().length >= 2
+    && form.facultyName.trim().length >= 2
+    && form.studyProgramName.trim().length >= 2;
   const submit = async (event) => { event.preventDefault(); if (valid) await onSave(form); };
   return <div className="identity-intake-overlay" role="dialog" aria-modal="true" aria-labelledby="identity-intake-title">
     <form className="identity-intake-modal" onSubmit={submit}>
@@ -2055,15 +2103,19 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
       <div className="identity-intake-grid">
         <label>Nama lengkap<input autoFocus autoComplete="name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Nama sesuai data kampus" /></label>
         <label>NPM / NIM<input inputMode="numeric" autoComplete="off" value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder="Nomor mahasiswa" /></label>
-        <label>Kelas<input autoComplete="off" value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Contoh: TI 3A" /></label>
-        <label>Jurusan / fakultas<CustomSelect value={form.departmentKey} onChange={(value) => setForm({ ...form, departmentKey: value, studyProgramKey: programs.some((item) => item.key === form.studyProgramKey && item.department === value) ? form.studyProgramKey : '' })} options={[{ value: '', label: 'Pilih jurusan / fakultas' }, ...departments.map((item) => ({ value: item.key, label: item.label }))]} /></label>
-        <label className="identity-program-field">Program studi<CustomSelect value={form.studyProgramKey} onChange={(value) => setForm({ ...form, studyProgramKey: value })} options={[{ value: '', label: form.departmentKey ? 'Pilih program studi' : 'Pilih jurusan terlebih dahulu' }, ...availablePrograms.map((item) => ({ value: item.key, label: item.label }))]} /></label>
+        <label>Kelas<input autoComplete="off" value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Contoh: RKS 20C" /></label>
+        <label>Univ / institusi<input value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder="Contoh: Politeknik Negeri Cilacap" /></label>
+        <label>Logo institusi <small>opsional</small><input value={form.institutionLogoUrl} onChange={(event) => setForm({ ...form, institutionLogoUrl: event.target.value })} placeholder="URL logo kampus" /></label>
+        <label>Fakultas / Jurusan<input value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder="Contoh: Jurusan Komputer dan Bisnis" /></label>
+        <label>Program studi<input value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder="Contoh: D4 Rekayasa Keamanan Siber" /></label>
+        <label>Dosen pengampu <small>opsional</small><input value={form.lecturerName} onChange={(event) => setForm({ ...form, lecturerName: event.target.value })} placeholder="Nama dosen" /></label>
+        <label>NIP dosen <small>opsional</small><input value={form.lecturerNip} onChange={(event) => setForm({ ...form, lecturerNip: event.target.value })} placeholder="NIP jika ada" /></label>
       </div>
       <footer><button type="button" onClick={onBack} disabled={busy}>Kembali edit pesan</button><Button type="submit" disabled={busy || !valid}>{busy ? <LoaderCircle className="spin" size={14} /> : <ArrowRight size={14} />}Simpan & lanjutkan</Button></footer>
     </form>
   </div>;
 }
-function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, onOpenDocument }) {
+function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz }) {
   const blankChat = !active || (!messages.length && !attachments.length && !active.document_id);
   const [previewFile, setPreviewFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
@@ -2115,7 +2167,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
   >
     {dragActive && <div className="workspace-drop-hint" aria-hidden="true"><UploadCloud size={22} /><b>Lepas file untuk melampirkan</b><small>File tetap menunggu sampai kamu menekan Enter.</small></div>}
     <div className="chat-thread">
-      {blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}>mau <em>laprakin</em> apa hari ini, {greetingName}?</h1></div> : <div className="thread-content">
+      {quizMode && documentState ? <div className="quiz-workspace-panel"><header><div><small>Cek pemahaman</small><h2>Jawab quiz singkat sebelum download</h2><p>Soal diambil dari laprak yang sedang kamu preview. Minimal benar 70%.</p></div><button type="button" onClick={onCloseQuiz}>Kembali ke chat</button></header><DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} /></div> : blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}>mau <em>laprakin</em> apa hari ini, {greetingName}?</h1></div> : <div className="thread-content">
       {visibleMessages.map((message) => <Fragment key={message.id}>
         {message.role === 'user' && attachmentBuckets.get(message.id)?.length ? <SourceBar compact attachments={attachmentBuckets.get(message.id)} onOpen={setPreviewFile} /> : null}
         {message.role === 'assistant' && !message.meta?.isClarification && message.meta?.workPlan?.steps?.length ? <WorkPlanRail
@@ -2128,6 +2180,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
         <article className={`message ${message.role}`}><div><p>{message.content}</p>{message.meta?.links?.length ? <div className="link-row">{message.meta.links.map((link) => <a key={link} href={link} target="_blank" rel="noreferrer"><Globe2 size={12} />{new URL(link).hostname}</a>)}</div> : null}</div></article>
         {message.meta?.kind === 'document_ready' ? <DocumentCard documentState={documentState} activeJob={jobForMessage(message)} version={message.meta.documentVersion} onOpen={onOpenDocument} /> : null}
       </Fragment>)}
+      {active && visibleMessages.length > 0 && !active.document_id && <ChatBriefPanel config={config} updateConfig={updateConfig} />}
       {contextOpen && <InlineContext config={config} updateConfig={updateConfig} onClose={() => setContextOpen(false)} />}
       {orphanAttachments.length > 0 && <SourceBar compact attachments={orphanAttachments} onOpen={setPreviewFile} />}
       {active?.document_id
@@ -2135,7 +2188,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
         : !hasEmbeddedPlan && <WorkflowPanel workflow={workflow} busy={busy} onCreate={createDocument} onAction={onWorkflowAction} aiMode={aiMode} />}
       {busy && !active?.document_id && !['queued', 'running', 'retry_queued'].includes(activeJob?.status) && <ThinkingRail />}
     </div>}</div>
-    <Composer input={input} setInput={setInput} busy={busy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} centered={blankChat} pendingFiles={pendingFiles} onPasteImages={onPasteImages} onAddPendingFiles={onAddPendingFiles} onRemovePending={onRemovePending} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={onUpgrade} />
+    {!quizMode && <Composer input={input} setInput={setInput} busy={busy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} centered={blankChat} pendingFiles={pendingFiles} onPasteImages={onPasteImages} onAddPendingFiles={onAddPendingFiles} onRemovePending={onRemovePending} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={onUpgrade} />}
     {previewFile && <AttachmentPreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />}
   </div>;
 }
@@ -2439,6 +2492,16 @@ function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, up
   </div>;
 }
 
+function ChatBriefPanel({ config, updateConfig }) {
+  return <form className="chat-brief-panel" onSubmit={(event) => event.preventDefault()}>
+    <div><small>Brief laprak</small><b>Lengkapi jika ada yang belum ketangkap</b></div>
+    <label>Mata kuliah<input value={config.configuration.courseName || ''} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Contoh: Administrasi Jaringan Komputer" /></label>
+    <label>Judul modul<input value={config.configuration.moduleTitle || ''} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Contoh: Dynamic Host Configuration Protocol" /></label>
+    <label>Dosen <small>opsional</small><input value={config.configuration.lecturerName || ''} onChange={(event) => updateConfig({ configuration: { lecturerName: event.target.value } })} placeholder="Nama dosen" /></label>
+    <label>NIP <small>opsional</small><input value={config.configuration.lecturerNip || ''} onChange={(event) => updateConfig({ configuration: { lecturerNip: event.target.value } })} placeholder="NIP dosen" /></label>
+  </form>;
+}
+
 function InlineContext({ config, updateConfig, onClose }) {
   return <form className="inline-context" onSubmit={(event) => { event.preventDefault(); onClose(); }}><div className="context-title"><div><b>Konteks laprak</b><p>Isi seperlunya agar bahan lebih mudah dibaca.</p></div><button type="button" onClick={onClose} aria-label="Tutup form konteks"><X size={14} /></button></div><div className="context-fields"><label>Mata kuliah<input value={config.configuration.courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Jaringan Komputer" /></label><label>Judul materi <small>Opsional</small><input value={config.configuration.moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Routing Protocol" /></label><Button type="submit" variant="secondary">Simpan</Button></div></form>;
 }
@@ -2615,7 +2678,7 @@ function DocumentSidePanel({ documentState, activeJob, workflow, busy, user, onC
     <header className="document-side-head">
       <div><small>Dokumen laprak</small><b>{documentState.title}</b></div>
       <div className="document-side-actions">
-        {exported && canDownload ? <button type="button" onClick={onDownload}><ArrowDownToLine size={15} />Unduh</button> : isGenerated ? <button type="button" disabled={busy || !canDownload} onClick={() => onAction('export')}><ArrowDownToLine size={15} />Unduh</button> : null}
+        {exported && canDownload ? <button type="button" onClick={onDownload}><ArrowDownToLine size={15} />Unduh</button> : isGenerated ? <button type="button" disabled={busy} onClick={() => canDownload ? onAction('export') : onStartQuiz()}><ArrowDownToLine size={15} />Unduh</button> : null}
         <IconButton label="Tutup dokumen" onClick={onClose}><X size={17} /></IconButton>
       </div>
     </header>
@@ -2628,7 +2691,6 @@ function DocumentSidePanel({ documentState, activeJob, workflow, busy, user, onC
       {isGenerated && <>
         <RenderedDocxPreview documentId={documentState.id} revision={documentState.revision_count || 0} />
         <div className="revision-chat-note"><MessageCircle size={16} /><div><b>Sudah lengkap atau perlu revisi?</b><p>Tulis perubahan di chat utama. Bagian lain akan tetap dipertahankan.</p></div></div>
-        <DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} />
       </>}
     </div>
   </div>;
@@ -2927,7 +2989,7 @@ function SettingsPaneHeader({ eyebrow, title, description }) {
 function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, prefs, setPrefs, initialTab = 'general' }) {
   const { user, setNotice, refreshSession, showDialog } = useApp();
   const [tab, setTab] = useState(initialTab);
-  const [form, setForm] = useState({ nickname: user.nickname || '', departmentKey: user.departmentKey || '', studyProgramKey: user.studyProgramKey || '' });
+  const [form, setForm] = useState({ nickname: user.nickname || '', fullName: user.fullName || '', nim: user.nim || '', className: user.className || '', institutionName: user.institutionName || '', institutionLogoUrl: user.institutionLogoUrl || '', facultyName: user.facultyName || '', studyProgramName: user.studyProgramName || '', lecturerName: user.lecturerName || '', lecturerNip: user.lecturerNip || '', departmentKey: user.departmentKey || '', studyProgramKey: user.studyProgramKey || '' });
   const [storage, setStorage] = useState(null);
   const [archivedChats, setArchivedChats] = useState([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
@@ -2956,7 +3018,7 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
       setBusy(false);
     }
   };
-  const saveAcademic = async () => { setBusy(true); try { await api('/profile', { method: 'PUT', body: { departmentKey: form.departmentKey, studyProgramKey: form.studyProgramKey } }); await onSaved(); setNotice('Jurusan dan prodi aktif disimpan.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
+  const saveAcademic = async () => { setBusy(true); try { await api('/profile', { method: 'PUT', body: { fullName: form.fullName, nim: form.nim, className: form.className, institutionName: form.institutionName, institutionLogoUrl: form.institutionLogoUrl, facultyName: form.facultyName, studyProgramName: form.studyProgramName, lecturerName: form.lecturerName, lecturerNip: form.lecturerNip, departmentKey: form.departmentKey, studyProgramKey: form.studyProgramKey } }); await onSaved(); setNotice('Profil akademik disimpan.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   const requestPasswordChange = async () => { setBusy(true); try { await api('/auth/password-change-request', { method: 'POST', body: {} }); setNotice('Link verifikasi perubahan kata sandi sudah dikirim ke email akunmu.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   const restoreArchivedChat = async (sessionId) => {
     setBusy(true);
@@ -3015,7 +3077,7 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
           <section className="settings-group"><Row title="Keluar dari semua perangkat" description="Gunakan setelah login dari perangkat umum."><Button variant="secondary" onClick={logoutAll} disabled={busy}>Akhiri semua sesi</Button></Row></section>
         </div>}
         {tab === 'archived' && <div className="settings-pane"><section className="settings-group archived-chat-settings"><div className="settings-group-heading"><b>Percakapan arsip</b><small>Chat yang dipulihkan akan kembali muncul di sidebar.</small></div>{archivedLoading ? <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat chat arsip...</div> : archivedChats.length ? <div className="archived-chat-list">{archivedChats.map((session) => <article key={session.id}><div><b>{session.title || 'Chat baru'}</b><small>{session.course_group || 'Belum dikelompokkan'} · {formatDate(session.archived_at || session.updated_at)}</small></div><Button type="button" variant="secondary" disabled={busy} onClick={() => restoreArchivedChat(session.id)}>Pulihkan</Button></article>)}</div> : <div className="settings-empty-state"><Archive size={18}/><div><b>Belum ada chat diarsipkan</b><p>Chat yang kamu arsipkan dari sidebar akan muncul di sini.</p></div></div>}</section></div>}
-        {tab === 'academic' && <div className="settings-pane"><section className="settings-group academic-settings-form"><label><span>Jurusan</span><CustomSelect value={form.departmentKey} onChange={(value) => setForm({ departmentKey: value, studyProgramKey: '' })} options={[{ value: '', label: 'Pilih jurusan' }, ...departments.map((item) => ({ value: item.key, label: item.label }))]} /></label><label><span>Program studi aktif</span><CustomSelect value={form.studyProgramKey} onChange={(value) => setForm({ ...form, studyProgramKey: value })} options={[{ value: '', label: 'Pilih program studi' }, ...programs.filter((item) => item.department === form.departmentKey).map((item) => ({ value: item.key, label: item.label }))]} /></label><Button onClick={saveAcademic} disabled={busy}><Save size={14}/>Simpan profil akademik</Button></section><section className="settings-danger-zone"><div><b>Hapus akun</b><p>Unduh data yang diperlukan terlebih dahulu. Tindakan ini tidak dapat dibatalkan.</p></div><input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} placeholder={user.email} /><Button variant="danger" onClick={deleteAccount} disabled={busy || deleteConfirm !== user.email}>Hapus akun</Button></section></div>}
+        {tab === 'academic' && <div className="settings-pane"><section className="settings-group academic-settings-form academic-settings-wide"><label><span>Nama lengkap</span><input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Nama pada cover" /></label><label><span>NPM / NIM</span><input value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder="Nomor mahasiswa" /></label><label><span>Kelas</span><input value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Contoh: RKS 20C" /></label><label><span>Univ / institusi</span><input value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder="Nama kampus" /></label><label><span>Logo institusi</span><input value={form.institutionLogoUrl} onChange={(event) => setForm({ ...form, institutionLogoUrl: event.target.value })} placeholder="URL logo kampus" /></label><label><span>Fakultas / Jurusan</span><input value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder="Fakultas atau jurusan" /></label><label><span>Program studi</span><input value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder="Program studi" /></label><label><span>Dosen pengampu <small>opsional</small></span><input value={form.lecturerName} onChange={(event) => setForm({ ...form, lecturerName: event.target.value })} placeholder="Nama dosen" /></label><label><span>NIP dosen <small>opsional</small></span><input value={form.lecturerNip} onChange={(event) => setForm({ ...form, lecturerNip: event.target.value })} placeholder="NIP jika ada" /></label><Button onClick={saveAcademic} disabled={busy}><Save size={14}/>Simpan profil akademik</Button></section><section className="settings-danger-zone"><div><b>Hapus akun</b><p>Unduh data yang diperlukan terlebih dahulu. Tindakan ini tidak dapat dibatalkan.</p></div><input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} placeholder={user.email} /><Button variant="danger" onClick={deleteAccount} disabled={busy || deleteConfirm !== user.email}>Hapus akun</Button></section></div>}
         {tab === 'keyboard' && <div className="settings-pane"><section className="settings-group"><Toggle checked={prefs.enterToSend !== false} onChange={(checked) => updatePrefs({ enterToSend: checked })} title="Enter untuk kirim" description="Gunakan Shift + Enter untuk membuat baris baru." /><Toggle checked={prefs.reducedMotion} onChange={(checked) => updatePrefs({ reducedMotion: checked })} title="Kurangi animasi" description="Pertahankan feedback penting dengan gerakan yang lebih singkat." /></section></div>}
       </div>
     </div>
@@ -3061,7 +3123,7 @@ function FeedbackModal({ onClose }) {
   </Modal>;
 }
 
-function NotificationModal({ onClose }) { const { setNotice } = useApp(); const [data, setData] = useState({ notifications: [], unread: 0 }); useEffect(() => { api('/notifications').then(setData).catch((err) => setNotice(err.message)); }, []); useEffect(() => { const timer = window.setTimeout(onClose, 5000); return () => window.clearTimeout(timer); }, [onClose]); const markRead = async () => { try { setData(await api('/notifications/read', { method: 'PUT', body: {} })); } catch (err) { setNotice(err.message); } }; return <aside className="notification-popover" role="dialog" aria-label="Notifikasi"><header><div><b>Notifikasi</b><small>{data.unread ? `${data.unread} baru` : 'Semua sudah dibaca'}</small></div><IconButton label="Tutup" onClick={onClose}><X size={16} /></IconButton></header>{data.unread ? <button className="notification-read" onClick={markRead}>Tandai semua dibaca</button> : null}<div className="notification-list">{data.notifications.length ? data.notifications.map((note) => <article key={note.id}><span /><div><b>{note.title}</b><p>{note.body}</p><small>{formatDate(note.created_at)}</small></div></article>) : <p className="muted-note">Belum ada notifikasi.</p>}</div></aside>; }
+function NotificationModal({ onClose }) { const { setNotice } = useApp(); const [data, setData] = useState({ notifications: [], unread: 0 }); const ref = useRef(null); useEffect(() => { api('/notifications').then(setData).catch((err) => setNotice(err.message)); }, []); useEffect(() => { const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose(); }; window.addEventListener('mousedown', closeOutside); return () => window.removeEventListener('mousedown', closeOutside); }, [onClose]); useEffect(() => { const timer = window.setTimeout(onClose, 5000); return () => window.clearTimeout(timer); }, [onClose]); const markRead = async () => { try { setData(await api('/notifications/read', { method: 'PUT', body: {} })); } catch (err) { setNotice(err.message); } }; return <aside ref={ref} className="notification-popover" role="dialog" aria-label="Notifikasi"><header><div><b>Notifikasi</b><small>{data.unread ? `${data.unread} baru` : 'Semua sudah dibaca'}</small></div><IconButton label="Tutup" onClick={onClose}><X size={16} /></IconButton></header>{data.unread ? <button className="notification-read" onClick={markRead}>Tandai semua dibaca</button> : null}<div className="notification-list">{data.notifications.length ? data.notifications.map((note) => <article key={note.id}><span /><div><b>{note.title}</b><p>{note.body}</p><small>{formatDate(note.created_at)}</small></div></article>) : <p className="muted-note">Belum ada notifikasi.</p>}</div></aside>; }
 
 function AppDialog({ dialog, onResolve }) {
   const [value, setValue] = useState('');
