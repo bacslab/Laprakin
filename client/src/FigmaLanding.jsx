@@ -19,18 +19,13 @@ const STEPS = [
   ['Export saat siap', 'Unduh draft ke Word dan lakukan pengecekan akhir sebelum dokumen dikumpulkan.'],
 ];
 
+// Tiap bahan disebut apa adanya beserta bagian laporan yang memakainya. Tidak
+// memakai nama berkas contoh agar tidak terbaca sebagai tangkapan layar produk.
 const SOURCES = [
-  ['Modul & paper', 'PDF / DOCX', FileText, 'Menjadi pegangan teori, urutan kerja, dan batas pembahasan yang memang diminta.', 'modul-praktikum.pdf', ['Landasan teori', 'Langkah kerja']],
-  ['Bukti praktikum', 'PNG / JPG / WEBP', FileImage, 'Menjaga pembahasan tetap menempel pada hasil praktik dan kondisi yang benar-benar terjadi.', 'bukti-output.png', ['Hasil praktik', 'Pembahasan']],
-  ['Data pengujian', 'CSV / XLSX', FileSpreadsheet, 'Memberi angka, tabel, dan hasil pengukuran yang dapat dirujuk saat analisis.', 'hasil-pengujian.csv', ['Tabel hasil', 'Analisis data']],
-  ['Referensi daring', 'URL / DOCS', Link2, 'Melengkapi istilah atau dokumentasi tanpa memutus hubungan dengan bahan utama.', 'docs-referensi.url', ['Definisi istilah', 'Daftar pustaka']],
-];
-
-const SOURCE_THREAD_PATHS = [
-  'M 4 91 C 76 91, 68 239, 176 239',
-  'M 4 169 C 76 169, 68 239, 176 239',
-  'M 4 247 C 76 247, 68 239, 176 239',
-  'M 4 325 C 76 325, 68 239, 176 239',
+  ['Modul & paper', 'PDF, DOCX', FileText, 'Jadi pegangan teori, urutan kerja, dan batas pembahasan yang diminta.', ['Landasan teori', 'Langkah kerja']],
+  ['Bukti praktikum', 'PNG, JPG, WEBP', FileImage, 'Membuat pembahasan menempel pada hasil praktik yang benar-benar terjadi.', ['Hasil praktik', 'Pembahasan']],
+  ['Data pengujian', 'CSV, XLSX', FileSpreadsheet, 'Memberi angka dan tabel yang bisa dirujuk saat menulis analisis.', ['Tabel hasil', 'Analisis data']],
+  ['Referensi daring', 'Tautan', Link2, 'Melengkapi istilah dan dokumentasi tanpa menggeser bahan utamamu.', ['Definisi istilah', 'Daftar pustaka']],
 ];
 
 const FEATURES = [
@@ -171,7 +166,6 @@ export default function FigmaLanding({ navigate }) {
   const [content, setContent] = useState({ media: {}, copy: {} });
   const [step, setStep] = useState(0);
   const [stepDragging, setStepDragging] = useState(false);
-  const [sourceFocus, setSourceFocus] = useState(0);
   const [openFaq, setOpenFaq] = useState(null);
   const pageRef = useRef(null);
   const stepDragRef = useRef(null);
@@ -568,62 +562,21 @@ export default function FigmaLanding({ navigate }) {
         <SectionTitle eyebrow="Your sources" title="Bahanmu bukan sekadar lampiran">
           <p>Setiap modul, data, dan bukti tetap punya jejak ke bagian laporan yang memakainya.</p>
         </SectionTitle>
-        <div className="fg-source-workbench" data-aos="fade-up">
-          <header className="fg-source-workbench-head">
-            <div><span><i /> SOURCE DESK</span><p>Pilih satu berkas untuk melihat bagaimana konteksnya dibawa ke laporan.</p></div>
-            <strong>{String(sourceFocus + 1).padStart(2, '0')} / {String(SOURCES.length).padStart(2, '0')}</strong>
-          </header>
-          <div className="fg-source-stage">
-            <div className="fg-source-stack" aria-label="Pilih sumber untuk melihat perannya">
-              <span className="fg-source-stack-label">Bahan masuk</span>
-              {SOURCES.map(([title, type, Icon, , filename], index) => <button
-                type="button"
-                key={title}
-                className={sourceFocus === index ? 'is-active' : ''}
-                style={{
-                  '--source-y': `${56 + (index * 78)}px`,
-                  '--source-shift': `${index * 9}px`,
-                  '--source-tilt': `${(index - 1.5) * 0.45}deg`,
-                }}
-                onMouseEnter={() => setSourceFocus(index)}
-                onFocus={() => setSourceFocus(index)}
-                onClick={() => setSourceFocus(index)}
-                aria-pressed={sourceFocus === index}
-                data-cursor="TRACE"
-              >
-                <span className="fg-source-sheet">
-                  <span className="fg-source-sheet-top"><span>0{index + 1}</span><small>{type}</small></span>
-                  <span className="fg-source-sheet-preview" aria-hidden="true"><i /><i /><i /><i /></span>
-                  <span className="fg-source-sheet-file"><Icon size={15} /><b>{filename}</b></span>
-                </span>
-                <span className="fg-source-tab"><b>{title}</b><small>{type}</small></span>
-              </button>)}
+        <div className="fg-source-grid">
+          {SOURCES.map(([title, type, Icon, text, sections], index) => <article key={title} data-aos="fade-up" data-aos-delay={(index % 2) * 90}>
+            <span className="fg-source-icon" aria-hidden="true"><Icon size={18} /></span>
+            <div className="fg-source-copy">
+              <h3>{title}</h3>
+              <small>{type}</small>
+              <p>{text}</p>
             </div>
-            <div className="fg-source-thread" aria-hidden="true">
-              <svg viewBox="0 0 180 416" preserveAspectRatio="none">
-                <path className="fg-source-thread-base" d={SOURCE_THREAD_PATHS[sourceFocus]} />
-                <path key={sourceFocus} className="fg-source-thread-live" d={SOURCE_THREAD_PATHS[sourceFocus]} />
-                <circle cx="176" cy="239" r="4" />
-              </svg>
-              <span>context tetap tertaut</span>
+            <div className="fg-source-sections">
+              <span>Dipakai di bagian</span>
+              <ul>{sections.map((item) => <li key={item}>{item}</li>)}</ul>
             </div>
-            <aside className="fg-source-report" aria-live="polite">
-              <span className="fg-source-report-holes" aria-hidden="true"><i /><i /><i /><i /><i /></span>
-              <header><span>LEMBAR KERJA</span><small>REF. 0{sourceFocus + 1}</small></header>
-              <div className="fg-source-report-copy" key={sourceFocus}>
-                <small>Sumber aktif</small>
-                <h3>{SOURCES[sourceFocus][0]}</h3>
-                <p>{SOURCES[sourceFocus][3]}</p>
-              </div>
-              <div className="fg-source-report-map">
-                <span>Diikat ke bagian</span>
-                <ul>{SOURCES[sourceFocus][5].map((item) => <li key={item}>{item}</li>)}</ul>
-              </div>
-              <footer><span><i /> Tertaut</span><small>{SOURCES[sourceFocus][4]}</small></footer>
-            </aside>
-          </div>
-          <footer className="fg-source-workbench-foot"><span>NO FABRICATED EVIDENCE</span><p>Laprakin menyusun dari bahanmu—bukan mengarang hasil praktik yang tidak ada.</p></footer>
+          </article>)}
         </div>
+        <p className="fg-source-note">Laprakin menyusun dari bahan yang kamu punya, bukan mengarang hasil praktik yang tidak ada.</p>
       </section>
 
       <section className="fg-compare fg-section fg-container">

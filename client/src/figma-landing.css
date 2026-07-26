@@ -252,3 +252,24 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){background:#0f0f0f}
 @media(prefers-reduced-motion:reduce){
   .fg-page *{scroll-behavior:auto!important;transition:none!important}
 }
+
+/* ── Section bahan (pengganti source desk) ─────────────────────────────────
+Versi sebelumnya berupa mockup interaktif dengan nama berkas rekaan, benang SVG,
+dan label kapital berbahasa Inggris. Bentuknya tidak selaras dengan section lain
+di landing dan terbaca seperti tangkapan layar produk yang tidak pernah ada.
+Sekarang memakai kisi kartu yang sama dengan section fitur. */
+.fg-source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:58px}
+.fg-source-grid article{display:flex;flex-direction:column;gap:16px;padding:26px;border:1px solid var(--fg-border);border-radius:22px;background:var(--fg-card)}
+.fg-source-icon{width:42px;height:42px;flex:none;display:grid;place-items:center;border:1px solid var(--fg-border);border-radius:13px;color:var(--fg-ink)}
+.fg-source-copy h3{margin:0;font-size:1.06rem;letter-spacing:-.01em}
+.fg-source-copy small{display:block;margin-top:5px;font-size:.72rem;opacity:.62}
+.fg-source-copy p{margin:10px 0 0;font-size:.86rem;line-height:1.6;opacity:.78}
+.fg-source-sections{margin-top:auto;padding-top:16px;border-top:1px solid var(--fg-border)}
+.fg-source-sections>span{display:block;margin-bottom:9px;font-size:.7rem;letter-spacing:.02em;opacity:.6}
+.fg-source-sections ul{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:0;list-style:none}
+.fg-source-sections li{padding:5px 11px;border:1px solid var(--fg-border);border-radius:999px;font-size:.74rem}
+.fg-source-note{margin:26px 0 0;font-size:.86rem;line-height:1.6;opacity:.72;max-width:56ch}
+@media(max-width:860px){
+  .fg-source-grid{grid-template-columns:1fr;margin-top:38px}
+  .fg-source-grid article{padding:22px}
+}

@@ -1151,7 +1151,44 @@ function PublicPricingPage() {
           </article>;
         })}
       </section>}
-      {user && selected && isCheckoutPage && <section className="pricing-compact-checkout" aria-live="polite"><div><small>Checkout QRIS</small><b>{quoteBusy ? 'Menghitung...' : quote?.displayTotal || 'Rp0'}</b><span>{quote?.items?.map((item) => `${item.label}${item.quantity > 1 ? ` x${item.quantity}` : ""}`).join(' + ') || 'Produk pilihan'}</span></div><Button onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>{busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? 'Bayar dengan QRIS' : 'Gateway belum aktif'}</Button></section>}
+      {user && selected && isCheckoutPage && <section className="checkout-summary" aria-live="polite">
+        <header className="checkout-summary-head">
+          <div><b>Ringkasan pesanan</b><small>Periksa kembali sebelum membayar.</small></div>
+          <Link to="/pricing" className="checkout-change-plan">Ubah pilihan</Link>
+        </header>
+
+        <ul className="checkout-lines">
+          {(quote?.items || []).map((item) => <li key={item.sku}>
+            <div>
+              <b>{item.label}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</b>
+              <small>
+                {item.kind === 'subscription'
+                  ? `${item.creditPerUnit} credit · aktif ${item.durationDays} hari`
+                  : `${item.creditPerUnit * item.quantity} credit · berlaku 180 hari`}
+              </small>
+            </div>
+            <span>{formatCurrency(item.subtotalIdr)}</span>
+          </li>)}
+          {!quote?.items?.length && <li className="checkout-lines-empty"><span>{quoteBusy ? 'Menghitung pesanan…' : 'Belum ada produk terpilih.'}</span></li>}
+        </ul>
+
+        <div className="checkout-total">
+          <div><span>Total</span><small>Sudah termasuk seluruh biaya.</small></div>
+          <b>{quoteBusy ? 'Menghitung…' : quote?.displayTotal || 'Rp0'}</b>
+        </div>
+
+        {quote?.totalCredits > 0 && <p className="checkout-gain"><Check size={14} />Kamu mendapat <b>{quote.totalCredits} credit</b> begitu pembayaran terverifikasi.</p>}
+
+        <Button onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>
+          {busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? 'Bayar dengan QRIS' : 'Gateway belum aktif'}
+        </Button>
+
+        <ul className="checkout-notes">
+          <li>Scan QRIS memakai aplikasi bank atau e-wallet apa pun.</li>
+          <li>Kode QRIS berlaku 15 menit. Lewat itu, buat pesanan baru.</li>
+          <li>Credit masuk otomatis setelah pembayaran diverifikasi—tidak perlu konfirmasi manual.</li>
+        </ul>
+      </section>}
       {activeOrder && <section className={`pricing-compact-status ${activeOrder.status || 'pending'}`}><div><b>{activeOrder.statusLabel || 'Status pembayaran'}</b><p>{statusCopy[activeOrder.status] || 'Status pembayaran sedang diproses.'}</p></div>{['created', 'pending'].includes(activeOrder.status) ? <button type="button" onClick={() => refreshOrder(activeOrder.id, true)} disabled={busy}><RefreshCw size={14}/>Refresh</button> : <CheckCircle2 size={20}/>}</section>}
       {error && <div className="pricing-compact-error"><CircleAlert size={16}/><span>{error}</span>{checkoutRecoveryUrl && <a href={checkoutRecoveryUrl}>Buka checkout QRIS</a>}</div>}
     </main>

@@ -9160,3 +9160,47 @@ menyediakan slot badge setinggi sama agar seluruh baris sejajar. */
 /* Tombol kembali pada checkout membawa label agar tujuannya jelas. */
 .pricing-compact-nav button{display:inline-flex;align-items:center;gap:7px}
 .pricing-compact-nav button span{font-size:.74rem;font-weight:600}
+
+/* ── Ringkasan checkout ────────────────────────────────────────────────────
+Sebelumnya hanya menampilkan total dan satu tombol, sehingga halaman terasa
+kosong dan user tidak tahu persis apa yang dibeli. */
+.checkout-summary{width:100%;margin-top:20px;padding:20px;border:1px solid var(--pricing-line);border-radius:16px;background:var(--pricing-surface);display:flex;flex-direction:column;gap:16px}
+.checkout-summary-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.checkout-summary-head b{display:block;font-size:.95rem}
+.checkout-summary-head small{display:block;margin-top:3px;font-size:.72rem;opacity:.66}
+.checkout-change-plan{font-size:.74rem;font-weight:600;text-decoration:underline;text-underline-offset:3px;color:inherit;opacity:.8}
+.checkout-change-plan:hover{opacity:1}
+.checkout-lines{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.checkout-lines li{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.checkout-lines b{display:block;font-size:.84rem;font-weight:600}
+.checkout-lines small{display:block;margin-top:3px;font-size:.72rem;opacity:.66}
+.checkout-lines>li>span{flex:none;font-size:.84rem;font-weight:600;font-variant-numeric:tabular-nums}
+.checkout-lines-empty span{opacity:.66;font-size:.8rem;font-weight:400}
+.checkout-total{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-top:15px;border-top:1px solid var(--pricing-line)}
+.checkout-total span{font-size:.86rem;font-weight:600}
+.checkout-total small{display:block;margin-top:2px;font-size:.7rem;opacity:.62}
+.checkout-total b{font-size:1.32rem;font-weight:800;font-variant-numeric:tabular-nums}
+.checkout-gain{display:flex;align-items:center;gap:8px;margin:0;padding:11px 13px;border-radius:11px;background:color-mix(in srgb,var(--pricing-accent) 12%,transparent);font-size:.78rem;line-height:1.5}
+.checkout-gain b{font-weight:700}
+.checkout-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.checkout-notes li{position:relative;padding-left:15px;font-size:.73rem;line-height:1.55;opacity:.7}
+.checkout-notes li::before{content:"";position:absolute;left:0;top:.55em;width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.6}
+@media(max-width:560px){
+  .checkout-summary{padding:16px}
+  .checkout-total b{font-size:1.16rem}
+}
+
+/* ── Kontras token teks sekunder ───────────────────────────────────────────
+--workspace-muted terdefinisi ulang di enam belas tempat, dan beberapa varian
+gelap dipakai di atas permukaan gelap: #65635c terhadap #1f1f1e hanya mencapai
+2,8:1 dan #766d66 mencapai 3,3:1, keduanya di bawah minimum 4,5:1 WCAG AA untuk
+teks. Nilai berikut diletakkan paling akhir agar menang atas seluruh duplikat.
+
+Terukur terhadap permukaan tergelap dan paling terang di masing-masing tema:
+  gelap  #a8a59e -> 6,8:1 di #1f1f1e · 5,7:1 di #2c2c2a
+  terang #5c5a54 -> 6,4:1 di #f7f6f4 · 6,9:1 di #ffffff */
+.workspace.theme-dark{--workspace-muted:#a8a59e}
+.workspace:not(.theme-dark){--workspace-muted:#5c5a54}
+/* Mode kontras tinggi didorong melewati 7:1 (AAA). */
+.workspace.theme-dark[data-contrast="high"]{--workspace-muted:#c9c6bf}
+.workspace:not(.theme-dark)[data-contrast="high"]{--workspace-muted:#43413c}
