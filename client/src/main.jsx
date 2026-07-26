@@ -2667,11 +2667,11 @@ function DocumentQuiz({ access, busy, onStart, onSubmit }) {
     if (next) setResult(next);
   };
   if (access?.passed && !attempt) {
-    return <section className="quiz-gate quiz-passed"><span><CheckCircle2 size={18} /></span><div><small>Quiz selesai</small><b>Download sudah terbuka</b><p>Nilai terakhir {access.latestScore}% · minimum {access.passScore}%.</p></div></section>;
+    return <section className="quiz-gate quiz-passed"><span><CheckCircle2 size={18} /></span><div><small>Quiz selesai</small><b>Download sudah terbuka</b><p>Nilai terakhir {access.latestScore ?? 0}% · minimum {access.passScore}%.</p></div></section>;
   }
   if (!attempt) {
     return <section className="quiz-gate">
-      <div><small>{access?.subscriptionBypass ? 'Opsional untuk paket berlangganan' : 'Sebelum download'}</small><h3>Quiz singkat dari laprakmu</h3><p>{access?.attemptCount ? `Nilai terakhir ${access.latestScore}%. Soal berikutnya akan diacak ulang.` : 'Pertanyaan mudah dengan jawaban singkat dari isi laporan.'}</p></div>
+      <div><small>{access?.subscriptionBypass ? 'Opsional untuk paket berlangganan' : 'Sebelum download'}</small><h3>Quiz singkat dari laprakmu</h3><p>{access?.attemptCount ? `Nilai terakhir ${access.latestScore ?? 0}%. Soal berikutnya akan diacak ulang.` : 'Pertanyaan mudah dengan jawaban singkat dari isi laporan.'}</p></div>
       <Button onClick={begin} disabled={busy}><Sparkles size={14} />{access?.attemptCount ? 'Coba lagi' : 'Mulai quiz'}</Button>
     </section>;
   }
@@ -2688,7 +2688,9 @@ function DocumentQuiz({ access, busy, onStart, onSubmit }) {
   return <section className="quiz-player">
     <header><span>Quiz laprak</span><b>{questionIndex + 1} / {attempt.questions.length}</b><div><i style={{ width: `${((questionIndex + 1) / attempt.questions.length) * 100}%` }} /></div></header>
     <article className="quiz-question-card"><small>{question.sectionTitle}</small><h3>{question.question}</h3></article>
-    <div className="quiz-options">{question.options.map((option, index) => <button type="button" key={`${question.id}-${index}`} className={`quiz-option quiz-option-${index} ${selected === index ? 'selected' : ''}`} onClick={() => setAnswers((value) => ({ ...value, [question.id]: index }))}><span>{String.fromCharCode(65 + index)}</span><b>{option}</b></button>)}</div>
+    {/* Tanpa kelas warna per-opsi: empat warna keras yang berbeda membuat
+    pilihan terlihat seperti kuis permainan dan tidak mengikuti tema. */}
+    <div className="quiz-options">{question.options.map((option, index) => <button type="button" key={`${question.id}-${index}`} className={`quiz-option ${selected === index ? 'selected' : ''}`} onClick={() => setAnswers((value) => ({ ...value, [question.id]: index }))}><span>{String.fromCharCode(65 + index)}</span><b>{option}</b></button>)}</div>
     <footer><button type="button" disabled={questionIndex === 0} onClick={() => setQuestionIndex((value) => value - 1)}>Sebelumnya</button><Button disabled={selected === undefined || busy} onClick={() => isLast ? finish() : setQuestionIndex((value) => value + 1)}>{isLast ? 'Selesai' : 'Lanjut'}<ArrowRight size={14} /></Button></footer>
   </section>;
 }

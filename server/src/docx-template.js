@@ -211,6 +211,35 @@ function ensureContentType(contentTypesXml, extension) {
   );
 }
 
+/**
+ * Memaksa paragraf bergambar pada cover menjadi rata tengah.
+ *
+ * Penggantian logo hanya menukar berkas media dan tidak menyentuh perataan,
+ * sehingga logo mewarisi perataan template asal dan sering tampak bergeser ke
+ * kiri. w:jc disisipkan sebelum w:rPr bila ada, karena skema menempatkan jc
+ * mendahului rPr di dalam w:pPr.
+ */
+export function centerImageParagraphs(elements = []) {
+  return elements.map((element) => {
+    if (!/<w:drawing\b|<w:pict\b/i.test(element)) return element;
+
+    if (/<w:pPr\b/i.test(element)) {
+      return element.replace(/<w:pPr\b[^>]*>([\s\S]*?)<\/w:pPr>/i, (match, inner) => {
+        if (/<w:jc\b/i.test(inner)) {
+          return match.replace(/<w:jc\b[^>]*\/>/i, '<w:jc w:val="center"/>');
+        }
+        const centered = /<w:rPr\b/i.test(inner)
+          ? inner.replace(/<w:rPr\b/i, '<w:jc w:val="center"/><w:rPr')
+          : `${inner}<w:jc w:val="center"/>`;
+        return match.replace(inner, centered);
+      });
+    }
+
+    // Paragraf tanpa w:pPr: sisipkan blok baru tepat setelah tag pembuka.
+    return element.replace(/<w:p\b[^>]*>/i, (match) => `${match}<w:pPr><w:jc w:val="center"/></w:pPr>`);
+  });
+}
+
 function replaceCoverImage(templateZip, coverElements, logoBuffer, extension = 'png') {
   if (!logoBuffer?.length) return;
   const embedId = coverElements.join('').match(/\br:embed="([^"]+)"/i)?.[1];
@@ -304,7 +333,7 @@ export function mergeReportWithTemplate({ reportBuffer, templateBuffer, slots })
   const templateElements = splitTopLevelElements(templateParts.body);
   const reportElements = splitTopLevelElements(reportParts.body);
   const boundary = detectCoverBoundary(templateElements);
-  const coverElements = patchCoverElements(templateElements.slice(0, boundary), slots);
+  const coverElements = centerImageParagraphs(patchCoverElements(templateElements.slice(0, boundary), slots));
   replaceCoverImage(templateZip, coverElements, slots.institutionLogoBuffer, slots.institutionLogoExtension);
   const templateSection = [...templateElements].reverse().find((element) => /^<w:sectPr\b/i.test(element.trim())) || '';
   const reportBody = reportElements.filter((element) => !/^<w:sectPr\b/i.test(element.trim())).join('');

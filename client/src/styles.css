@@ -9212,3 +9212,52 @@ kini dirender berurutan ke bawah di dalam area yang dapat digulir. */
 .attachment-pdf-pages{display:flex;flex-direction:column;align-items:center;gap:14px}
 .attachment-pdf-page{width:100%;height:auto;border:1px solid var(--workspace-line);border-radius:6px;background:#fff}
 .attachment-preview-body{overflow-y:auto;max-height:min(74vh,780px)}
+
+/* ── Quiz: mengikuti tema, aksen seperlunya ────────────────────────────────
+Versi sebelumnya memberi tiap opsi warna solid berbeda (biru, hijau, oranye,
+merah muda) sehingga terbaca seperti kuis permainan dan bertabrakan dengan
+seluruh workspace. Sekarang seluruh permukaan memakai token tema, dan aksen
+hanya muncul tipis pada status terpilih dan garis kemajuan.
+Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
+.quiz-player{display:flex;flex-direction:column;gap:16px;padding:20px;border:1px solid var(--workspace-line);border-radius:14px;background:var(--workspace-panel)}
+.quiz-player>header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:transparent;padding:0;border:0}
+.quiz-player>header span{font-size:.72rem;color:var(--workspace-muted)}
+.quiz-player>header b{font-size:.72rem;font-variant-numeric:tabular-nums;color:var(--workspace-muted)}
+.quiz-player>header div{flex:1 1 120px;height:3px;border-radius:999px;background:var(--workspace-hover);overflow:hidden}
+.quiz-player>header div i{display:block;height:100%;border-radius:999px;background:var(--workspace-accent);transition:width .25s ease}
+
+.quiz-question-card{padding:0;border:0;background:transparent}
+.quiz-question-card small{display:block;margin-bottom:6px;font-size:.7rem;color:var(--workspace-muted)}
+.quiz-question-card h3{margin:0;font-size:1.02rem;line-height:1.45;font-weight:600;color:var(--workspace-text)}
+
+.quiz-options{display:flex;flex-direction:column;gap:8px}
+.quiz-option{display:flex;align-items:center;gap:11px;width:100%;padding:12px 14px;border:1px solid var(--workspace-line)!important;border-radius:10px;background:var(--workspace-card)!important;color:var(--workspace-text)!important;text-align:left;transition:border-color .14s ease,background-color .14s ease}
+.quiz-option:hover{background:var(--workspace-hover)!important}
+.quiz-option span{flex:none;width:24px;height:24px;display:grid;place-items:center;border:1px solid var(--workspace-line);border-radius:7px;background:transparent!important;font-size:.7rem;font-weight:700;color:var(--workspace-muted)!important}
+.quiz-option b{font-size:.86rem;font-weight:500;line-height:1.45}
+/* Aksen hanya sebagai lapisan tipis, bukan warna dominan. */
+.quiz-option.selected{border-color:color-mix(in srgb,var(--workspace-accent) 55%,var(--workspace-line))!important;background:color-mix(in srgb,var(--workspace-accent) 10%,var(--workspace-card))!important}
+.quiz-option.selected span{border-color:color-mix(in srgb,var(--workspace-accent) 55%,var(--workspace-line));color:var(--workspace-text)!important}
+
+.quiz-player>footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0;border:0;background:transparent}
+.quiz-player>footer button:first-child{padding:8px 12px;border:1px solid var(--workspace-line);border-radius:9px;background:transparent;color:var(--workspace-text);font-size:.76rem}
+.quiz-player>footer button:first-child:disabled{opacity:.45}
+
+.quiz-gate{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:16px 18px;border:1px solid var(--workspace-line)!important;border-radius:14px;background:var(--workspace-panel)!important}
+.quiz-gate small{display:block;font-size:.68rem;color:var(--workspace-muted)}
+.quiz-gate h3{margin:4px 0 3px;font-size:.94rem;font-weight:600;color:var(--workspace-text)}
+.quiz-gate p{margin:0;font-size:.76rem;color:var(--workspace-muted)}
+.quiz-passed span{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:color-mix(in srgb,var(--workspace-accent) 12%,transparent);color:var(--workspace-text)}
+
+.quiz-result{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:18px;border:1px solid var(--workspace-line)!important;border-radius:14px;background:var(--workspace-panel)!important}
+.quiz-result-score{display:flex;align-items:baseline;gap:2px;padding:10px 14px;border:1px solid var(--workspace-line);border-radius:11px;background:var(--workspace-card)}
+.quiz-result-score span{font-size:1.5rem;font-weight:800;font-variant-numeric:tabular-nums;color:var(--workspace-text)}
+.quiz-result-score small{font-size:.7rem;color:var(--workspace-muted)}
+.quiz-result small{font-size:.68rem;color:var(--workspace-muted)}
+.quiz-result h3{margin:4px 0 3px;font-size:.94rem;font-weight:600;color:var(--workspace-text)}
+.quiz-result p{margin:0;font-size:.76rem;color:var(--workspace-muted);max-width:48ch}
+.quiz-result.passed .quiz-result-score{border-color:color-mix(in srgb,var(--workspace-accent) 45%,var(--workspace-line));background:color-mix(in srgb,var(--workspace-accent) 10%,var(--workspace-card))}
+@media(max-width:620px){
+  .quiz-gate,.quiz-result{flex-direction:column;align-items:flex-start}
+  .quiz-player{padding:16px}
+}
