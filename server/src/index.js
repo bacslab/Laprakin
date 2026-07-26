@@ -2356,6 +2356,23 @@ const landingMediaUpload = multer({
   },
 });
 
+/**
+ * Mengirim berkas privat hanya bila benar-benar berada di dalam direktori upload.
+ *
+ * Kepemilikan sudah diperiksa pemanggil dan storage_path selalu dibuat server
+ * lewat nanoid + sanitizeFilename, jadi ini pertahanan berlapis: bila suatu saat
+ * nilai storage_path dapat dipengaruhi input, path di luar uploadDir tetap
+ * ditolak alih-alih terkirim.
+ */
+function sendPrivateFile(res, storagePath) {
+  const root = path.resolve(config.uploadDir);
+  const target = path.resolve(String(storagePath || ''));
+  if (target !== root && !target.startsWith(root + path.sep)) {
+    throw new HttpError(404, 'File tidak ditemukan.', 'FILE_NOT_FOUND');
+  }
+  return res.sendFile(target);
+}
+
 const institutionLogoUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
@@ -2716,7 +2733,7 @@ app.get('/api/chat/attachments/:id/preview', requireAuth, (req, res) => {
   if (!String(attachment.mime_type || '').startsWith('image/') && attachment.mime_type !== 'application/pdf') throw new HttpError(415, 'Preview hanya tersedia untuk gambar dan PDF.', 'PREVIEW_UNSUPPORTED');
   res.type(attachment.mime_type);
   res.setHeader('Content-Disposition', 'inline');
-  res.sendFile(path.resolve(attachment.storage_path));
+  sendPrivateFile(res, attachment.storage_path);
 });
 
 app.get('/api/chat/attachments/:id/file', requireAuth, (req, res) => {
@@ -2728,7 +2745,7 @@ app.get('/api/chat/attachments/:id/file', requireAuth, (req, res) => {
   res.type(attachment.detected_mime || attachment.mime_type || mime.lookup(attachment.original_name) || 'application/octet-stream');
   res.setHeader('Content-Disposition', `inline; filename="${sanitizeFilename(attachment.original_name)}"`);
   res.setHeader('Cache-Control', 'private, no-store');
-  res.sendFile(path.resolve(attachment.storage_path));
+  sendPrivateFile(res, attachment.storage_path);
 });
 
 app.get('/api/chat/attachments/:id/text-preview', requireAuth, asyncHandler(async (req, res) => {
@@ -3443,7 +3460,7 @@ app.get('/api/files/:id/preview', requireAuth, (req, res) => {
   }
   res.type(file.mime_type);
   res.setHeader('Content-Disposition', 'inline');
-  res.sendFile(path.resolve(file.storage_path));
+  sendPrivateFile(res, file.storage_path);
 });
 
 app.delete('/api/files/:id', requireAuth, requireCsrf, (req, res) => {
