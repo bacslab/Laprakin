@@ -2201,6 +2201,19 @@ export async function analyzeDocument(documentId, userId, progress) {
  * yang meminta model menandai seluruh bukti sebagai berhasil. Menjadikannya satu
  * baris pendek membuat isinya tidak dapat menyamar sebagai instruksi terpisah.
  */
+/**
+ * Tahun ajaran berjalan menurut kalender akademik Indonesia.
+ *
+ * Tahun ajaran dimulai sekitar Juli, jadi Januari sampai Juni masih termasuk
+ * tahun ajaran yang dibuka tahun sebelumnya. Sebelumnya nilainya dipatok
+ * '2025/2026' sehingga cover menua diam-diam setiap pergantian tahun.
+ */
+export function currentAcademicYear(reference = new Date()) {
+  const year = reference.getFullYear();
+  const startYear = reference.getMonth() + 1 >= 7 ? year : year - 1;
+  return `${startYear}/${startYear + 1}`;
+}
+
 export function promptSafeLabel(value = '', maxLength = 120) {
   return String(value ?? '')
     .replace(/\s+/g, ' ')
@@ -2830,13 +2843,20 @@ Aturan keras:
 - Setiap opsi wajib singkat, idealnya 1-4 kata dan maksimal 8 kata.
 - Buat empat opsi, satu jawaban benar, dan tiga distraktor yang satu jenis dengan jawaban benar.
 - Jika jawaban benar berupa angka/IP/interface/command, distraktor juga harus angka/IP/interface/command yang muncul di laporan.
+- Distraktor wajib sekelas dengan jawaban benar: bila jawabannya alamat IP, ketiga distraktor juga alamat IP; bila jawabannya nama interface, ketiganya nama interface. Ambil distraktor dari nilai lain yang benar-benar tertulis di laporan, bukan karangan.
+- Keempat opsi harus setara panjang dan bentuknya sehingga jawaban benar tidak dapat ditebak dari formatnya saja.
+- Pertanyaan harus dapat dijawab hanya dengan membaca laporan, dan menanyakan hal yang spesifik: nilai, langkah, hasil, atau konfigurasi yang tertulis. Hindari pertanyaan tentang apa yang "dibahas" atau "dijelaskan" suatu bagian.
 - Jangan memakai opsi generic seperti praktikum, dimulai, mengidentifikasi, laporan, analisis, atau kata kerja umum.
 - Jangan memakai pengetahuan eksternal dan jangan menanyakan identitas mahasiswa.`,
         contents: [{
           role: 'user',
           parts: [{ text: `Buat tepat ${poolTarget} soal unik dari laporan berikut:\n\n${source.slice(0, 36000)}` }],
         }],
-        maxOutputTokens: 6200,
+        // Sepuluh soal beserta opsi, kutipan sumber, dan penjelasan mudah
+        // melewati anggaran lama, apalagi karena mode thinking ikut memakannya.
+        // Setiap kali terpotong, hasilnya jatuh diam-diam ke fallback mekanis
+        // yang menghasilkan soal tidak masuk akal.
+        maxOutputTokens: 14000,
         responseMimeType: 'application/json',
         responseJsonSchema,
       });
@@ -2845,7 +2865,10 @@ Aturan keras:
         .map((question) => cleanQuizQuestion(question, sectionContentByTitle))
         .filter(Boolean)
         .filter((question, index, all) => all.findIndex((item) => normalizedGrounding(item.question) === normalizedGrounding(question.question)) === index);
-    } catch {
+    } catch (quizError) {
+      // Kegagalan di sini menentukan apakah user menerima soal buatan AI atau
+      // fallback mekanis, jadi penyebabnya harus terlihat saat menelusuri.
+      console.error(`[quiz] pembuatan soal AI gagal untuk dokumen ${documentId}:`, quizError?.code || quizError?.message || quizError);
       questions = [];
     }
   }
@@ -3340,20 +3363,24 @@ export async function buildDocumentDocxBuffer(documentId, userId, { enforceExpor
     reportBuffer,
     templateBuffer: template.buffer,
     slots: {
-      courseName: document.course_name,
+      // Bila kosong, teks bawaan template kampus tidak tergantikan dan cover
+      // menampilkan mata kuliah milik pemilik template, bukan milik user.
+      courseName: document.course_name || recipe.courseName || 'MATA KULIAH ANDA',
       moduleTitle: document.module_title || document.title,
       lecturerName: document.lecturer_name || recipe.lecturerName || user.lecturer_name || '',
       lecturerNip,
       fullName: user.full_name,
       studentId: user.nim,
       className: user.class_name,
-      studyProgram: user.study_program_name || programLabel(user.study_program_key),
-      department: user.faculty_name || departmentLabel(user.department_key),
-      institutionName: user.institution_name || 'INSTITUSI',
+      // Placeholder eksplisit lebih baik daripada membiarkan teks template lama
+      // bertahan: user langsung melihat bagian mana yang masih perlu diisi.
+      studyProgram: user.study_program_name || programLabel(user.study_program_key) || 'PROGRAM STUDI ANDA',
+      department: user.faculty_name || departmentLabel(user.department_key) || 'JURUSAN ANDA',
+      institutionName: user.institution_name || 'UNIVERSITAS ANDA',
       institutionLogoUrl: user.institution_logo_url || '',
       institutionLogoBuffer: institutionLogo?.buffer || null,
       institutionLogoExtension: institutionLogo?.extension || '',
-      academicYear: document.academic_year || '2025/2026',
+      academicYear: document.academic_year || currentAcademicYear(),
     },
   });
   return { buffer, document, user, templateSource: template.source };

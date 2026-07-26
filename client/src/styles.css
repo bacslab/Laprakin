@@ -9204,3 +9204,11 @@ Terukur terhadap permukaan tergelap dan paling terang di masing-masing tema:
 /* Mode kontras tinggi didorong melewati 7:1 (AAA). */
 .workspace.theme-dark[data-contrast="high"]{--workspace-muted:#c9c6bf}
 .workspace:not(.theme-dark)[data-contrast="high"]{--workspace-muted:#43413c}
+
+/* ── Preview lampiran: gulir, bukan halaman per halaman ─────────────────────
+Modal sebelumnya terlalu lebar dan memakai tombol maju/mundur. Seluruh halaman
+kini dirender berurutan ke bawah di dalam area yang dapat digulir. */
+.attachment-preview-modal{width:min(760px,calc(100vw - 48px))!important;max-width:760px!important}
+.attachment-pdf-pages{display:flex;flex-direction:column;align-items:center;gap:14px}
+.attachment-pdf-page{width:100%;height:auto;border:1px solid var(--workspace-line);border-radius:6px;background:#fff}
+.attachment-preview-body{overflow-y:auto;max-height:min(74vh,780px)}

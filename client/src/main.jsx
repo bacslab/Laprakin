@@ -1761,10 +1761,8 @@ function Workspace() {
   };
   const documentAction = async (action, payload = {}) => {
     if (!active?.document_id) return;
-    if (action === 'export') {
-      const confirmed = await showDialog({ kind: 'confirm', title: 'Sudah cek draft?', message: 'Pastikan isi, angka, bukti, nama, NIM, dan kelas sudah benar. DOCX dibuat setelah konfirmasi ini.', confirmLabel: 'Sudah, export' });
-      if (!confirmed) return;
-    }
+    // Tanpa dialog konfirmasi: pengingat memeriksa draft sudah tampil permanen
+    // di panel dokumen, dan quiz pemahaman tetap menjadi gerbang sebelum unduh.
     setBusy(true);
     try {
       const path = action === 'analyze'
@@ -1853,7 +1851,37 @@ function Workspace() {
       setBusy(false);
     }
   };
-  const downloadExport = async () => { const exported = documentState?.exports?.find((item) => item.status === 'ready'); if (!exported) return; try { await download(`/exports/${exported.id}/download`, exported.file_name); } catch (err) { setNotice(err.message); } };
+  // Satu klik menuntaskan seluruh alur: buat DOCX bila belum ada, lalu unduh.
+  // Sebelumnya tombol memilih export berdasarkan content_signature dokumen
+  // sekarang, sedangkan fungsi ini mengambil export ready mana saja, sehingga
+  // saat keduanya tidak cocok fungsi berhenti diam-diam tanpa efek apa pun.
+  const downloadBusyRef = useRef(false);
+  const readyExportFor = (doc) => {
+    const signature = doc?.quizAccess?.contentSignature;
+    return doc?.exports?.find((item) => item.status === 'ready'
+      && (!signature || item.content_signature === signature));
+  };
+  const downloadExport = async () => {
+    // Klik berulang selama proses berjalan dihitung sebagai satu unduhan.
+    if (downloadBusyRef.current) return;
+    downloadBusyRef.current = true;
+    try {
+      let current = documentState;
+      let ready = readyExportFor(current);
+      if (!ready && active?.document_id) {
+        await documentAction('export');
+        current = await api(`/documents/${active.document_id}`);
+        setDocumentState(current);
+        ready = readyExportFor(current);
+      }
+      if (!ready) throw new Error('File Word belum siap. Coba lagi sebentar.');
+      await download(`/exports/${ready.id}/download`, ready.file_name);
+    } catch (err) {
+      setNotice(err.message);
+    } finally {
+      downloadBusyRef.current = false;
+    }
+  };
   const logout = async () => { try { await api('/auth/logout', { method: 'POST' }); } catch {} clearCsrfToken(); await refreshSession(); navigate('/'); };
   const projectEntries = useMemo(() => {
     const grouped = groupsFromSessions(sessions.filter((item) => groupLabel(item) !== 'Belum dikelompokkan'));
@@ -2289,48 +2317,64 @@ function SourceBar({ attachments, onOpen, onAdd, compact = false }) {
   </section>;
 }
 
+/**
+ * Preview PDF yang seluruh halamannya dirender berurutan ke bawah.
+ *
+ * Versi sebelumnya menampilkan satu halaman dengan tombol maju/mundur dan
+ * memanggil destroy() pada dokumen pdf.js lewat effect terpisah. Saat modal
+ * ditutup, destroy() berjalan sementara getPage/render masih tertunda, promise
+ * yang ditolak tidak pernah ditangkap, dan seluruh tampilan jatuh ke error
+ * boundary. Sekarang satu effect memegang seluruh siklus hidupnya.
+ */
 function PdfAttachmentPreview({ file }) {
-  const canvasRef = useRef(null);
-  const documentRef = useRef(null);
-  const renderRef = useRef(null);
-  const [pageNumber, setPageNumber] = useState(1);
+  const containerRef = useRef(null);
   const [pageCount, setPageCount] = useState(0);
   const [error, setError] = useState('');
-  useEffect(() => { setPageNumber(1); setError(''); }, [file.id]);
+
   useEffect(() => {
     let disposed = false;
-    const render = async () => {
+    let pdf = null;
+    const container = containerRef.current;
+    setError('');
+    setPageCount(0);
+
+    const renderAll = async () => {
       try {
         const { GlobalWorkerOptions, getDocument: getPdfDocument } = await import('pdfjs-dist/build/pdf.mjs');
         GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-        if (!documentRef.current) {
-          const task = getPdfDocument({ url: `/api/chat/attachments/${file.id}/file`, withCredentials: true });
-          documentRef.current = await task.promise;
-        }
-        const pdf = documentRef.current;
+        pdf = await getPdfDocument({ url: `/api/chat/attachments/${file.id}/file`, withCredentials: true }).promise;
         if (disposed) return;
         setPageCount(pdf.numPages);
-        const page = await pdf.getPage(Math.min(pageNumber, pdf.numPages));
-        const canvas = canvasRef.current;
-        if (!canvas || disposed) return;
-        const viewport = page.getViewport({ scale: 1.55 });
-        const context = canvas.getContext('2d');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        renderRef.current?.cancel();
-        renderRef.current = page.render({ canvasContext: context, viewport });
-        await renderRef.current.promise;
+        for (let number = 1; number <= pdf.numPages; number += 1) {
+          if (disposed || !container) return;
+          const page = await pdf.getPage(number);
+          if (disposed || !container) return;
+          const viewport = page.getViewport({ scale: 1.35 });
+          const canvas = document.createElement('canvas');
+          canvas.className = 'attachment-pdf-page';
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          container.appendChild(canvas);
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        }
       } catch (previewError) {
         if (!disposed && previewError?.name !== 'RenderingCancelledException') setError('PDF tidak dapat ditampilkan.');
       }
     };
-    render();
-    return () => { disposed = true; try { renderRef.current?.cancel(); } catch {} };
-  }, [file.id, pageNumber]);
-  useEffect(() => () => { documentRef.current?.destroy(); documentRef.current = null; }, [file.id]);
+    renderAll();
+
+    return () => {
+      disposed = true;
+      // destroy() menolak setiap operasi yang masih tertunda. Tanpa catch,
+      // penolakan itu lolos sebagai unhandled rejection saat modal ditutup.
+      try { pdf?.destroy?.()?.catch?.(() => {}); } catch { /* sudah terlanjur tertutup */ }
+      if (container) container.replaceChildren();
+    };
+  }, [file.id]);
+
   return <div className="attachment-pdf-preview">
-    {error ? <div className="attachment-preview-error"><CircleAlert size={17}/>{error}</div> : <canvas ref={canvasRef} />}
-    {pageCount > 1 && <div className="attachment-page-controls"><button type="button" disabled={pageNumber <= 1} onClick={() => setPageNumber((value) => value - 1)}><ArrowLeft size={14}/>Sebelumnya</button><span>Halaman {pageNumber} dari {pageCount}</span><button type="button" disabled={pageNumber >= pageCount} onClick={() => setPageNumber((value) => value + 1)}>Berikutnya<ArrowRight size={14}/></button></div>}
+    {error && <div className="attachment-preview-error"><CircleAlert size={17}/>{error}</div>}
+    <div ref={containerRef} className="attachment-pdf-pages" aria-label={pageCount ? `Dokumen ${pageCount} halaman` : 'Memuat dokumen'} />
   </div>;
 }
 
@@ -2739,7 +2783,7 @@ function DocumentSidePanel({ documentState, activeJob, workflow, busy, user, onC
     <header className="document-side-head">
       <div><small>Dokumen laprak</small><b>{documentState.title}</b></div>
       <div className="document-side-actions">
-        {exported && canDownload ? <button type="button" onClick={onDownload}><ArrowDownToLine size={15} />Unduh</button> : isGenerated ? <button type="button" disabled={busy} onClick={() => canDownload ? onAction('export') : onStartQuiz()}><ArrowDownToLine size={15} />Unduh</button> : null}
+        {isGenerated && <button type="button" disabled={busy} onClick={() => (canDownload ? onDownload() : onStartQuiz())}><ArrowDownToLine size={15} />Unduh</button>}
         <IconButton label="Tutup dokumen" onClick={onClose}><X size={17} /></IconButton>
       </div>
     </header>
