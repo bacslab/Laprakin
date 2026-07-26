@@ -60,9 +60,22 @@ if [[ ! -s "$SSH_KEY" ]]; then
   echo "deploy: deploy key belum ada di $SSH_KEY; dilewati"
   exit 0
 fi
-if ! ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
-  -o BatchMode=yes -o ConnectTimeout=15 -T git@github.com 2>&1 | grep -q 'successfully authenticated'; then
+# Output ditangkap lebih dulu, bukan disalurkan langsung ke grep: `ssh -T` ke
+# GitHub selalu keluar dengan kode 1 karena tidak ada shell, dan dengan pipefail
+# aktif exit code itu menutupi hasil grep sehingga otentikasi yang berhasil pun
+# terbaca sebagai gagal.
+AUTH_OUTPUT="$(ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+  -o BatchMode=yes -o ConnectTimeout=15 -T git@github.com 2>&1 || true)"
+if ! printf '%s' "$AUTH_OUTPUT" | grep -q 'successfully authenticated'; then
   echo "deploy: deploy key belum diotorisasi di GitHub; dilewati" >&2
+  exit 0
+fi
+
+# Branch release baru terbentuk setelah workflow CI pertama selesai. Sampai saat
+# itu kondisinya sama seperti deploy key yang belum terdaftar: bagian dari setup,
+# bukan kegagalan yang perlu dikabarkan tiap lima menit.
+if ! git ls-remote --exit-code --heads "$REPO_URL" "$BRANCH" >/dev/null 2>&1; then
+  echo "deploy: branch $BRANCH belum ada di remote; dilewati"
   exit 0
 fi
 
