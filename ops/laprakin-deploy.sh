@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# Deploy otomatis Laprakin, model tarik (pull).
+#
+# VM yang menarik perubahan, bukan GitHub yang mendorong. Alasannya: port 22
+# dibatasi ke IP operator, sedangkan runner GitHub Actions ber-IP dinamis.
+# Model tarik hanya butuh koneksi keluar, sehingga NSG tetap tertutup dan tidak
+# ada private key SSH yang dititipkan sebagai secret di GitHub.
+#
+# Hanya branch `release` yang dipakai. Branch itu dimajukan oleh workflow CI
+# setelah unit test dan audit lulus, jadi commit yang gagal test tidak pernah
+# sampai ke pengguna.
+#
+# Urutan tiap deploy: backup -> build image kandidat -> uji boot di container
+# canary terisolasi -> baru promosikan. Bila canary gagal, produksi tidak
+# tersentuh sama sekali dan operator menerima notifikasi.
+set -uo pipefail
+
+APP_DIR="${LAPRAKIN_APP_DIR:-/opt/laprakin}"
+STATE_DIR="${LAPRAKIN_DEPLOY_STATE_DIR:-/var/lib/laprakin-deploy}"
+REPO_DIR="$STATE_DIR/repo"
+REPO_URL="${LAPRAKIN_REPO_URL:-git@github.com:Mubax5/Laprakin.git}"
+BRANCH="${LAPRAKIN_DEPLOY_BRANCH:-release}"
+SSH_KEY="${LAPRAKIN_DEPLOY_KEY:-$STATE_DIR/deploy-key}"
+NOTIFY="${LAPRAKIN_NOTIFY_BIN:-/usr/local/bin/laprakin-notify.sh}"
+CANARY_PORT="${LAPRAKIN_CANARY_PORT:-4555}"
+LOCK_FILE="$STATE_DIR/deploy.lock"
+
+export GIT_SSH_COMMAND="ssh -i $SSH_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+mkdir -p "$STATE_DIR"
+
+# Satu deploy pada satu waktu. Timer berjalan tiap lima menit sedangkan build
+# dapat memakan lebih lama dari itu pada VM 1 GB.
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "deploy: proses lain masih berjalan; dilewati"
+  exit 0
+fi
+
+notify() {
+  [[ -x "$NOTIFY" ]] && "$NOTIFY" "$1" "$2" >/dev/null 2>&1 || true
+}
+
+fail() {
+  echo "deploy GAGAL: $1" >&2
+  notify "Deploy gagal" "$1"
+  exit 1
+}
+
+cleanup_canary() {
+  docker rm -f laprakin-canary >/dev/null 2>&1 || true
+}
+trap cleanup_canary EXIT
+
+# ── Pastikan akses repository sudah dikonfigurasi ───────────────────────────
+# Selama deploy key belum didaftarkan di GitHub, kondisi ini tidak dianggap
+# kegagalan: timer berjalan tiap lima menit, dan mengirim notifikasi setiap kali
+# hanya akan membanjiri inbox operator saat setup belum tuntas.
+if [[ ! -s "$SSH_KEY" ]]; then
+  echo "deploy: deploy key belum ada di $SSH_KEY; dilewati"
+  exit 0
+fi
+if ! ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+  -o BatchMode=yes -o ConnectTimeout=15 -T git@github.com 2>&1 | grep -q 'successfully authenticated'; then
+  echo "deploy: deploy key belum diotorisasi di GitHub; dilewati" >&2
+  exit 0
+fi
+
+# ── Ambil revisi terbaru ────────────────────────────────────────────────────
+if [[ ! -d "$REPO_DIR/.git" ]]; then
+  git clone --quiet --branch "$BRANCH" "$REPO_URL" "$REPO_DIR" || fail "clone repository gagal"
+fi
+
+git -C "$REPO_DIR" fetch --quiet origin "$BRANCH" || fail "fetch branch $BRANCH gagal"
+TARGET="$(git -C "$REPO_DIR" rev-parse "origin/$BRANCH")"
+CURRENT="$(cat "$STATE_DIR/deployed-revision" 2>/dev/null || echo '')"
+
+if [[ "$TARGET" == "$CURRENT" ]]; then
+  echo "deploy: sudah pada revisi ${TARGET:0:7}; tidak ada perubahan"
+  exit 0
+fi
+
+SUBJECT="$(git -C "$REPO_DIR" log -1 --format=%s "$TARGET")"
+FROM_LABEL="${CURRENT:0:7}"
+[[ -z "$FROM_LABEL" ]] && FROM_LABEL="belum ada"
+echo "deploy: $FROM_LABEL -> ${TARGET:0:7} ($SUBJECT)"
+
+# ── Backup sebelum menyentuh apa pun ────────────────────────────────────────
+systemctl start laprakin-backup.service >/dev/null 2>&1 || echo "deploy: backup pra-deploy gagal, dilanjutkan" >&2
+
+# ── Salin source ────────────────────────────────────────────────────────────
+# git archive dipakai agar mode berkas mengikuti git: bit executable terjaga dan
+# tidak menghasilkan direktori world-writable seperti ekstraksi arsip dari
+# Windows. Berkas tak terlacak seperti server/.env tidak tersentuh.
+git -C "$REPO_DIR" archive --format=tar "$TARGET" | tar -x -C "$APP_DIR" || fail "ekstraksi source gagal"
+
+# ── Bangun image kandidat ───────────────────────────────────────────────────
+cd "$APP_DIR" || fail "direktori aplikasi tidak ditemukan"
+docker build -q -t laprakin-laprakin:candidate . >/dev/null 2>&1 || fail "build image gagal pada ${TARGET:0:7}"
+
+# ── Uji boot di container terisolasi ────────────────────────────────────────
+# Memeriksa sintaks saja tidak cukup: kesalahan inisialisasi seperti const yang
+# dipakai sebelum dideklarasikan baru muncul saat modul dijalankan.
+cleanup_canary
+docker run -d --name laprakin-canary --memory 600m \
+  -p "127.0.0.1:${CANARY_PORT}:4000" \
+  --env-file "$APP_DIR/server/.env" \
+  -e NODE_ENV=production -e PORT=4000 \
+  -e LAPRAKIN_DATA_DIR=/tmp/canary/data \
+  -e LAPRAKIN_UPLOAD_DIR=/tmp/canary/uploads \
+  -e LAPRAKIN_PUBLIC_MEDIA_DIR=/tmp/canary/media \
+  laprakin-laprakin:candidate >/dev/null 2>&1 || fail "canary tidak dapat dijalankan"
+
+CANARY_OK=""
+for _ in $(seq 1 40); do
+  if curl -fsS -m 5 "http://127.0.0.1:${CANARY_PORT}/api/health/ready" 2>/dev/null | grep -q '"ok":true'; then
+    CANARY_OK="yes"
+    break
+  fi
+  state="$(docker inspect -f '{{.State.Status}}' laprakin-canary 2>/dev/null || echo gone)"
+  if [[ "$state" != "running" ]]; then break; fi
+  sleep 2
+done
+
+if [[ -z "$CANARY_OK" ]]; then
+  LOGS="$(docker logs --tail 20 laprakin-canary 2>&1 | tail -20)"
+  cleanup_canary
+  fail "canary ${TARGET:0:7} tidak sehat; produksi tidak diubah.\n\n$LOGS"
+fi
+cleanup_canary
+
+# ── Promosikan ──────────────────────────────────────────────────────────────
+# Image lama disimpan sebagai :previous agar rollback cukup satu retag.
+docker tag laprakin-laprakin:latest laprakin-laprakin:previous >/dev/null 2>&1 || true
+docker tag laprakin-laprakin:candidate laprakin-laprakin:latest || fail "tagging image gagal"
+docker compose up -d --no-build >/dev/null 2>&1 || fail "restart container gagal"
+
+PROD_OK=""
+for _ in $(seq 1 40); do
+  if curl -fsS -m 5 http://127.0.0.1:4000/api/health/ready 2>/dev/null | grep -q '"ok":true'; then
+    PROD_OK="yes"
+    break
+  fi
+  sleep 2
+done
+
+if [[ -z "$PROD_OK" ]]; then
+  # Canary lulus tetapi produksi tidak sehat: kembalikan segera, jangan tunggu.
+  docker tag laprakin-laprakin:previous laprakin-laprakin:latest >/dev/null 2>&1
+  docker compose up -d --no-build >/dev/null 2>&1
+  fail "produksi tidak sehat setelah promosi ${TARGET:0:7}; sudah dikembalikan ke image sebelumnya"
+fi
+
+printf '%s' "$TARGET" > "$STATE_DIR/deployed-revision"
+docker image prune -f --filter "until=168h" >/dev/null 2>&1 || true
+
+echo "deploy: berhasil pada ${TARGET:0:7}"
+notify "Deploy berhasil" "Revisi ${TARGET:0:7} aktif di production.\n\n$SUBJECT"

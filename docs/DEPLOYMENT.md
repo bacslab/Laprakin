@@ -169,6 +169,55 @@ az snapshot create -g RG-LAPRAKIN-PROD -n snap-laprakin-$(date +%Y%m%d) \
 
 Restore diverifikasi dengan mendekripsi arsip terbaru ke direktori sementara, lalu memeriksa `PRAGMA integrity_check` pada SQLite hasil ekstraksi. Lakukan minimal sekali setiap kali skrip backup atau skema database berubah.
 
+## 4a. Deploy otomatis dari GitHub
+
+Model **tarik**, bukan dorong. VM yang memeriksa GitHub, karena port 22 dibatasi ke IP operator sedangkan runner GitHub Actions ber-IP dinamis. Konsekuensinya baik: tidak ada port yang perlu dibuka, dan tidak ada private key SSH yang dititipkan sebagai secret di GitHub.
+
+### Alur
+
+1. Commit masuk ke `main`.
+2. Workflow `test.yml` menjalankan unit test dan `npm audit`.
+3. Job `release` memajukan branch `release` ke commit tersebut **hanya bila keduanya lulus**.
+4. `laprakin-deploy.timer` di VM memeriksa `release` setiap lima menit.
+5. Bila ada revisi baru: backup → `git archive` ke `/opt/laprakin` → build `laprakin-laprakin:candidate` → jalankan container **canary** terisolasi di port 4555 dengan data sementara → tunggu `/api/health/ready` → baru promosikan ke `latest` dan restart produksi.
+
+Commit yang gagal test tidak pernah mencapai `release`. Image yang gagal boot tidak pernah dipromosikan; produksi tetap melayani image lama. Bila produksi ternyata tidak sehat setelah promosi, skrip mengembalikan `laprakin-laprakin:previous` tanpa menunggu operator.
+
+Canary bukan formalitas: deploy 26 Juli 2026 sempat membuat produksi crash-loop karena sebuah rute memakai `const` multer yang dideklarasikan ratusan baris di bawahnya. `node --check` meloloskannya karena sintaksnya sah. Hanya menjalankan modulnya yang menangkap kelas kesalahan ini.
+
+### Pemasangan
+
+```bash
+sudo install -o root -g root -m 750 ops/laprakin-deploy.sh /usr/local/bin/
+sudo install -m 0644 ops/laprakin-deploy.service ops/laprakin-deploy.timer /etc/systemd/system/
+sudo install -d -o root -g root -m 700 /var/lib/laprakin-deploy
+sudo ssh-keygen -t ed25519 -N "" -C "laprakin-vm-deploy-readonly" -f /var/lib/laprakin-deploy/deploy-key
+sudo systemctl daemon-reload && sudo systemctl enable --now laprakin-deploy.timer
+```
+
+Daftarkan `deploy-key.pub` di **GitHub → repository → Settings → Deploy keys**, **tanpa** mencentang write access. Kunci ini hanya perlu membaca. Selama belum didaftarkan, skrip keluar diam-diam tanpa mengirim notifikasi agar inbox tidak dibanjiri selama setup.
+
+### Operasi harian
+
+```bash
+sudo systemctl start laprakin-deploy.service         # deploy sekarang, tanpa menunggu timer
+sudo journalctl -u laprakin-deploy.service -n 40     # riwayat deploy
+cat /var/lib/laprakin-deploy/deployed-revision       # revisi yang sedang aktif
+```
+
+Rollback manual bila diperlukan:
+
+```bash
+docker tag laprakin-laprakin:previous laprakin-laprakin:latest
+cd /opt/laprakin && docker compose up -d --no-build
+```
+
+Kosongkan `deployed-revision` untuk memaksa deploy ulang pada siklus berikutnya. Untuk membekukan deployment sementara, `sudo systemctl stop laprakin-deploy.timer`.
+
+### Batas yang perlu disadari
+
+Tidak ada environment staging. Commit yang lulus test dan berhasil boot akan langsung dilihat pengguna, meskipun secara fungsional keliru. Gerbang yang ada menahan kegagalan test dan kegagalan boot, bukan kekeliruan logika.
+
 ## 5a. Monitoring dan alert
 
 Dua lapis, karena keduanya buta terhadap hal yang berbeda.

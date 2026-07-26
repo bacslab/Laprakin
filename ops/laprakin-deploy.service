@@ -1,0 +1,19 @@
+[Unit]
+Description=Deploy Laprakin from the release branch
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+# Dipanggil lewat bash agar tidak bergantung pada bit executable berkas.
+ExecStart=/bin/bash /usr/local/bin/laprakin-deploy.sh
+# Build dapat berlangsung beberapa menit pada VM 1 GB.
+TimeoutStartSec=1800
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

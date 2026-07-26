@@ -29,3 +29,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:audit
+
+  # Gerbang rilis. Branch `release` hanya maju ketika unit test dan audit lulus,
+  # dan VM production hanya men-deploy dari branch ini. Dengan begitu commit yang
+  # gagal test tidak pernah sampai ke pengguna, tanpa perlu membuka port apa pun
+  # ke runner GitHub.
+  release:
+    needs: [unit, audit]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Majukan branch release ke commit yang lulus
+        run: git push origin "${{ github.sha }}:refs/heads/release"
