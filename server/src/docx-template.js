@@ -93,12 +93,37 @@ function replaceTextInSegment(segment, value) {
   });
 }
 
+/** Menulis beberapa baris ke dalam satu segmen, dipisah w:br di dalam run. */
+function replaceTextLinesInSegment(segment, values, breakNode) {
+  const list = values.length ? values : [''];
+  let replaced = false;
+  return segment.replace(TEXT_NODE, (match, open, _content, close) => {
+    if (replaced) return `${open}${close}`;
+    replaced = true;
+    return list.map((value) => `${open}${xmlEscape(value)}${close}`).join(breakNode);
+  });
+}
+
+/**
+ * Menulis daftar baris ke paragraf cover.
+ *
+ * Jumlah baris yang perlu ditulis tidak selalu sama dengan jumlah w:br yang
+ * kebetulan ada di template. Versi sebelumnya memetakan lines[index] ke segmen
+ * yang tersedia saja, sehingga template dengan dua baris membuang baris ketiga
+ * dan keempat tanpa jejak: pada blok akademik itu berarti nama universitas dan
+ * tahun akademik tidak pernah muncul di cover. Sisa baris kini digabungkan ke
+ * segmen terakhir dengan break tambahan.
+ */
 function replaceParagraphLines(xml, lines) {
   const segments = String(xml).split(BREAK_NODE);
   const breaks = String(xml).match(BREAK_NODE) || [];
+  const breakNode = breaks[0] || '<w:br/>';
+  const lastIndex = segments.length - 1;
   return segments.map((segment, index) => {
-    const updated = replaceTextInSegment(segment, lines[index] || '');
-    return index < breaks.length ? `${updated}${breaks[index]}` : updated;
+    if (index < lastIndex) {
+      return `${replaceTextInSegment(segment, lines[index] || '')}${breaks[index] || breakNode}`;
+    }
+    return replaceTextLinesInSegment(segment, lines.slice(index), breakNode);
   }).join('');
 }
 
@@ -150,7 +175,7 @@ function patchAcademicLine(line, slots) {
   return result;
 }
 
-function patchCoverElements(elements, slots) {
+export function patchCoverElements(elements, slots) {
   const patched = [...elements];
   const titleIndex = patched.findIndex((element) => /\bLAPORAN\s+PRAKTIKUM\b/i.test(elementText(element)));
   const lecturerLabelIndex = patched.findIndex((element) => /\bDOSEN\s+PENGAMPU\b/i.test(elementText(element)));
@@ -182,8 +207,24 @@ function patchCoverElements(elements, slots) {
       String(slots.institutionName || 'INSTITUSI').toUpperCase(),
       `TAHUN AKADEMIK ${slots.academicYear || '-'}`,
     ]);
+    // Tahun akademik harus menjadi baris terakhir halaman cover. Paragraf kosong
+    // yang tersisa di bawahnya membuatnya terangkat dari dasar halaman.
+    return trimTrailingEmptyParagraphs(patched, academicIndex);
   }
   return patched;
+}
+
+/** Membuang paragraf tanpa teks dan tanpa gambar setelah indeks tertentu. */
+function trimTrailingEmptyParagraphs(elements, afterIndex) {
+  let end = elements.length;
+  while (end - 1 > afterIndex) {
+    const candidate = elements[end - 1];
+    const hasText = elementText(candidate).trim().length > 0;
+    const hasGraphic = /<w:drawing\b|<w:pict\b/i.test(candidate);
+    if (hasText || hasGraphic) break;
+    end -= 1;
+  }
+  return elements.slice(0, end);
 }
 
 function relationshipAttribute(tag, name) {
