@@ -14,6 +14,7 @@
     "dev": "concurrently -n api,web -c blue,green \"npm run dev --workspace @laprakin/server\" \"npm run dev --workspace @laprakin/client\"",
     "build": "npm run build --workspace @laprakin/client",
     "start": "npm run start --workspace @laprakin/server",
+    "test": "node --test \"server/test/*.test.mjs\"",
     "test:smoke": "node scripts/smoke.mjs",
     "start:prod": "node scripts/start-production.mjs",
     "test:e2e": "node scripts/e2e.mjs",
