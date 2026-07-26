@@ -525,6 +525,37 @@ const workspaceAccents = [
   { key: 'amber', label: 'Amber', color: '#f3c969', contrast: '#211704' },
   { key: 'gray', label: 'Abu-abu', color: '#b9bab6', contrast: '#111210' },
 ];
+
+// Lime (#c2ff33) dan Amber (#f3c969) hanya mencapai rasio kontras sekitar 1,4:1
+// dan 1,7:1 terhadap permukaan terang, jauh di bawah 3:1 yang disyaratkan WCAG
+// untuk komponen antarmuka. Keduanya tetap dipakai pada tema gelap dan hanya
+// diganti abu-abu saat tampilan terang aktif.
+// Nama modal -> tab Settings yang dibuka. Sebelumnya berupa rantai ternary
+// sepanjang delapan cabang, sehingga menambah satu tab mudah terlewat.
+const SETTINGS_MODAL_TABS = {
+  settings: 'general',
+  'settings-billing': 'billing',
+  'settings-general': 'general',
+  'settings-personalization': 'personalization',
+  'settings-academic': 'academic',
+  'settings-storage': 'storage',
+  'settings-security': 'security',
+  'settings-archived': 'archived',
+  'settings-referral': 'referral',
+};
+
+const DARK_ONLY_ACCENTS = new Set(['lime', 'amber']);
+const LIGHT_FALLBACK_ACCENT = 'gray';
+
+/**
+ * Aksen yang benar-benar dirender. Preferensi user tidak pernah ditulis ulang,
+ * sehingga pilihan aslinya kembali begitu tema gelap dipakai lagi.
+ */
+function resolveAccent(accentKey, resolvedTheme) {
+  const requested = workspaceAccents.find((item) => item.key === accentKey) || workspaceAccents[0];
+  if (resolvedTheme !== 'light' || !DARK_ONLY_ACCENTS.has(requested.key)) return requested;
+  return workspaceAccents.find((item) => item.key === LIGHT_FALLBACK_ACCENT) || requested;
+}
 const defaultChatConfig = {
   title: 'Laprak baru',
   structureMode: 'guided',
@@ -1845,7 +1876,7 @@ function Workspace() {
   const headerSubtitle = active
     ? [workflow?.courseName || active.configuration?.courseName, workflow?.practiceTopic || active.configuration?.moduleTitle, user.studyProgramName || activeProgram?.label, workflowStatusLabel].filter(Boolean).join(' ? ')
     : 'Mulai dengan teks, bahan, atau link yang kamu punya.';
-  const workspaceAccent = workspaceAccents.find((item) => item.key === prefs.accent) || workspaceAccents[0];
+  const workspaceAccent = resolveAccent(prefs.accent, resolvedTheme);
   const recordProductUpdate = async (action) => {
     if (!productUpdate) return;
     try { await api(`/product-updates/${productUpdate.id}/receipt`, { method: 'POST', body: { action } }); }
@@ -1938,29 +1969,19 @@ function Workspace() {
         ? <DocumentSidePanel documentState={documentState} activeJob={activeJob} workflow={workflow} busy={busy || actionBusy} user={user} onClose={() => setDocumentOpen(false)} onAction={documentAction} onDownload={downloadExport} onRestoreVersion={restoreDocumentVersion} onStartQuiz={startDocumentQuiz} onSubmitQuiz={submitDocumentQuiz} />
         : <div className="config-inner"><div className="right-head"><div><b>Konfigurasi chat</b><small>Hanya untuk laprak ini.</small></div><IconButton label="Tutup konfigurasi" onClick={() => setRightOpen(false)}><PanelRightClose size={16} /></IconButton></div>{active ? <><div className="right-body"><label>Nama laprak<input value={config.title} onChange={(event) => updateConfig({ title: event.target.value })} /></label><label>Mata kuliah<input value={config.configuration.courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Opsional" /></label><label>Modul atau konteks<input value={config.configuration.moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Opsional" /></label><label>Dosen pengampu <small>opsional</small><input value={config.configuration.lecturerName || ''} onChange={(event) => updateConfig({ configuration: { lecturerName: event.target.value } })} placeholder="Nama dosen" /></label><label>NIP dosen <small>opsional</small><input value={config.configuration.lecturerNip || ''} onChange={(event) => updateConfig({ configuration: { lecturerNip: event.target.value } })} placeholder="NIP jika ada" /></label><label>Jenis struktur<CustomSelect value={config.configuration.documentProfile} onChange={(value) => updateConfig({ configuration: { documentProfile: value } })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></label><div className="structure-choice"><button className={config.structureMode === 'guided' ? 'active' : ''} onClick={() => updateConfig({ structureMode: 'guided' })}><LayoutTemplate size={15} /><span><b>Struktur prodi</b><small>Dipakai otomatis.</small></span></button><button className={config.structureMode === 'custom' ? 'active' : ''} onClick={() => updateConfig({ structureMode: 'custom' })}><SlidersHorizontal size={15} /><span><b>Struktur khusus</b><small>Hanya bila tugas berbeda.</small></span></button></div>{config.structureMode === 'custom' && <label>Susunan bagian<textarea value={config.configuration.customStructure} onChange={(event) => updateConfig({ configuration: { customStructure: event.target.value } })} placeholder="Pendahuluan, hasil, pembahasan, kesimpulan" /></label>}<label>Instruksi tambahan<textarea value={config.configuration.instructions} onChange={(event) => updateConfig({ configuration: { instructions: event.target.value } })} placeholder="Contoh: fokus ke analisis hasil." /></label></div><div className="right-foot"><Button onClick={saveConfig} disabled={busy}><Save size={14} />Simpan</Button><small>Jurusan, prodi, gaya penulisan, dan billing ada di Settings. Dark mode bisa diubah dari header workspace.</small></div></> : <div className="empty-config"><PanelRightOpen size={20} /><b>Buat chat laprak dulu.</b><p>Panel ini baru dipakai untuk mengubah konteks tugas yang sedang dibuka.</p></div>}</div>}
     </aside>}
-    {['settings','settings-billing','settings-general','settings-personalization','settings-academic','settings-storage','settings-security','settings-archived'].includes(modal) && <SettingsModal initialTab={modal === 'settings-billing' ? 'billing' : modal === 'settings-general' ? 'general' : modal === 'settings-personalization' ? 'personalization' : modal === 'settings-academic' ? 'academic' : modal === 'settings-storage' ? 'storage' : modal === 'settings-security' ? 'security' : modal === 'settings-archived' ? 'archived' : 'general'} onClose={() => setModal(null)} onSaved={refreshSession} onArchivedChanged={loadSessions} onOpenBilling={() => { setModal(null); navigate('/pricing'); }} prefs={prefs} setPrefs={setPrefs} />}{modal === 'help' && <HelpModal onClose={() => setModal(null)} />}{modal === 'feedback' && <FeedbackModal onClose={() => setModal(null)} />}{modal === 'notifications' && <NotificationModal onClose={() => setModal(null)} />}{identityIntake && <IdentityIntakeModal user={user} busy={busy} onSave={completeIdentityIntake} onBack={() => setIdentityIntake(null)} />}{tutorialOpen && <WorkspaceTutorial onClose={closeTutorial} />}{productUpdate && <ProductUpdatePopup update={productUpdate} onReceipt={recordProductUpdate} onClose={closeProductUpdate} />}
+    {SETTINGS_MODAL_TABS[modal] && <SettingsModal initialTab={SETTINGS_MODAL_TABS[modal]} onClose={() => setModal(null)} onSaved={refreshSession} onArchivedChanged={loadSessions} onOpenBilling={() => { setModal(null); navigate('/pricing'); }} prefs={prefs} setPrefs={setPrefs} />}{modal === 'help' && <HelpModal onClose={() => setModal(null)} />}{modal === 'feedback' && <FeedbackModal onClose={() => setModal(null)} />}{modal === 'notifications' && <NotificationModal onClose={() => setModal(null)} />}{identityIntake && <IdentityIntakeModal user={user} busy={busy} onSave={completeIdentityIntake} onBack={() => setIdentityIntake(null)} />}{tutorialOpen && <WorkspaceTutorial onClose={closeTutorial} />}{productUpdate && <ProductUpdatePopup update={productUpdate} onReceipt={recordProductUpdate} onClose={closeProductUpdate} />}
   </div>;
 }
 
 function AccountPopover({ onOpen, onLogout, onClose, showUpgrade = true }) {
-  const { user, setNotice } = useApp();
+  const { user } = useApp();
   const ref = useRef(null);
   useEffect(() => {
     const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose?.(); };
     window.addEventListener('mousedown', closeOutside);
     return () => window.removeEventListener('mousedown', closeOutside);
   }, [onClose]);
-  const copyReferral = async () => {
-    const code = user?.referralCode || '';
-    if (!code) return setNotice('Kode referral belum tersedia.');
-    try {
-      await navigator.clipboard?.writeText(code);
-      setNotice('Kode referral disalin. Bonus aktif jika teman belanja minimal Rp29.900 atau subscribe Pro.');
-    } catch {
-      setNotice(`Kode referral: ${code}. Bonus aktif jika teman belanja minimal Rp29.900 atau subscribe Pro.`);
-    }
-  };
-  return <div ref={ref} className="account-popover account-popover-fixed" onMouseDown={(event) => event.stopPropagation()}><div className="account-popover-head"><span className="account-popover-avatar" aria-hidden="true">{userInitials(user)}</span><div><b>{user?.fullName || 'Akun Laprakin'}</b><small>Workspace pribadi</small></div></div><div className="account-popover-divider" />{showUpgrade && <button onClick={() => onOpen('billing')}><Sparkles size={15} />Upgrade plan<ChevronRight size={14} /></button>}<button onClick={copyReferral}><Megaphone size={15} />Referral <small>min. Rp29.900</small></button><button onClick={() => onOpen('settings-personalization')}><Sliders size={15} />Personalisasi</button><button onClick={() => onOpen('settings-academic')}><UserRound size={15} />Jurusan & prodi</button><button onClick={() => onOpen('settings-general')}><Settings2 size={15} />Settings</button><div className="account-popover-divider" /><button onClick={() => onOpen('help')}><HelpCircle size={15} />Help<ChevronRight size={14} /></button><button className="logout-item" onClick={onLogout}><LogOut size={15} />Log out<ChevronRight size={14} /></button></div>;
+  return <div ref={ref} className="account-popover account-popover-fixed" onMouseDown={(event) => event.stopPropagation()}><div className="account-popover-head"><span className="account-popover-avatar" aria-hidden="true">{userInitials(user)}</span><div><b>{user?.fullName || 'Akun Laprakin'}</b><small>Workspace pribadi</small></div></div><div className="account-popover-divider" />{showUpgrade && <button onClick={() => onOpen('billing')}><Sparkles size={15} />Upgrade plan<ChevronRight size={14} /></button>}<button onClick={() => onOpen('settings-referral')}><Megaphone size={15} />Referral<ChevronRight size={14} /></button><button onClick={() => onOpen('settings-personalization')}><Sliders size={15} />Personalisasi</button><button onClick={() => onOpen('settings-academic')}><UserRound size={15} />Jurusan & prodi</button><button onClick={() => onOpen('settings-general')}><Settings2 size={15} />Settings</button><div className="account-popover-divider" /><button onClick={() => onOpen('help')}><HelpCircle size={15} />Help<ChevronRight size={14} /></button><button className="logout-item" onClick={onLogout}><LogOut size={15} />Log out<ChevronRight size={14} /></button></div>;
 }
 
 function SessionGroup({ group, items, activeId, page, onOpen, renamingId, setRenamingId, onRename, draggingSession, setDraggingSession, onDropSession, onDropGroup, folders = [], onPin, onMove, onArchive, onDelete }) {
@@ -2738,6 +2759,83 @@ function ProjectsPage({ projects, selectedProject, documents, onOpenProject, onB
   </section>;
 }
 
+const REFERRAL_STATUS_LABEL = {
+  registered: { label: 'Terdaftar', hint: 'Menunggu pembelian pertama.' },
+  pending: { label: 'Menunggu masa tahan', hint: 'Bonus dilepas setelah masa tahan selesai.' },
+  held: { label: 'Ditahan', hint: 'Sedang ditinjau sebelum bonus dilepas.' },
+  rewarded: { label: 'Bonus diberikan', hint: 'Credit sudah masuk ke saldomu.' },
+  rejected: { label: 'Tidak memenuhi syarat', hint: 'Undangan tidak memenuhi ketentuan bonus.' },
+};
+
+function ReferralSettingsPane() {
+  const { user, setNotice } = useApp();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try { setData(await api('/referral')); } catch { setData(null); } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const code = data?.code || user?.referralCode || '';
+  const inviteLink = code ? `${window.location.origin}/auth?ref=${encodeURIComponent(code)}` : '';
+
+  const copy = async (value, key) => {
+    if (!value) return setNotice('Kode referral belum tersedia.');
+    try {
+      await navigator.clipboard?.writeText(value);
+      setCopied(key);
+      setTimeout(() => setCopied((current) => (current === key ? '' : current)), 2000);
+    } catch {
+      setNotice(`Salin manual: ${value}`);
+    }
+  };
+
+  const referrals = data?.referrals || [];
+  const rewarded = referrals.filter((item) => item.status === 'rewarded').length;
+
+  return <div className="referral-settings-pane">
+    <section className="referral-code-card">
+      <div className="referral-code-head"><span className="referral-code-icon"><Megaphone size={19} /></span><div><small>Kode referralmu</small><h3>{loading && !code ? '…' : code || 'Belum tersedia'}</h3></div></div>
+      <div className="referral-code-actions">
+        <Button variant="secondary" onClick={() => copy(code, 'code')} disabled={!code}>
+          {copied === 'code' ? <><Check size={14} />Tersalin</> : <><Copy size={14} />Salin kode</>}
+        </Button>
+        <Button variant="secondary" onClick={() => copy(inviteLink, 'link')} disabled={!inviteLink}>
+          {copied === 'link' ? <><Check size={14} />Tersalin</> : <><Copy size={14} />Salin link undangan</>}
+        </Button>
+      </div>
+    </section>
+
+    <section className="referral-terms">
+      <b>Cara bonus dihitung</b>
+      <ul>
+        <li>Temanmu memasukkan kodemu saat mendaftar.</li>
+        <li>Bonus aktif setelah temanmu belanja minimal Rp29.900 atau berlangganan Pro.</li>
+        <li>Credit masuk setelah masa tahan selesai, untuk memastikan transaksinya sah.</li>
+        <li>Akun yang dibuat dari perangkat yang sama tidak dihitung.</li>
+      </ul>
+    </section>
+
+    <section className="referral-list">
+      <div className="referral-list-head">
+        <div><b>Undangan</b><small>{loading ? 'Memuat…' : `${referrals.length} terdaftar · ${rewarded} berbonus`}</small></div>
+        <button type="button" onClick={load} disabled={loading}><RefreshCw size={13} />Muat ulang</button>
+      </div>
+      {!loading && !referrals.length && <p className="referral-empty">Belum ada yang mendaftar memakai kodemu. Bagikan link undangan di atas untuk mulai.</p>}
+      {referrals.map((item) => {
+        const status = REFERRAL_STATUS_LABEL[item.status] || { label: item.status, hint: '' };
+        return <article key={item.id} className="referral-row">
+          <div><b>{item.email}</b><small>{status.hint || item.rejection_reason || ''}</small></div>
+          <span className={`referral-status referral-status-${item.status}`}>{status.label}</span>
+        </article>;
+      })}
+    </section>
+  </div>;
+}
+
 function BillingSettingsPane({ onOpenBilling }) {
   const [billing, setBilling] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2963,11 +3061,26 @@ function BillingPage() {
   </div>;
 }
 
-function AccentPicker({ value, onChange }) {
+function AccentPicker({ value, onChange, resolvedTheme = 'dark' }) {
+  const lightMode = resolvedTheme === 'light';
   return <div className="accent-picker" role="radiogroup" aria-label="Warna aksen workspace">
-    {workspaceAccents.map((accent) => <button key={accent.key} type="button" role="radio" aria-label={accent.label} title={accent.label} aria-checked={value === accent.key} className={value === accent.key ? 'selected' : ''} onClick={() => onChange(accent.key)} style={{ '--accent-swatch': accent.color }}>
-      <span className="accent-swatch">{value === accent.key && <Check size={13} />}</span>
-    </button>)}
+    {workspaceAccents.map((accent) => {
+      const unavailable = lightMode && DARK_ONLY_ACCENTS.has(accent.key);
+      return <button
+        key={accent.key}
+        type="button"
+        role="radio"
+        aria-label={unavailable ? `${accent.label} (hanya tersedia pada tema gelap)` : accent.label}
+        title={unavailable ? `${accent.label} tidak terbaca pada tema terang. Tersedia kembali di tema gelap.` : accent.label}
+        aria-checked={value === accent.key}
+        disabled={unavailable}
+        className={`${value === accent.key ? 'selected' : ''}${unavailable ? ' accent-unavailable' : ''}`.trim()}
+        onClick={() => onChange(accent.key)}
+        style={{ '--accent-swatch': accent.color }}
+      >
+        <span className="accent-swatch">{value === accent.key && !unavailable && <Check size={13} />}</span>
+      </button>;
+    })}
   </div>;
 }
 
@@ -2988,6 +3101,7 @@ function SettingsPaneHeader({ eyebrow, title, description }) {
 
 function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, prefs, setPrefs, initialTab = 'general' }) {
   const { user, setNotice, refreshSession, showDialog } = useApp();
+  const settingsTheme = useResolvedTheme(prefs?.theme || 'system');
   const [tab, setTab] = useState(initialTab);
   const [form, setForm] = useState({ nickname: user.nickname || '', fullName: user.fullName || '', nim: user.nim || '', className: user.className || '', institutionName: user.institutionName || '', institutionLogoUrl: user.institutionLogoUrl || '', facultyName: user.facultyName || '', studyProgramName: user.studyProgramName || '', lecturerName: user.lecturerName || '', lecturerNip: user.lecturerNip || '', departmentKey: user.departmentKey || '', studyProgramKey: user.studyProgramKey || '' });
   const [storage, setStorage] = useState(null);
@@ -3037,6 +3151,7 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
     { key: 'notifications', label: 'Notifikasi', icon: BellRing, title: 'Notifikasi yang berguna', description: 'Pilih kabar yang benar-benar perlu muncul.' },
     { key: 'personalization', label: 'Personalisasi', icon: Sliders, title: 'Cara Laprakin menulis', description: 'Jadikan preferensi ini sebagai titik awal untuk chat baru.' },
     { key: 'billing', label: 'Billing', icon: CreditCard, title: 'Plan dan transaksi', description: 'Lihat status plan, credit, dan histori pembayaran.' },
+    { key: 'referral', label: 'Referral', icon: Megaphone, title: 'Ajak teman pakai Laprakin', description: 'Bagikan kodemu dan pantau status bonus tiap undangan.' },
     { key: 'data', label: 'Kontrol data', icon: Database, title: 'Data tetap dalam kendalimu', description: 'Atur pemrosesan eksternal dan unduh ringkasan data.' },
     { key: 'storage', label: 'Penyimpanan', icon: FolderOpen, title: 'Penggunaan penyimpanan', description: 'Pantau file yang tersimpan pada workspace.' },
     { key: 'archived', label: 'Chat diarsipkan', icon: Archive, title: 'Chat diarsipkan', description: 'Lihat dan pulihkan percakapan yang pernah kamu arsipkan.' },
@@ -3062,12 +3177,13 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
         <SettingsPaneHeader eyebrow={activeTab.label} title={activeTab.title} description={activeTab.description} />
         {tab === 'general' && <div className="settings-pane">
           <section className="settings-group"><div className="settings-group-heading"><b>Appearance</b><small>Perubahan diterapkan langsung.</small></div><Row title="Tema"><ThemePicker value={prefs.theme || 'system'} onChange={(value) => updatePrefs({ theme: value })} /></Row><Row title="Kontras"><CustomSelect value={prefs.contrast || 'default'} onChange={(value) => updatePrefs({ contrast: value })} options={[{ value: 'default', label: 'Default' }, { value: 'high', label: 'Tinggi' }]} /></Row><Row title="Bahasa"><CustomSelect value={prefs.language || 'id'} onChange={(value) => updatePrefs({ language: value })} options={[{ value: 'id', label: 'Bahasa Indonesia' }, { value: 'en', label: 'English' }]} /></Row></section>
-          <section className="settings-group accent-settings-group"><div className="settings-group-heading"><b>Warna aksen</b><small>Dipakai untuk tombol utama dan status aktif—bukan seluruh hover.</small></div><AccentPicker value={prefs.accent || 'lime'} onChange={(accent) => updatePrefs({ accent })} /></section>
+          <section className="settings-group accent-settings-group"><div className="settings-group-heading"><b>Warna aksen</b><small>Dipakai untuk tombol utama dan status aktif—bukan seluruh hover.</small></div><AccentPicker value={prefs.accent || 'lime'} onChange={(accent) => updatePrefs({ accent })} resolvedTheme={settingsTheme} /></section>
           <Toggle checked={prefs.compact} onChange={(checked) => updatePrefs({ compact: checked })} title="Workspace ringkas" description="Rapatkan sidebar, toolbar, dan area percakapan." />
         </div>}
         {tab === 'notifications' && <div className="settings-pane"><section className="settings-group"><Toggle checked={prefs.jobNotifications !== false} onChange={(checked) => updatePrefs({ jobNotifications: checked })} title="Proses dokumen" description="Beritahu saat analisis, draft, atau export selesai." /><Toggle checked={prefs.deadlineNotifications !== false} onChange={(checked) => updatePrefs({ deadlineNotifications: checked })} title="Deadline tugas" description="Pengingat ringan untuk dokumen yang memiliki tenggat." /><Toggle checked={prefs.productUpdates !== false} onChange={(checked) => updatePrefs({ productUpdates: checked })} title="Update produk" description="Hanya perubahan fitur beta yang penting." /></section></div>}
         {tab === 'personalization' && <div className="settings-pane"><section className="settings-group nickname-settings"><div className="settings-group-heading"><b>Nama panggilan</b><small>Dipakai hanya untuk menyapamu di halaman chat. Kosongkan untuk memakai nama depan.</small></div><div className="nickname-settings-control"><label><span>Nama panggilan</span><input value={form.nickname} maxLength={20} autoComplete="nickname" onChange={(event) => setForm({ ...form, nickname: event.target.value })} placeholder={userGreetingName({ ...user, nickname: '' })} /></label><small>{form.nickname.length}/20</small><Button type="button" variant="secondary" onClick={saveNickname} disabled={busy}><Save size={14}/>Simpan</Button></div></section><section className="settings-group"><Row title="Gaya bahasa"><CustomSelect value={prefs.tone} onChange={(value) => updatePrefs({ tone: value })} options={[{ value: 'semi-formal', label: 'Semi-formal' }, { value: 'formal', label: 'Formal' }]} /></Row><Row title="Sudut pandang"><CustomSelect value={prefs.perspective} onChange={(value) => updatePrefs({ perspective: value })} options={[{ value: 'saya', label: 'Saya' }, { value: 'kita', label: 'Kita' }, { value: 'impersonal', label: 'Impersonal' }]} /></Row><Row title="Struktur awal"><CustomSelect value={prefs.profile} onChange={(value) => updatePrefs({ profile: value })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></Row></section><label className="settings-textarea"><span>Instruksi tambahan</span><small>Dipakai sebagai preferensi, bukan isi otomatis.</small><textarea value={prefs.customInstructions || ''} onChange={(event) => updatePrefs({ customInstructions: event.target.value })} placeholder="Contoh: gunakan bahasa teknis yang ringkas." /></label></div>}
         {tab === 'billing' && <BillingSettingsPane onOpenBilling={onOpenBilling} />}
+        {tab === 'referral' && <ReferralSettingsPane />}
         {tab === 'data' && <div className="settings-pane"><div className="settings-trust-card"><ShieldCheck size={19}/><div><b>Privat secara default</b><p>Isi chat dan file tidak tampil di dashboard operasional. Akses hanya dilakukan untuk proses yang kamu minta.</p></div></div><section className="settings-group"><Toggle checked={Boolean(prefs.allowExternalAi)} onChange={(checked) => updatePrefs({ allowExternalAi: checked })} title="Izinkan provider AI eksternal" description="Aktif hanya saat provider tersedia dan dibutuhkan untuk permintaanmu." /><Row title="Salinan data" description="Unduh profil, preferensi, dan ringkasan aktivitas akun."><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>Unduh data</Button></Row></section></div>}
         {tab === 'storage' && <div className="settings-pane">{storage ? <><div className="storage-overview"><div><span>Terpakai</span><b>{formatBytes(storage.usedBytes)}</b><small>dari {formatBytes(storage.limitBytes)}</small></div><strong>{storagePercentage}%</strong></div><div className="storage-meter"><i><em style={{ width: `${storagePercentage}%` }} /></i></div><div className="storage-cards"><span><FolderOpen size={17}/><b>{storage.tier === 'pro' ? 'Pro' : storage.tier === 'subscription' ? 'Subscription' : storage.tier === 'paid' ? 'Satuan' : 'Gratis'}</b><small>{storage.retentionHint}</small></span><span><FileText size={17}/><b>Yang dihitung</b><small>Modul, bukti, template, data, dan export DOCX.</small></span></div></> : <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat ringkasan penyimpanan...</div>}<p className="settings-footnote">Chat teks dan preferensi tidak dihitung sebagai penyimpanan file.</p></div>}
         {tab === 'safety' && <div className="settings-pane"><div className="safety-principles"><article><ShieldCheck size={18}/><div><b>Bukti tetap asli</b><p>Laprakin tidak membuat screenshot, data, atau hasil praktikum palsu.</p></div></article><article><FileText size={18}/><div><b>Draft tetap perlu ditinjau</b><p>Kamu memegang keputusan akhir sebelum dokumen diekspor atau dikumpulkan.</p></div></article><article><Eye size={18}/><div><b>Review secara kontekstual</b><p>Sinyal tidak biasa ditinjau sebagai metadata minimum, bukan isi pribadi.</p></div></article></div><div className="settings-info-banner"><CircleAlert size={16}/><p>Satu sinyal tidak menyebabkan pemblokiran otomatis. Jika ada batasan, Laprakin menjelaskan tindakan yang perlu dilakukan.</p></div></div>}
