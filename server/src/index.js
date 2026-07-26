@@ -1977,6 +1977,67 @@ app.put('/api/profile', requireAuth, requireCsrf, asyncHandler(async (req, res) 
   res.json({ user: publicUser(req.user.id) });
 }));
 
+/**
+ * Unggah logo institusi.
+ *
+ * Menggantikan pengisian URL bebas. Selain lebih praktis bagi user, ini juga
+ * menghapus permukaan SSRF: URL bebas membuat server melakukan fetch ke alamat
+ * pilihan user, termasuk localhost dan jaringan internal.
+ */
+app.post('/api/profile/institution-logo', requireAuth, requireCsrf, uploadLimiter, institutionLogoUpload.single('file'), asyncHandler(async (req, res) => {
+  if (!req.file) throw new HttpError(400, 'Pilih berkas logo terlebih dahulu.', 'INSTITUTION_LOGO_REQUIRED');
+  const detectedMime = detectBufferType(req.file.buffer);
+  if (detectedMime !== req.file.mimetype) {
+    throw new HttpError(400, 'Isi berkas tidak cocok dengan format yang dipilih.', 'INSTITUTION_LOGO_SIGNATURE');
+  }
+  const extension = { 'image/png': '.png', 'image/jpeg': '.jpg' }[detectedMime];
+  if (!extension) throw new HttpError(400, 'Logo institusi hanya mendukung PNG atau JPG.', 'INSTITUTION_LOGO_TYPE');
+
+  const logoDir = path.join(config.uploadDir, 'institution-logos');
+  fs.mkdirSync(logoDir, { recursive: true });
+  const filename = `logo-${req.user.id}-${nanoid(8)}${extension}`;
+  fs.writeFileSync(path.join(logoDir, filename), req.file.buffer, { flag: 'wx' });
+
+  const previous = db.prepare('SELECT institution_logo_url FROM users WHERE id = ?').get(req.user.id)?.institution_logo_url || '';
+  const url = `/api/profile/institution-logo/${filename}`;
+  db.prepare('UPDATE users SET institution_logo_url = ?, updated_at = ? WHERE id = ?').run(url, now(), req.user.id);
+
+  // Berkas lama hanya dihapus bila memang milik direktori logo, sehingga nilai
+  // URL eksternal warisan tidak pernah dipakai sebagai path penghapusan.
+  const previousName = previous.startsWith('/api/profile/institution-logo/') ? path.basename(previous) : '';
+  if (previousName && previousName !== filename) {
+    fs.rm(path.join(logoDir, previousName), { force: true }, () => {});
+  }
+
+  audit(req.user.id, 'profile.institution_logo_uploaded', 'user', req.user.id, { mimeType: detectedMime, size: req.file.size });
+  res.status(201).json({ user: publicUser(req.user.id) });
+}));
+
+app.get('/api/profile/institution-logo/:filename', requireAuth, asyncHandler(async (req, res) => {
+  // basename memblokir traversal, dan pola nama mengikat berkas ke pemiliknya.
+  const filename = path.basename(String(req.params.filename || ''));
+  if (!new RegExp(`^logo-${req.user.id}-[A-Za-z0-9_-]{1,32}\\.(?:png|jpg)$`).test(filename)) {
+    throw new HttpError(404, 'Logo tidak ditemukan.', 'INSTITUTION_LOGO_NOT_FOUND');
+  }
+  const logoDir = path.join(config.uploadDir, 'institution-logos');
+  const target = path.resolve(logoDir, filename);
+  if (!target.startsWith(path.resolve(logoDir) + path.sep)) {
+    throw new HttpError(404, 'Logo tidak ditemukan.', 'INSTITUTION_LOGO_NOT_FOUND');
+  }
+  if (!fs.existsSync(target)) throw new HttpError(404, 'Logo tidak ditemukan.', 'INSTITUTION_LOGO_NOT_FOUND');
+  res.sendFile(target);
+}));
+
+app.delete('/api/profile/institution-logo', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
+  const current = db.prepare('SELECT institution_logo_url FROM users WHERE id = ?').get(req.user.id)?.institution_logo_url || '';
+  db.prepare("UPDATE users SET institution_logo_url = '', updated_at = ? WHERE id = ?").run(now(), req.user.id);
+  if (current.startsWith('/api/profile/institution-logo/')) {
+    fs.rm(path.join(config.uploadDir, 'institution-logos', path.basename(current)), { force: true }, () => {});
+  }
+  audit(req.user.id, 'profile.institution_logo_removed', 'user', req.user.id, {});
+  res.json({ user: publicUser(req.user.id) });
+}));
+
 app.post('/api/profile/onboarding', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
   const input = onboardingPreferenceSchema.parse(req.body || {});
   db.prepare('UPDATE users SET onboarding_dismissed = ?, updated_at = ? WHERE id = ?')
@@ -2291,6 +2352,16 @@ const landingMediaUpload = multer({
   fileFilter: (_req, file, callback) => {
     const allowed = new Set(['image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'video/mp4', 'video/webm', 'video/ogg']);
     if (!allowed.has(file.mimetype)) return callback(new HttpError(400, 'Media landing hanya mendukung PNG, JPG, WEBP, PDF, MP4, atau WEBM.', 'LANDING_MEDIA_TYPE'));
+    return callback(null, true);
+  },
+});
+
+const institutionLogoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    const allowed = new Set(['image/png', 'image/jpeg']);
+    if (!allowed.has(file.mimetype)) return callback(new HttpError(400, 'Logo institusi hanya mendukung PNG atau JPG.', 'INSTITUTION_LOGO_TYPE'));
     return callback(null, true);
   },
 });

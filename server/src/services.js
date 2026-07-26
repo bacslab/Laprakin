@@ -2707,13 +2707,53 @@ function fallbackQuizQuestions(sections, targetCount) {
   });
 }
 
+/**
+ * Membaca logo institusi untuk cover DOCX.
+ *
+ * Logo yang diunggah lewat /api/profile/institution-logo dibaca langsung dari
+ * disk. Nilai http(s) hanya tersisa dari data lama; permintaan keluar dibatasi
+ * agar URL pilihan user tidak dapat memaksa server menjangkau localhost, alamat
+ * link-local, atau jaringan privat (SSRF).
+ */
+const PRIVATE_HOST_PATTERN = /^(?:localhost|(?:0|10|127)\.|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|\[?::1\]?$|\[?f[cd][0-9a-f]{2}:)/i;
+
+function isBlockedLogoHost(hostname = '') {
+  const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (!host || host === '::1' || host.endsWith('.localhost') || host.endsWith('.internal')) return true;
+  return PRIVATE_HOST_PATTERN.test(host);
+}
+
 async function fetchInstitutionLogo(url = '') {
   const value = String(url || '').trim();
+
+  if (value.startsWith('/api/profile/institution-logo/')) {
+    const logoDir = path.join(config.uploadDir, 'institution-logos');
+    const target = path.resolve(logoDir, path.basename(value));
+    if (!target.startsWith(path.resolve(logoDir) + path.sep)) return null;
+    try {
+      const buffer = await fs.readFile(target);
+      if (!buffer.length || buffer.length > 5_000_000) return null;
+      return { buffer, extension: target.toLowerCase().endsWith('.png') ? 'png' : 'jpg' };
+    } catch {
+      return null;
+    }
+  }
+
   if (!/^https?:\/\//i.test(value)) return null;
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  if (isBlockedLogoHost(parsed.hostname)) return null;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    const response = await fetch(value, { signal: controller.signal, redirect: 'follow' });
+    // redirect: 'manual' mencegah host publik memantulkan permintaan ke alamat
+    // internal lewat 3xx setelah pemeriksaan host di atas dilewati.
+    const response = await fetch(value, { signal: controller.signal, redirect: 'manual' });
     if (!response.ok) return null;
     const type = String(response.headers.get('content-type') || '').toLowerCase();
     const extension = type.includes('jpeg') || type.includes('jpg') ? 'jpg' : type.includes('png') ? 'png' : '';

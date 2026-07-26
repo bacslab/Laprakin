@@ -8,6 +8,7 @@ import {
   PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Save, Send, Settings2,
   ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, UploadCloud, X,
   ChevronRight, Database, Eye, GripVertical, Keyboard, MoreHorizontal, Pencil, Pin, PinOff, UserRound, Volume2, BellRing, Shield, Sliders, Monitor, Palette, Languages, CircleUserRound, LogOut as LogOutIcon, LayoutDashboard, Users, AlertTriangle, ClipboardList, Megaphone, RefreshCw, MessageSquareText, Activity, FileCog,
+  Copy, Upload, Image as ImageIcon,
 } from 'lucide-react';
 import { api, clearCsrfToken, download, setCsrfToken } from './api';
 import { departments, programs } from './data';
@@ -2759,6 +2760,65 @@ function ProjectsPage({ projects, selectedProject, documents, onOpenProject, onB
   </section>;
 }
 
+const INSTITUTION_LOGO_MAX_BYTES = 5 * 1024 * 1024;
+
+function InstitutionLogoField({ logoUrl = '', onChanged, setNotice }) {
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const hasLogo = Boolean(logoUrl);
+
+  const pick = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    // Diperiksa juga di server; cek di sini hanya agar user tidak menunggu
+    // unggahan yang pasti ditolak.
+    if (file.size > INSTITUTION_LOGO_MAX_BYTES) return setNotice('Ukuran logo maksimal 5 MB.');
+    if (!['image/png', 'image/jpeg'].includes(file.type)) return setNotice('Logo harus berformat PNG atau JPG.');
+    const body = new FormData();
+    body.append('file', file);
+    setBusy(true);
+    try {
+      await api('/profile/institution-logo', { method: 'POST', body, form: true });
+      await onChanged?.();
+      setNotice('Logo institusi diperbarui.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await api('/profile/institution-logo', { method: 'DELETE' });
+      await onChanged?.();
+      setNotice('Logo institusi dihapus.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <section className="settings-group institution-logo-field">
+    <div className="settings-group-heading"><b>Logo institusi</b><small>Dipakai pada cover dokumen. PNG atau JPG, maksimal 5 MB.</small></div>
+    <div className="institution-logo-row">
+      <div className="institution-logo-preview">
+        {hasLogo ? <img src={logoUrl} alt="Logo institusi" /> : <ImageIcon size={20} aria-hidden="true" />}
+      </div>
+      <div className="institution-logo-actions">
+        <input ref={inputRef} type="file" accept="image/png,image/jpeg" onChange={pick} hidden />
+        <Button variant="secondary" onClick={() => inputRef.current?.click()} disabled={busy}>
+          <Upload size={14} />{hasLogo ? 'Ganti logo' : 'Unggah logo'}
+        </Button>
+        {hasLogo && <Button variant="secondary" onClick={remove} disabled={busy}><Trash2 size={14} />Hapus</Button>}
+      </div>
+    </div>
+  </section>;
+}
+
 const REFERRAL_STATUS_LABEL = {
   registered: { label: 'Terdaftar', hint: 'Menunggu pembelian pertama.' },
   pending: { label: 'Menunggu masa tahan', hint: 'Bonus dilepas setelah masa tahan selesai.' },
@@ -3184,7 +3244,15 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
         {tab === 'personalization' && <div className="settings-pane"><section className="settings-group nickname-settings"><div className="settings-group-heading"><b>Nama panggilan</b><small>Dipakai hanya untuk menyapamu di halaman chat. Kosongkan untuk memakai nama depan.</small></div><div className="nickname-settings-control"><label><span>Nama panggilan</span><input value={form.nickname} maxLength={20} autoComplete="nickname" onChange={(event) => setForm({ ...form, nickname: event.target.value })} placeholder={userGreetingName({ ...user, nickname: '' })} /></label><small>{form.nickname.length}/20</small><Button type="button" variant="secondary" onClick={saveNickname} disabled={busy}><Save size={14}/>Simpan</Button></div></section><section className="settings-group"><Row title="Gaya bahasa"><CustomSelect value={prefs.tone} onChange={(value) => updatePrefs({ tone: value })} options={[{ value: 'semi-formal', label: 'Semi-formal' }, { value: 'formal', label: 'Formal' }]} /></Row><Row title="Sudut pandang"><CustomSelect value={prefs.perspective} onChange={(value) => updatePrefs({ perspective: value })} options={[{ value: 'saya', label: 'Saya' }, { value: 'kita', label: 'Kita' }, { value: 'impersonal', label: 'Impersonal' }]} /></Row><Row title="Struktur awal"><CustomSelect value={prefs.profile} onChange={(value) => updatePrefs({ profile: value })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></Row></section><label className="settings-textarea"><span>Instruksi tambahan</span><small>Dipakai sebagai preferensi, bukan isi otomatis.</small><textarea value={prefs.customInstructions || ''} onChange={(event) => updatePrefs({ customInstructions: event.target.value })} placeholder="Contoh: gunakan bahasa teknis yang ringkas." /></label></div>}
         {tab === 'billing' && <BillingSettingsPane onOpenBilling={onOpenBilling} />}
         {tab === 'referral' && <ReferralSettingsPane />}
-        {tab === 'data' && <div className="settings-pane"><div className="settings-trust-card"><ShieldCheck size={19}/><div><b>Privat secara default</b><p>Isi chat dan file tidak tampil di dashboard operasional. Akses hanya dilakukan untuk proses yang kamu minta.</p></div></div><section className="settings-group"><Toggle checked={Boolean(prefs.allowExternalAi)} onChange={(checked) => updatePrefs({ allowExternalAi: checked })} title="Izinkan provider AI eksternal" description="Aktif hanya saat provider tersedia dan dibutuhkan untuk permintaanmu." /><Row title="Salinan data" description="Unduh profil, preferensi, dan ringkasan aktivitas akun."><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>Unduh data</Button></Row></section></div>}
+        {tab === 'data' && <div className="settings-pane"><div className="settings-trust-card"><ShieldCheck size={19}/><div><b>Privat secara default</b><p>Isi chat dan file tidak tampil di dashboard operasional. Akses hanya dilakukan untuk proses yang kamu minta.</p></div></div><section className="settings-group"><Toggle checked={Boolean(prefs.allowExternalAi)} onChange={(checked) => updatePrefs({ allowExternalAi: checked })} title="Izinkan provider AI eksternal" description="Aktif hanya saat provider tersedia dan dibutuhkan untuk permintaanmu." /><Row title="Salinan data" description="Unduh profil, preferensi, dan ringkasan aktivitas akun."><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>Unduh data</Button></Row></section>
+          {/* Hapus akun berada satu tab dengan unduh data: urutan yang benar
+          adalah mengunduh salinan lebih dulu, baru menghapus. */}
+          <section className="settings-danger-zone">
+            <div><b>Hapus akun</b><p>Unduh data yang diperlukan terlebih dahulu. Tindakan ini tidak dapat dibatalkan.</p></div>
+            <input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} placeholder={user.email} aria-label="Ketik email akun untuk konfirmasi" />
+            <Button variant="danger" onClick={deleteAccount} disabled={busy || deleteConfirm !== user.email}>Hapus akun</Button>
+          </section>
+        </div>}
         {tab === 'storage' && <div className="settings-pane">{storage ? <><div className="storage-overview"><div><span>Terpakai</span><b>{formatBytes(storage.usedBytes)}</b><small>dari {formatBytes(storage.limitBytes)}</small></div><strong>{storagePercentage}%</strong></div><div className="storage-meter"><i><em style={{ width: `${storagePercentage}%` }} /></i></div><div className="storage-cards"><span><FolderOpen size={17}/><b>{storage.tier === 'pro' ? 'Pro' : storage.tier === 'subscription' ? 'Subscription' : storage.tier === 'paid' ? 'Satuan' : 'Gratis'}</b><small>{storage.retentionHint}</small></span><span><FileText size={17}/><b>Yang dihitung</b><small>Modul, bukti, template, data, dan export DOCX.</small></span></div></> : <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat ringkasan penyimpanan...</div>}<p className="settings-footnote">Chat teks dan preferensi tidak dihitung sebagai penyimpanan file.</p></div>}
         {tab === 'safety' && <div className="settings-pane"><div className="safety-principles"><article><ShieldCheck size={18}/><div><b>Bukti tetap asli</b><p>Laprakin tidak membuat screenshot, data, atau hasil praktikum palsu.</p></div></article><article><FileText size={18}/><div><b>Draft tetap perlu ditinjau</b><p>Kamu memegang keputusan akhir sebelum dokumen diekspor atau dikumpulkan.</p></div></article><article><Eye size={18}/><div><b>Review secara kontekstual</b><p>Sinyal tidak biasa ditinjau sebagai metadata minimum, bukan isi pribadi.</p></div></article></div><div className="settings-info-banner"><CircleAlert size={16}/><p>Satu sinyal tidak menyebabkan pemblokiran otomatis. Jika ada batasan, Laprakin menjelaskan tindakan yang perlu dilakukan.</p></div></div>}
         {tab === 'security' && <div className="settings-pane">
@@ -3193,7 +3261,19 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
           <section className="settings-group"><Row title="Keluar dari semua perangkat" description="Gunakan setelah login dari perangkat umum."><Button variant="secondary" onClick={logoutAll} disabled={busy}>Akhiri semua sesi</Button></Row></section>
         </div>}
         {tab === 'archived' && <div className="settings-pane"><section className="settings-group archived-chat-settings"><div className="settings-group-heading"><b>Percakapan arsip</b><small>Chat yang dipulihkan akan kembali muncul di sidebar.</small></div>{archivedLoading ? <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat chat arsip...</div> : archivedChats.length ? <div className="archived-chat-list">{archivedChats.map((session) => <article key={session.id}><div><b>{session.title || 'Chat baru'}</b><small>{session.course_group || 'Belum dikelompokkan'} · {formatDate(session.archived_at || session.updated_at)}</small></div><Button type="button" variant="secondary" disabled={busy} onClick={() => restoreArchivedChat(session.id)}>Pulihkan</Button></article>)}</div> : <div className="settings-empty-state"><Archive size={18}/><div><b>Belum ada chat diarsipkan</b><p>Chat yang kamu arsipkan dari sidebar akan muncul di sini.</p></div></div>}</section></div>}
-        {tab === 'academic' && <div className="settings-pane"><section className="settings-group academic-settings-form academic-settings-wide"><label><span>Nama lengkap</span><input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Nama pada cover" /></label><label><span>NPM / NIM</span><input value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder="Nomor mahasiswa" /></label><label><span>Kelas</span><input value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Contoh: RKS 20C" /></label><label><span>Univ / institusi</span><input value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder="Nama kampus" /></label><label><span>Logo institusi</span><input value={form.institutionLogoUrl} onChange={(event) => setForm({ ...form, institutionLogoUrl: event.target.value })} placeholder="URL logo kampus" /></label><label><span>Fakultas / Jurusan</span><input value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder="Fakultas atau jurusan" /></label><label><span>Program studi</span><input value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder="Program studi" /></label><label><span>Dosen pengampu <small>opsional</small></span><input value={form.lecturerName} onChange={(event) => setForm({ ...form, lecturerName: event.target.value })} placeholder="Nama dosen" /></label><label><span>NIP dosen <small>opsional</small></span><input value={form.lecturerNip} onChange={(event) => setForm({ ...form, lecturerNip: event.target.value })} placeholder="NIP jika ada" /></label><Button onClick={saveAcademic} disabled={busy}><Save size={14}/>Simpan profil akademik</Button></section><section className="settings-danger-zone"><div><b>Hapus akun</b><p>Unduh data yang diperlukan terlebih dahulu. Tindakan ini tidak dapat dibatalkan.</p></div><input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} placeholder={user.email} /><Button variant="danger" onClick={deleteAccount} disabled={busy || deleteConfirm !== user.email}>Hapus akun</Button></section></div>}
+        {tab === 'academic' && <div className="settings-pane">
+          <section className="settings-group academic-settings-form academic-settings-wide">
+            <label><span>Nama lengkap</span><input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Nama pada cover" /></label>
+            <label><span>NPM / NIM</span><input value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder="Nomor mahasiswa" /></label>
+            <label><span>Kelas</span><input value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Contoh: RKS 20C" /></label>
+            <label><span>Univ / institusi</span><input value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder="Nama kampus" /></label>
+            <label><span>Fakultas / Jurusan</span><input value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder="Fakultas atau jurusan" /></label>
+            <label><span>Program studi</span><input value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder="Program studi" /></label>
+            <Button onClick={saveAcademic} disabled={busy}><Save size={14}/>Simpan profil akademik</Button>
+          </section>
+          <InstitutionLogoField logoUrl={user.institutionLogoUrl || ''} onChanged={onSaved} setNotice={setNotice} />
+          <p className="settings-note">Dosen pengampu dan NIP diisi per laprak lewat panel <b>Konfigurasi</b>, karena berbeda tiap mata kuliah.</p>
+        </div>}
         {tab === 'keyboard' && <div className="settings-pane"><section className="settings-group"><Toggle checked={prefs.enterToSend !== false} onChange={(checked) => updatePrefs({ enterToSend: checked })} title="Enter untuk kirim" description="Gunakan Shift + Enter untuk membuat baris baru." /><Toggle checked={prefs.reducedMotion} onChange={(checked) => updatePrefs({ reducedMotion: checked })} title="Kurangi animasi" description="Pertahankan feedback penting dengan gerakan yang lebih singkat." /></section></div>}
       </div>
     </div>
