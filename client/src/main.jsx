@@ -2220,13 +2220,13 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
       <div className="identity-intake-grid">
         <label>Nama lengkap<input autoFocus autoComplete="name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Nama sesuai data kampus" /></label>
         <label>NPM / NIM<input inputMode="numeric" autoComplete="off" value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder="Nomor mahasiswa" /></label>
-        <label>Kelas<input autoComplete="off" value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Contoh: RKS 20C" /></label>
-        <label>Univ / institusi<input value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder="Contoh: Politeknik Negeri Cilacap" /></label>
+        <label>Kelas<input autoComplete="off" value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Kelas anda" /></label>
+        <label>Univ / institusi<input value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder="Contoh: Universitas Republik Indonesia" /></label>
         <label>Logo institusi <small>opsional</small><input value={form.institutionLogoUrl} onChange={(event) => setForm({ ...form, institutionLogoUrl: event.target.value })} placeholder="URL logo kampus" /></label>
-        <label>Fakultas / Jurusan<input value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder="Contoh: Jurusan Komputer dan Bisnis" /></label>
-        <label>Program studi<input value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder="Contoh: D4 Rekayasa Keamanan Siber" /></label>
-        <label>Dosen pengampu <small>opsional</small><input value={form.lecturerName} onChange={(event) => setForm({ ...form, lecturerName: event.target.value })} placeholder="Nama dosen" /></label>
-        <label>NIP dosen <small>opsional</small><input value={form.lecturerNip} onChange={(event) => setForm({ ...form, lecturerNip: event.target.value })} placeholder="NIP jika ada" /></label>
+        <label>Fakultas / Jurusan<input value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder="Contoh: Fakultas Hukum" /></label>
+        <label>Program studi<input value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder="Contoh: S1 Rekayasa Hukum" /></label>
+        <label>Dosen pengampu <small>opsional</small><input value={form.lecturerName} onChange={(event) => setForm({ ...form, lecturerName: event.target.value })} placeholder="Nama dosen (Jika ada)" /></label>
+        <label>NIP dosen <small>opsional</small><input value={form.lecturerNip} onChange={(event) => setForm({ ...form, lecturerNip: event.target.value })} placeholder="NIP (jika ada)" /></label>
       </div>
       <footer><button type="button" onClick={onBack} disabled={busy}>Kembali edit pesan</button><Button type="submit" disabled={busy || !valid}>{busy ? <LoaderCircle className="spin" size={14} /> : <ArrowRight size={14} />}Simpan & lanjutkan</Button></footer>
     </form>
@@ -3396,7 +3396,7 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
           <section className="settings-group academic-settings-form academic-settings-wide">
             <label><span>Nama lengkap</span><input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Nama pada cover" /></label>
             <label><span>NPM / NIM</span><input value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder="Nomor mahasiswa" /></label>
-            <label><span>Kelas</span><input value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Contoh: RKS 20C" /></label>
+            <label><span>Kelas</span><input value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Kelas anda" /></label>
             <label><span>Univ / institusi</span><input value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder="Nama kampus" /></label>
             <label><span>Fakultas / Jurusan</span><input value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder="Fakultas atau jurusan" /></label>
             <label><span>Program studi</span><input value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder="Program studi" /></label>

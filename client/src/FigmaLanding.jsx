@@ -495,7 +495,6 @@ export default function FigmaLanding({ navigate }) {
             </div>
           </article>)}
         </div>
-        <p className="fg-source-note">Laprakin menyusun dari bahan yang kamu punya, bukan mengarang hasil praktik yang tidak ada.</p>
       </section>
 
       <section className="fg-compare fg-section fg-container">

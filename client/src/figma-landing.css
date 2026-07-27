@@ -85,7 +85,7 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){background:#0f0f0f}
 .fg-step-controls{position:relative;z-index:6;display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px}
 .fg-step-controls button{width:42px;height:42px;display:grid;place-items:center;border:1px solid var(--fg-border);border-radius:999px;background:#181818;color:#ddd;transition:background-color .18s ease,color .18s ease}
 .fg-step-controls button:hover{background:#292929;color:#fff}
-.fg-step-controls span{min-width:48px;color:var(--fg-lime);font:750 12px 'DM Mono',monospace;text-align:center;letter-spacing:.04em}
+.fg-step-controls span{min-width:48px;color:#fff;font:750 12px 'DM Mono',monospace;text-align:center;letter-spacing:.04em}
 
 .fg-sources{display:flex;flex-direction:column;align-items:center}
 .fg-source-workbench{position:relative;width:100%;margin-top:70px;overflow:hidden;border:1px solid #353535;border-radius:4px;background:#111}
@@ -237,11 +237,6 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){background:#0f0f0f}
   .fg-page *{scroll-behavior:auto!important;transition:none!important}
 }
 
-/* ── Section bahan (pengganti source desk) ─────────────────────────────────
-Versi sebelumnya berupa mockup interaktif dengan nama berkas rekaan, benang SVG,
-dan label kapital berbahasa Inggris. Bentuknya tidak selaras dengan section lain
-di landing dan terbaca seperti tangkapan layar produk yang tidak pernah ada.
-Sekarang memakai kisi kartu yang sama dengan section fitur. */
 .fg-source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:58px}
 .fg-source-grid article{display:flex;flex-direction:column;gap:16px;padding:26px;border:1px solid var(--fg-border);border-radius:22px;background:var(--fg-card)}
 .fg-source-icon{width:42px;height:42px;flex:none;display:grid;place-items:center;border:1px solid var(--fg-border);border-radius:13px;color:var(--fg-ink)}
