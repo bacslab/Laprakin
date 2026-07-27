@@ -221,20 +221,53 @@ export async function finishGoogleAuthorization({ state, code, beforeCreate = nu
   if (!tokens.id_token) throw new HttpError(401, 'Google tidak mengembalikan identitas yang valid.', 'GOOGLE_TOKEN_MISSING');
   const claims = await verifyGoogleIdToken(tokens.id_token, row.nonce);
   const email = String(claims.email).toLowerCase();
+  const configuredAdmin = isConfiguredAdminEmail(email);
   let userRow = db.prepare('SELECT * FROM users WHERE google_sub = ? AND deleted_at IS NULL').get(claims.sub);
   if (!userRow) {
     userRow = db.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').get(email);
     if (userRow && userRow.google_sub && userRow.google_sub !== claims.sub) throw new HttpError(409, 'Email ini sudah terhubung ke akun Google lain.', 'GOOGLE_ACCOUNT_CONFLICT');
     if (userRow) {
-      db.prepare(`UPDATE users SET google_sub = ?, auth_provider = CASE WHEN auth_provider = 'password' THEN 'password+google' ELSE auth_provider END, email_verified_at = COALESCE(email_verified_at, ?), full_name = CASE WHEN full_name = '' THEN ? ELSE full_name END, role = CASE WHEN ? THEN 'admin' ELSE role END, updated_at = ? WHERE id = ?`).run(claims.sub, now(), claims.name || '', config.adminEmail && email === config.adminEmail ? 1 : 0, now(), userRow.id);
+      db.prepare(`UPDATE users SET google_sub = ?, auth_provider = CASE WHEN auth_provider = 'password' THEN 'password+google' ELSE auth_provider END, email_verified_at = COALESCE(email_verified_at, ?), full_name = CASE WHEN full_name = '' THEN ? ELSE full_name END, role = CASE WHEN ? THEN 'admin' ELSE role END, updated_at = ? WHERE id = ?`).run(claims.sub, now(), claims.name || '', configuredAdmin ? 1 : 0, now(), userRow.id);
+    } else if (configuredAdmin) {
+      userRow = db.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NOT NULL').get(email);
+      if (userRow) {
+        db.prepare(`
+          UPDATE users
+          SET google_sub = ?,
+              auth_provider = CASE WHEN auth_provider = 'password' THEN 'password+google' ELSE 'google' END,
+              email_verified_at = COALESCE(email_verified_at, ?),
+              full_name = CASE WHEN full_name = '' THEN ? ELSE full_name END,
+              role = 'admin',
+              deleted_at = NULL,
+              verification_token = NULL,
+              verification_expires_at = NULL,
+              updated_at = ?
+          WHERE id = ?
+        `).run(claims.sub, now(), claims.name || '', now(), userRow.id);
+        audit(userRow.id, 'admin.account_restored', 'user', userRow.id, { source: 'google_admin_email' });
+        userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(userRow.id);
+      } else {
+        const registration = beforeCreate ? beforeCreate(email) : null;
+        try {
+          const id = nanoid();
+          const randomPassword = await bcrypt.hash(randomToken(48), 12);
+          db.prepare(`INSERT INTO users (id, email, password_hash, full_name, role, email_verified_at, referral_code, google_sub, auth_provider, created_at, updated_at) VALUES (?, ?, ?, ?, 'admin', ?, ?, ?, 'google', ?, ?)`)
+            .run(id, email, randomPassword, claims.name || '', now(), referralCodeFor(id), claims.sub, now(), now());
+          registration?.bind(id);
+          userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+          notify(id, 'account', 'Masuk Google berhasil', 'Akun Laprakinmu siap dipakai.', '/app');
+        } catch (error) {
+          registration?.release();
+          throw error;
+        }
+      }
     } else {
       const registration = beforeCreate ? beforeCreate(email) : null;
       try {
         const id = nanoid();
         const randomPassword = await bcrypt.hash(randomToken(48), 12);
-        const role = config.adminEmail && email === config.adminEmail ? 'admin' : 'student';
         db.prepare(`INSERT INTO users (id, email, password_hash, full_name, role, email_verified_at, referral_code, google_sub, auth_provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'google', ?, ?)`)
-          .run(id, email, randomPassword, claims.name || '', role, now(), referralCodeFor(id), claims.sub, now(), now());
+          .run(id, email, randomPassword, claims.name || '', 'student', now(), referralCodeFor(id), claims.sub, now(), now());
         registration?.bind(id);
         userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
         notify(id, 'account', 'Masuk Google berhasil', 'Akun Laprakinmu siap dipakai.', '/app');
@@ -243,6 +276,10 @@ export async function finishGoogleAuthorization({ state, code, beforeCreate = nu
         throw error;
       }
     }
+  }
+  if (configuredAdmin && userRow?.role !== 'admin') {
+    db.prepare("UPDATE users SET role = 'admin', deleted_at = NULL, updated_at = ? WHERE id = ?").run(now(), userRow.id);
+    userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(userRow.id);
   }
   const user = publicUser(userRow.id);
   audit(user.id, 'auth.google_login', 'user', user.id, {});
@@ -330,38 +367,76 @@ export const publicUser = (userId) => toUser(
   db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(userId),
 );
 
+function isConfiguredAdminEmail(email) {
+  return Boolean(config.adminEmail && String(email || '').trim().toLowerCase() === config.adminEmail);
+}
+
+export function syncConfiguredAdminAccount() {
+  if (!config.adminEmail) return { matched: 0, changed: 0 };
+  const row = db.prepare('SELECT id, role, deleted_at FROM users WHERE email = ?').get(config.adminEmail);
+  if (!row) return { matched: 0, changed: 0 };
+  if (row.role === 'admin' && !row.deleted_at) return { matched: 1, changed: 0 };
+  const timestamp = now();
+  db.prepare(`
+    UPDATE users
+    SET role = 'admin',
+        deleted_at = NULL,
+        email_verified_at = COALESCE(email_verified_at, ?),
+        verification_token = NULL,
+        verification_expires_at = NULL,
+        updated_at = ?
+    WHERE id = ?
+  `).run(timestamp, timestamp, row.id);
+  audit(row.id, 'admin.account_synced', 'user', row.id, { source: 'configured_admin_email' });
+  return { matched: 1, changed: 1 };
+}
+
 export function referralCodeFor(userId) {
   return `R-${String(userId).replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase()}`;
 }
 
 export async function createUser({ email, password, referralCode = '' }) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
-  if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(normalizedEmail)) {
+  const existing = db.prepare('SELECT id, deleted_at FROM users WHERE email = ?').get(normalizedEmail);
+  if (existing && !(isConfiguredAdminEmail(normalizedEmail) && existing.deleted_at)) {
     throw new HttpError(409, 'Email ini sudah terdaftar.', 'EMAIL_TAKEN');
   }
 
-  const userId = nanoid();
+  const userId = existing?.id || nanoid();
   const verificationToken = randomToken();
   const createdAt = now();
   const verificationExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   const passwordHash = await bcrypt.hash(password, 12);
-  const role = config.adminEmail && normalizedEmail === config.adminEmail ? 'admin' : 'student';
+  const role = isConfiguredAdminEmail(normalizedEmail) ? 'admin' : 'student';
 
-  db.prepare(`
-    INSERT INTO users (
-      id, email, password_hash, role, verification_token, verification_expires_at, referral_code, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    userId,
-    normalizedEmail,
-    passwordHash,
-    role,
-    tokenHash(verificationToken),
-    verificationExpiresAt,
-    referralCodeFor(userId),
-    createdAt,
-    createdAt,
-  );
+  if (existing) {
+    db.prepare(`
+      UPDATE users
+      SET password_hash = ?,
+          role = ?,
+          verification_token = ?,
+          verification_expires_at = ?,
+          deleted_at = NULL,
+          updated_at = ?
+      WHERE id = ?
+    `).run(passwordHash, role, tokenHash(verificationToken), verificationExpiresAt, createdAt, userId);
+  } else {
+    db.prepare(`
+      INSERT INTO users (
+        id, email, password_hash, role, verification_token, verification_expires_at, referral_code, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      userId,
+      normalizedEmail,
+      passwordHash,
+      role,
+      tokenHash(verificationToken),
+      verificationExpiresAt,
+      referralCodeFor(userId),
+      createdAt,
+      createdAt,
+    );
+  }
 
   const normalizedCode = String(referralCode || '').trim().toUpperCase();
   if (normalizedCode) {
@@ -394,7 +469,7 @@ export async function authenticateUser({ email, password }) {
   if (!row.email_verified_at) {
     throw new HttpError(403, 'Verifikasi email sebelum masuk. Periksa inbox atau kirim ulang link verifikasi.', 'EMAIL_NOT_VERIFIED');
   }
-  if (config.adminEmail && normalizedEmail === config.adminEmail && row.role !== 'admin') {
+  if (isConfiguredAdminEmail(normalizedEmail) && row.role !== 'admin') {
     db.prepare("UPDATE users SET role = 'admin', updated_at = ? WHERE id = ?").run(now(), row.id);
   }
   return publicUser(row.id);

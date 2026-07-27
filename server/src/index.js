@@ -85,6 +85,7 @@ import {
   submitDocumentQuizAttempt,
   quizAccessForDocument,
   extractText,
+  syncConfiguredAdminAccount,
 } from './services.js';
 import {
   PRICING,
@@ -2406,6 +2407,7 @@ function retireRemovedAdminAccounts() {
 }
 
 retireRemovedAdminAccounts();
+syncConfiguredAdminAccount();
 
 function chatConversationPayload(sessionOrId, user, extra = {}) {
   const row = typeof sessionOrId === 'string'

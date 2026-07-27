@@ -70,86 +70,6 @@ function MediaPlaceholder({ label }) {
   </div>;
 }
 
-function LandingCursor() {
-  const dotRef = useRef(null);
-  const orbitRef = useRef(null);
-  const labelRef = useRef(null);
-
-  useEffect(() => {
-    const finePointer = window.matchMedia('(pointer: fine)');
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const dot = dotRef.current;
-    const orbit = orbitRef.current;
-    const label = labelRef.current;
-    const page = orbit?.closest('.fg-page');
-    const ring = orbit?.querySelector('.fg-cursor-ring');
-    if (!finePointer.matches || reducedMotion.matches || !dot || !orbit || !label || !page || !ring) return undefined;
-
-    gsap.set([dot, orbit], { xPercent: -50, yPercent: -50 });
-    const moveOrbitX = gsap.quickTo(orbit, 'x', { duration: 0.24, ease: 'power3.out' });
-    const moveOrbitY = gsap.quickTo(orbit, 'y', { duration: 0.24, ease: 'power3.out' });
-    let previousX = window.innerWidth / 2;
-    let previousY = window.innerHeight / 2;
-
-    const show = () => { dot.classList.add('is-visible'); orbit.classList.add('is-visible'); };
-    const hide = () => { dot.classList.remove('is-visible'); orbit.classList.remove('is-visible', 'is-interactive', 'has-label', 'is-pressed'); };
-    const move = (event) => {
-      const deltaX = event.clientX - previousX;
-      const deltaY = event.clientY - previousY;
-      const speed = Math.min(0.42, Math.hypot(deltaX, deltaY) / 70);
-      const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-      const target = event.target.closest('[data-cursor], button, a');
-      const cursorLabel = target?.dataset?.cursor || '';
-
-      gsap.set(dot, { x: event.clientX, y: event.clientY });
-      moveOrbitX(event.clientX);
-      moveOrbitY(event.clientY);
-      gsap.to(ring, {
-        rotation: Number.isFinite(angle) ? angle : 0,
-        scaleX: 1 + speed,
-        scaleY: 1 - (speed * 0.22),
-        duration: 0.18,
-        ease: 'power2.out',
-        overwrite: true,
-      });
-      orbit.classList.toggle('is-interactive', Boolean(target));
-      orbit.classList.toggle('has-label', Boolean(cursorLabel));
-      label.textContent = cursorLabel;
-      previousX = event.clientX;
-      previousY = event.clientY;
-      show();
-    };
-    const press = () => orbit.classList.add('is-pressed');
-    const release = () => orbit.classList.remove('is-pressed');
-
-    page.addEventListener('pointerenter', show);
-    page.addEventListener('pointermove', move);
-    page.addEventListener('pointerleave', hide);
-    page.addEventListener('pointerdown', press);
-    page.addEventListener('pointerup', release);
-    page.addEventListener('pointercancel', release);
-    return () => {
-      page.removeEventListener('pointerenter', show);
-      page.removeEventListener('pointermove', move);
-      page.removeEventListener('pointerleave', hide);
-      page.removeEventListener('pointerdown', press);
-      page.removeEventListener('pointerup', release);
-      page.removeEventListener('pointercancel', release);
-      moveOrbitX.tween?.kill();
-      moveOrbitY.tween?.kill();
-      gsap.killTweensOf(ring);
-    };
-  }, []);
-
-  return <>
-    <span ref={dotRef} className="fg-cursor-dot" aria-hidden="true" />
-    <span ref={orbitRef} className="fg-cursor-orbit" aria-hidden="true">
-      <span className="fg-cursor-ring" />
-      <span ref={labelRef} className="fg-cursor-label" />
-    </span>
-  </>;
-}
-
 function StepCard({ index, active }) {
   const [title, text] = STEPS[index];
   return <article className={`fg-step-card ${active ? 'is-active' : ''}`} data-step-card={index} aria-hidden={!active}>
@@ -490,7 +410,6 @@ export default function FigmaLanding({ navigate }) {
   }, []);
 
   return <div ref={pageRef} className="fg-page">
-    <LandingCursor />
     <header className="fg-navbar">
       <button type="button" className="fg-brand-button" data-cursor="TOP" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><LogoLockup /></button>
       <nav aria-label="Navigasi landing page">

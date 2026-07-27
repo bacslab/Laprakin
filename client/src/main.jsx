@@ -912,7 +912,6 @@ function AuthPage() {
         <div className="auth-card-footer">
           {mode === 'login' && <button type="button" className="auth-text-button" onClick={() => changeMode('forgot')}>Lupa kata sandi?</button>}
           {['forgot', 'reset'].includes(mode) && <button type="button" className="auth-text-button" onClick={() => changeMode('login')}><ArrowLeft size={13} />Kembali ke masuk</button>}
-          {formModes && <span>File tetap privat di dalam akunmu.</span>}
         </div>
       </section>
       <p className="auth-legal">Dengan melanjutkan, kamu menyetujui <Link to="/terms">Ketentuan Layanan</Link> dan <Link to="/privacy">Kebijakan Privasi</Link> Laprakin.</p>
@@ -943,6 +942,7 @@ function PublicPricingPage() {
   const [activeOrder, setActiveOrder] = useState(null);
   const [checkoutRecoveryUrl, setCheckoutRecoveryUrl] = useState('');
   const [error, setError] = useState('');
+  const paymentReturn = params.get('payment') || '';
 
   const loadPricing = useCallback(async () => {
     try {
@@ -969,6 +969,11 @@ function PublicPricingPage() {
   useEffect(() => { loadPricing(); }, [loadPricing]);
   useEffect(() => { setSelected(requestedPlan); }, [requestedPlan]);
   useEffect(() => { setCreditQuantity(requestedQty); }, [requestedQty]);
+  useEffect(() => {
+    if (!['canceled', 'cancelled', 'failed', 'error'].includes(paymentReturn)) return;
+    window.sessionStorage.removeItem('laprakin:active-payment-order');
+    if (location.pathname !== '/pricing' || location.search) navigate('/pricing', { replace: true });
+  }, [paymentReturn, location.pathname, location.search, navigate]);
 
   const cartItems = useMemo(() => {
     if (!selected) return [];
@@ -1053,6 +1058,7 @@ function PublicPricingPage() {
       await refreshSession();
       await loadPricing();
       setNotice(notice || 'Pembayaran QRIS berhasil diverifikasi. Produk sudah aktif.');
+      navigate('/app', { replace: true });
     }
   };
 
@@ -2624,8 +2630,8 @@ function ChatBriefPanel({ config, updateConfig }) {
     <div><small>Brief laprak</small><b>Lengkapi jika ada yang belum ketangkap</b></div>
     <label>Mata kuliah<input value={config.configuration.courseName || ''} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Contoh: Administrasi Jaringan Komputer" /></label>
     <label>Judul modul<input value={config.configuration.moduleTitle || ''} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Contoh: Dynamic Host Configuration Protocol" /></label>
-    <label>Dosen <small>opsional</small><input value={config.configuration.lecturerName || ''} onChange={(event) => updateConfig({ configuration: { lecturerName: event.target.value } })} placeholder="Nama dosen" /></label>
-    <label>NIP <small>opsional</small><input value={config.configuration.lecturerNip || ''} onChange={(event) => updateConfig({ configuration: { lecturerNip: event.target.value } })} placeholder="NIP dosen" /></label>
+    <label>Dosen (opsional)<input value={config.configuration.lecturerName || ''} onChange={(event) => updateConfig({ configuration: { lecturerName: event.target.value } })} placeholder="Nama dosen" /></label>
+    <label>NIP (opsional)<input value={config.configuration.lecturerNip || ''} onChange={(event) => updateConfig({ configuration: { lecturerNip: event.target.value } })} placeholder="NIP dosen" /></label>
   </form>;
 }
 
@@ -3147,6 +3153,7 @@ function BillingPage() {
       await refreshSession();
       await load();
       setNotice(successNotice || 'Pembayaran QRIS berhasil diverifikasi. Plan atau credit sudah aktif.');
+      navigate('/app', { replace: true });
     }
   };
 
@@ -3365,10 +3372,10 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
           <Toggle checked={prefs.compact} onChange={(checked) => updatePrefs({ compact: checked })} title="Workspace ringkas" description="Rapatkan sidebar, toolbar, dan area percakapan." />
         </div>}
         {tab === 'notifications' && <div className="settings-pane"><section className="settings-group"><Toggle checked={prefs.jobNotifications !== false} onChange={(checked) => updatePrefs({ jobNotifications: checked })} title="Proses dokumen" description="Beritahu saat analisis, draft, atau export selesai." /><Toggle checked={prefs.deadlineNotifications !== false} onChange={(checked) => updatePrefs({ deadlineNotifications: checked })} title="Deadline tugas" description="Pengingat ringan untuk dokumen yang memiliki tenggat." /><Toggle checked={prefs.productUpdates !== false} onChange={(checked) => updatePrefs({ productUpdates: checked })} title="Update produk" description="Hanya perubahan fitur beta yang penting." /></section></div>}
-        {tab === 'personalization' && <div className="settings-pane"><section className="settings-group nickname-settings"><div className="settings-group-heading"><b>Nama panggilan</b><small>Dipakai hanya untuk menyapamu di halaman chat. Kosongkan untuk memakai nama depan.</small></div><div className="nickname-settings-control"><label><span>Sapaan</span><input value={form.nickname} maxLength={20} autoComplete="nickname" onChange={(event) => setForm({ ...form, nickname: event.target.value })} placeholder={userGreetingName({ ...user, nickname: '' })} /></label><small>{form.nickname.length}/20</small><Button type="button" variant="secondary" onClick={saveNickname} disabled={busy}><Save size={14}/>Simpan</Button></div></section><section className="settings-group"><Row title="Gaya bahasa"><CustomSelect value={prefs.tone || 'formal'} onChange={(value) => updatePrefs({ tone: value })} options={[{ value: 'formal', label: 'Formal' }, { value: 'semi-formal', label: 'Semi-formal' }]} /></Row><Row title="Sudut pandang"><CustomSelect value={prefs.perspective || 'saya'} onChange={(value) => updatePrefs({ perspective: value })} options={[{ value: 'saya', label: 'Saya' }, { value: 'kita', label: 'Kita' }, { value: 'impersonal', label: 'Impersonal' }]} /></Row><Row title="Struktur awal"><CustomSelect value={prefs.profile || 'langkah'} onChange={(value) => updatePrefs({ profile: value })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></Row></section><label className="settings-textarea"><span>Instruksi tambahan</span><small>Selalu dikirim sebagai acuan AI untuk chat dan generate laprak.</small><textarea value={prefs.customInstructions || ''} onChange={(event) => updatePrefs({ customInstructions: event.target.value })} placeholder="Contoh: gunakan bahasa teknis yang ringkas." /></label></div>}
+        {tab === 'personalization' && <div className="settings-pane"><section className="settings-group nickname-settings"><div className="settings-group-heading"><b>Nama panggilan</b><small>Dipakai hanya untuk menyapamu di halaman chat. Kosongkan untuk memakai nama depan.</small></div><div className="nickname-settings-control"><label aria-label="Sapaan"><input value={form.nickname} maxLength={20} autoComplete="nickname" onChange={(event) => setForm({ ...form, nickname: event.target.value })} placeholder={userGreetingName({ ...user, nickname: '' })} /></label><small>{form.nickname.length}/20</small><Button type="button" variant="secondary" onClick={saveNickname} disabled={busy}><Save size={14}/>Simpan</Button></div></section><section className="settings-group"><Row title="Gaya bahasa"><CustomSelect value={prefs.tone || 'formal'} onChange={(value) => updatePrefs({ tone: value })} options={[{ value: 'formal', label: 'Formal' }, { value: 'semi-formal', label: 'Semi-formal' }]} /></Row><Row title="Sudut pandang"><CustomSelect value={prefs.perspective || 'saya'} onChange={(value) => updatePrefs({ perspective: value })} options={[{ value: 'saya', label: 'Saya' }, { value: 'kita', label: 'Kita' }, { value: 'impersonal', label: 'Impersonal' }]} /></Row><Row title="Struktur awal"><CustomSelect value={prefs.profile || 'langkah'} onChange={(value) => updatePrefs({ profile: value })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></Row></section><label className="settings-textarea"><span>Instruksi tambahan</span><small>Selalu dikirim sebagai acuan AI untuk chat dan generate laprak.</small><textarea value={prefs.customInstructions || ''} onChange={(event) => updatePrefs({ customInstructions: event.target.value })} placeholder="Contoh: gunakan bahasa teknis yang ringkas." /></label></div>}
         {tab === 'billing' && <BillingSettingsPane onOpenBilling={onOpenBilling} />}
         {tab === 'referral' && <ReferralSettingsPane />}
-        {tab === 'data' && <div className="settings-pane"><section className="settings-group"><Toggle checked={Boolean(prefs.allowExternalAi)} onChange={(checked) => updatePrefs({ allowExternalAi: checked })} title="Izinkan provider AI eksternal" description="Aktif hanya saat provider tersedia dan dibutuhkan untuk permintaanmu." /><Row title="Salinan data" description="Unduh profil, preferensi, dan ringkasan aktivitas akun."><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>Unduh data</Button></Row></section><p className="settings-privacy-note"><ShieldCheck size={15}/>Semua data dan pemrosesan dijamin kerahasiaannya karena tersimpan dan diproses dengan perlindungan enkripsi.</p>
+        {tab === 'data' && <div className="settings-pane"><section className="settings-group"><Row title="Salinan data" description="Unduh profil, preferensi, dan ringkasan aktivitas akun."><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>Unduh data</Button></Row></section><p className="settings-privacy-note"><ShieldCheck size={15}/>Semua data dan pemrosesan dijamin kerahasiaannya karena tersimpan dan diproses dengan perlindungan enkripsi.</p>
           {/* Hapus akun berada satu tab dengan unduh data: urutan yang benar
           adalah mengunduh salinan lebih dulu, baru menghapus. */}
           <section className="settings-danger-zone">

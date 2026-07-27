@@ -439,7 +439,11 @@ function createMidtransPayload(orderId, user, quote) {
     // QRIS only: Midtrans documents `other_qris` as the generic QRIS option
     // that remains visible in Snap when explicitly requested.
     enabled_payments: [MIDTRANS_QRIS_CHANNEL],
-    callbacks: { finish: `${config.appUrl}/billing?payment=finished` },
+    callbacks: {
+      finish: `${config.appUrl}/pricing?payment=finished`,
+      unfinish: `${config.appUrl}/pricing?payment=canceled`,
+      error: `${config.appUrl}/pricing?payment=failed`,
+    },
   };
 }
 
