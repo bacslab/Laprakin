@@ -516,7 +516,7 @@ function useResolvedTheme(theme = 'system') {
 
 const defaultPrefs = {
   theme: 'system', language: 'id', compact: true, reducedMotion: false, enterToSend: true,
-  tone: 'semi-formal', perspective: 'saya', profile: 'langkah', accent: 'lime', productUpdates: true, allowExternalAi: true,
+  tone: 'formal', perspective: 'saya', profile: 'langkah', customInstructions: '', accent: 'lime', productUpdates: true, allowExternalAi: true,
 };
 const workspaceAccents = [
   { key: 'lime', label: 'Lime', color: '#c2ff33', contrast: '#101506' },
@@ -560,7 +560,7 @@ function resolveAccent(accentKey, resolvedTheme) {
 const defaultChatConfig = {
   title: 'Laprak baru',
   structureMode: 'guided',
-  configuration: { courseName: '', moduleTitle: '', lecturerName: '', lecturerNip: '', documentProfile: 'langkah', customStructure: '', instructions: '', tone: 'semi-formal', perspective: 'saya', allowExternalAi: true },
+  configuration: { courseName: '', moduleTitle: '', lecturerName: '', lecturerNip: '', documentProfile: 'langkah', customStructure: '', instructions: '', tone: 'formal', perspective: 'saya', allowExternalAi: true },
 };
 const previewTestimonials = [
   { quote: '“Saya baru ingin lihat bentuk ulasannya dulu. Nantinya kutipan asli hanya tampil setelah pengguna menyetujui publikasi.”', name: 'Preview ulasan beta', label: 'Bukan testimoni pengguna' },
@@ -1340,7 +1340,6 @@ function Workspace() {
   }, [prefs.productUpdates, productUpdate]);
   const projectParam = new URLSearchParams(location.search).get('project') || '';
   useEffect(() => { if (location.pathname === '/app/billing') navigate('/pricing', { replace: true }); }, [location.pathname, navigate]);
-  const activeProgram = programs.find((item) => item.key === user.studyProgramKey);
   const identityComplete = Boolean(user.fullName && user.nim && user.className && user.institutionName && (user.facultyName || user.departmentKey) && (user.studyProgramName || user.studyProgramKey));
   useEffect(() => {
     if (!identityComplete || user.onboardingDismissed || tutorialAutoOpenedRef.current) return;
@@ -1350,7 +1349,22 @@ function Workspace() {
   }, [identityComplete, user.onboardingDismissed]);
   const updateConfig = (patch) => setConfig((value) => ({ ...value, ...patch, configuration: { ...value.configuration, ...(patch.configuration || {}) } }));
   const setRoute = (next) => navigate(next === 'chat' ? '/app' : `/app/${next}`);
-  const createDefaultConfig = () => ({ ...defaultChatConfig, configuration: { ...defaultChatConfig.configuration, documentProfile: prefs.profile || 'langkah', tone: prefs.tone || 'semi-formal', perspective: prefs.perspective || 'saya', allowExternalAi: prefs.allowExternalAi !== false } });
+  const writingPrefsConfig = (base = {}) => {
+    const extraInstructions = String(prefs.customInstructions || '').trim();
+    const localInstructions = String(base.instructions || '').trim();
+    const instructions = extraInstructions && localInstructions
+      ? localInstructions.includes(extraInstructions) ? localInstructions : `${extraInstructions}\n\n${localInstructions}`
+      : extraInstructions || localInstructions;
+    return {
+      ...base,
+      documentProfile: prefs.profile || 'langkah',
+      tone: prefs.tone || 'formal',
+      perspective: prefs.perspective || 'saya',
+      instructions,
+      allowExternalAi: prefs.allowExternalAi !== false,
+    };
+  };
+  const createDefaultConfig = () => ({ ...defaultChatConfig, configuration: writingPrefsConfig(defaultChatConfig.configuration) });
   const sessionPayload = (base) => ({ ...base, departmentKey: user.departmentKey || '', studyProgramKey: user.studyProgramKey || '', structureMode: base.structureMode || 'guided', courseGroup: base.courseGroup || base.configuration?.courseName || 'Belum dikelompokkan' });
   const hydrate = (data) => { setActive(data.session); if (data.session?.id) localStorage.setItem('laprakin-active-chat-id', data.session.id); setMessages(data.messages || []); setAttachments(data.attachments || []); setWorkflow(data.workflow || null); const current = data.session.configuration || {}; setConfig({ title: data.session.title || 'Laprak baru', structureMode: data.session.structure_mode || 'guided', configuration: { ...defaultChatConfig.configuration, ...current } }); };
   const loadSessions = async () => {
@@ -1514,6 +1528,18 @@ function Workspace() {
       await api(`/chat/sessions/${current.id}/processing-access`, { method: 'POST', body: {} });
       await refreshSession();
       if (files.length) current = await uploadFiles(current, files, kind, false);
+      const currentConfiguration = current.configuration || config.configuration || {};
+      const syncedConfig = {
+        title: current.title || config.title || 'Laprak baru',
+        structureMode: current.structure_mode || current.structureMode || config.structureMode || 'guided',
+        configuration: writingPrefsConfig(currentConfiguration),
+        courseGroup: currentConfiguration.courseName || current.course_group || 'Belum dikelompokkan',
+      };
+      const synced = await api(`/chat/sessions/${current.id}`, { method: 'PUT', body: sessionPayload(syncedConfig) });
+      current = synced.session;
+      setActive(synced.session);
+      setConfig({ title: synced.session.title || 'Laprak baru', structureMode: synced.session.structure_mode || 'guided', configuration: { ...defaultChatConfig.configuration, ...(synced.session.configuration || {}) } });
+      setSessions((old) => old.map((item) => item.id === synced.session.id ? synced.session : item));
       const data = await api(`/chat/sessions/${current.id}/messages`, {
         method: 'POST',
         body: { content, aiMode, allowExternalAi: prefs.allowExternalAi !== false },
@@ -1928,21 +1954,8 @@ function Workspace() {
   const workspacePlanLabel = billingPlan?.key === 'pro' ? 'Max' : billingPlan?.key === 'monthly' ? 'Pro' : 'Free plan';
   const hasSubscriptionPlan = ['monthly', 'pro'].includes(billingPlan?.key);
   const isMaxPlan = billingPlan?.key === 'pro';
-  const workflowStatusLabel = {
-    NEW_CHAT: 'Percakapan baru',
-    SOURCE_RECOMMENDED: 'Menunggu keputusan bahan',
-    WAITING_SOURCE_DECISION: 'Menunggu keputusan bahan',
-    CLARIFICATION_REQUIRED: 'Menunggu satu klarifikasi',
-    READY_TO_GENERATE: 'Siap disusun',
-    GENERATING: 'Sedang menyusun',
-    DOCUMENT_PREVIEW: 'Siap direview',
-    REVISION: 'Sedang direvisi',
-    QUIZ_REQUIRED: 'Cek pemahaman diperlukan',
-    EXPORT_UNLOCKED: 'Download terbuka',
-    FINAL: 'Selesai',
-  }[workflow?.state] || 'Workspace laprak';
   const headerSubtitle = active
-    ? [workflow?.courseName || active.configuration?.courseName, workflow?.practiceTopic || active.configuration?.moduleTitle, user.studyProgramName || activeProgram?.label, workflowStatusLabel].filter(Boolean).join(' ? ')
+    ? [workflow?.courseName || active.configuration?.courseName, workflow?.practiceTopic || active.configuration?.moduleTitle].filter(Boolean).join(' · ') || 'Konteks laprak belum diisi'
     : 'Mulai dengan teks, bahan, atau link yang kamu punya.';
   const workspaceAccent = resolveAccent(prefs.accent, resolvedTheme);
   const recordProductUpdate = async (action) => {
@@ -2069,9 +2082,18 @@ function ChatSessionRow({ item, active, onOpen, editing, setEditing, onRename, d
   const [title, setTitle] = useState(item.title);
   const [menuOpen, setMenuOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
-  useEffect(() => { if (!menuOpen) return undefined; const timer = window.setTimeout(() => { setMenuOpen(false); setMoveOpen(false); }, 5000); return () => window.clearTimeout(timer); }, [menuOpen]);
   useEffect(() => setTitle(item.title), [item.title]);
   useEffect(() => { if (!menuOpen) return undefined; const timer = window.setTimeout(() => { setMenuOpen(false); setMoveOpen(false); }, 5000); return () => window.clearTimeout(timer); }, [menuOpen]);
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const closeOutside = (event) => {
+      if (event.target.closest?.('.session-menu, .session-menu-trigger')) return;
+      setMenuOpen(false);
+      setMoveOpen(false);
+    };
+    window.addEventListener('mousedown', closeOutside);
+    return () => window.removeEventListener('mousedown', closeOutside);
+  }, [menuOpen]);
   const submit = (event) => { event.preventDefault(); onRename(item.id, title); };
   const chooseFolder = async (folder) => { await onMove(item, folder); setMenuOpen(false); setMoveOpen(false); };
   const createFolder = async () => { const folder = await showDialog({ kind: 'prompt', title: 'Folder baru', message: 'Masukkan nama folder untuk mengelompokkan chat.', placeholder: 'Contoh: Modul 5 Firewall', confirmLabel: 'Buat folder' }); if (folder?.trim()) chooseFolder(folder.trim().slice(0, 100)); };
@@ -3250,12 +3272,15 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
   const [tab, setTab] = useState(initialTab);
   const [form, setForm] = useState({ nickname: user.nickname || '', fullName: user.fullName || '', nim: user.nim || '', className: user.className || '', institutionName: user.institutionName || '', institutionLogoUrl: user.institutionLogoUrl || '', facultyName: user.facultyName || '', studyProgramName: user.studyProgramName || '', lecturerName: user.lecturerName || '', lecturerNip: user.lecturerNip || '', departmentKey: user.departmentKey || '', studyProgramKey: user.studyProgramKey || '' });
   const [storage, setStorage] = useState(null);
+  const [storageBusy, setStorageBusy] = useState('');
+  const [safetyStatus, setSafetyStatus] = useState(null);
   const [archivedChats, setArchivedChats] = useState([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [settingsQuery, setSettingsQuery] = useState('');
-  useEffect(() => { api('/storage/summary').then(setStorage).catch(() => {}); }, []);
+  const loadStorage = async () => { try { setStorage(await api('/storage/summary')); } catch { setStorage(null); } };
+  useEffect(() => { loadStorage(); api('/safety/status').then(setSafetyStatus).catch(() => setSafetyStatus(null)); }, []);
   useEffect(() => setTab(initialTab), [initialTab]);
   const loadArchivedChats = async () => {
     setArchivedLoading(true);
@@ -3290,6 +3315,20 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
   };
   const logoutAll = async () => { const confirmed = await showDialog({ kind: 'confirm', title: 'Keluar dari semua perangkat?', message: 'Sesi di perangkat lain akan diakhiri. Perangkat ini tetap dapat melanjutkan setelah refresh.', confirmLabel: 'Akhiri sesi' }); if (!confirmed) return; setBusy(true); try { await api('/auth/logout-all', { method: 'POST' }); clearCsrfToken(); await refreshSession(); setNotice('Semua sesi sudah diakhiri.'); onClose(); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   const exportData = async () => { try { await download('/privacy/data-export', 'laprakin-data.json'); setNotice('Ringkasan data berhasil diunduh.'); } catch (err) { setNotice(err.message); } };
+  const deleteStorageFile = async (file) => {
+    const confirmed = await showDialog({ kind: 'confirm', title: 'Hapus file?', message: `${file.name || 'File ini'} akan dihapus dari penyimpanan akunmu.`, confirmLabel: 'Hapus', destructive: true });
+    if (!confirmed) return;
+    setStorageBusy(file.id);
+    try {
+      await api(`/storage/files/${file.kind}/${file.id}`, { method: 'DELETE', body: {} });
+      await loadStorage();
+      setNotice('File dihapus dari penyimpanan.');
+    } catch (err) {
+      setNotice(err.message);
+    } finally {
+      setStorageBusy('');
+    }
+  };
   const deleteAccount = async () => { if (deleteConfirm !== user.email) return setNotice('Masukkan email akun dengan tepat untuk melanjutkan.'); setBusy(true); try { await api('/me', { method: 'DELETE', body: { confirmation: deleteConfirm } }); clearCsrfToken(); await refreshSession(); onClose(); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   const tabs = [
     { key: 'general', label: 'Umum', icon: Settings2, title: 'Tampilan workspace', description: 'Atur tema, kepadatan, bahasa, dan warna aksen.' },
@@ -3326,10 +3365,10 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
           <Toggle checked={prefs.compact} onChange={(checked) => updatePrefs({ compact: checked })} title="Workspace ringkas" description="Rapatkan sidebar, toolbar, dan area percakapan." />
         </div>}
         {tab === 'notifications' && <div className="settings-pane"><section className="settings-group"><Toggle checked={prefs.jobNotifications !== false} onChange={(checked) => updatePrefs({ jobNotifications: checked })} title="Proses dokumen" description="Beritahu saat analisis, draft, atau export selesai." /><Toggle checked={prefs.deadlineNotifications !== false} onChange={(checked) => updatePrefs({ deadlineNotifications: checked })} title="Deadline tugas" description="Pengingat ringan untuk dokumen yang memiliki tenggat." /><Toggle checked={prefs.productUpdates !== false} onChange={(checked) => updatePrefs({ productUpdates: checked })} title="Update produk" description="Hanya perubahan fitur beta yang penting." /></section></div>}
-        {tab === 'personalization' && <div className="settings-pane"><section className="settings-group nickname-settings"><div className="settings-group-heading"><b>Nama panggilan</b><small>Dipakai hanya untuk menyapamu di halaman chat. Kosongkan untuk memakai nama depan.</small></div><div className="nickname-settings-control"><label><span>Nama panggilan</span><input value={form.nickname} maxLength={20} autoComplete="nickname" onChange={(event) => setForm({ ...form, nickname: event.target.value })} placeholder={userGreetingName({ ...user, nickname: '' })} /></label><small>{form.nickname.length}/20</small><Button type="button" variant="secondary" onClick={saveNickname} disabled={busy}><Save size={14}/>Simpan</Button></div></section><section className="settings-group"><Row title="Gaya bahasa"><CustomSelect value={prefs.tone} onChange={(value) => updatePrefs({ tone: value })} options={[{ value: 'semi-formal', label: 'Semi-formal' }, { value: 'formal', label: 'Formal' }]} /></Row><Row title="Sudut pandang"><CustomSelect value={prefs.perspective} onChange={(value) => updatePrefs({ perspective: value })} options={[{ value: 'saya', label: 'Saya' }, { value: 'kita', label: 'Kita' }, { value: 'impersonal', label: 'Impersonal' }]} /></Row><Row title="Struktur awal"><CustomSelect value={prefs.profile} onChange={(value) => updatePrefs({ profile: value })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></Row></section><label className="settings-textarea"><span>Instruksi tambahan</span><small>Dipakai sebagai preferensi, bukan isi otomatis.</small><textarea value={prefs.customInstructions || ''} onChange={(event) => updatePrefs({ customInstructions: event.target.value })} placeholder="Contoh: gunakan bahasa teknis yang ringkas." /></label></div>}
+        {tab === 'personalization' && <div className="settings-pane"><section className="settings-group nickname-settings"><div className="settings-group-heading"><b>Nama panggilan</b><small>Dipakai hanya untuk menyapamu di halaman chat. Kosongkan untuk memakai nama depan.</small></div><div className="nickname-settings-control"><label><span>Sapaan</span><input value={form.nickname} maxLength={20} autoComplete="nickname" onChange={(event) => setForm({ ...form, nickname: event.target.value })} placeholder={userGreetingName({ ...user, nickname: '' })} /></label><small>{form.nickname.length}/20</small><Button type="button" variant="secondary" onClick={saveNickname} disabled={busy}><Save size={14}/>Simpan</Button></div></section><section className="settings-group"><Row title="Gaya bahasa"><CustomSelect value={prefs.tone || 'formal'} onChange={(value) => updatePrefs({ tone: value })} options={[{ value: 'formal', label: 'Formal' }, { value: 'semi-formal', label: 'Semi-formal' }]} /></Row><Row title="Sudut pandang"><CustomSelect value={prefs.perspective || 'saya'} onChange={(value) => updatePrefs({ perspective: value })} options={[{ value: 'saya', label: 'Saya' }, { value: 'kita', label: 'Kita' }, { value: 'impersonal', label: 'Impersonal' }]} /></Row><Row title="Struktur awal"><CustomSelect value={prefs.profile || 'langkah'} onChange={(value) => updatePrefs({ profile: value })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></Row></section><label className="settings-textarea"><span>Instruksi tambahan</span><small>Selalu dikirim sebagai acuan AI untuk chat dan generate laprak.</small><textarea value={prefs.customInstructions || ''} onChange={(event) => updatePrefs({ customInstructions: event.target.value })} placeholder="Contoh: gunakan bahasa teknis yang ringkas." /></label></div>}
         {tab === 'billing' && <BillingSettingsPane onOpenBilling={onOpenBilling} />}
         {tab === 'referral' && <ReferralSettingsPane />}
-        {tab === 'data' && <div className="settings-pane"><div className="settings-trust-card"><ShieldCheck size={19}/><div><b>Privat secara default</b><p>Isi chat dan file tidak tampil di dashboard operasional. Akses hanya dilakukan untuk proses yang kamu minta.</p></div></div><section className="settings-group"><Toggle checked={Boolean(prefs.allowExternalAi)} onChange={(checked) => updatePrefs({ allowExternalAi: checked })} title="Izinkan provider AI eksternal" description="Aktif hanya saat provider tersedia dan dibutuhkan untuk permintaanmu." /><Row title="Salinan data" description="Unduh profil, preferensi, dan ringkasan aktivitas akun."><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>Unduh data</Button></Row></section>
+        {tab === 'data' && <div className="settings-pane"><section className="settings-group"><Toggle checked={Boolean(prefs.allowExternalAi)} onChange={(checked) => updatePrefs({ allowExternalAi: checked })} title="Izinkan provider AI eksternal" description="Aktif hanya saat provider tersedia dan dibutuhkan untuk permintaanmu." /><Row title="Salinan data" description="Unduh profil, preferensi, dan ringkasan aktivitas akun."><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>Unduh data</Button></Row></section><p className="settings-privacy-note"><ShieldCheck size={15}/>Semua data dan pemrosesan dijamin kerahasiaannya karena tersimpan dan diproses dengan perlindungan enkripsi.</p>
           {/* Hapus akun berada satu tab dengan unduh data: urutan yang benar
           adalah mengunduh salinan lebih dulu, baru menghapus. */}
           <section className="settings-danger-zone">
@@ -3338,8 +3377,8 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
             <Button variant="danger" onClick={deleteAccount} disabled={busy || deleteConfirm !== user.email}>Hapus akun</Button>
           </section>
         </div>}
-        {tab === 'storage' && <div className="settings-pane">{storage ? <><div className="storage-overview"><div><span>Terpakai</span><b>{formatBytes(storage.usedBytes)}</b><small>dari {formatBytes(storage.limitBytes)}</small></div><strong>{storagePercentage}%</strong></div><div className="storage-meter"><i><em style={{ width: `${storagePercentage}%` }} /></i></div><div className="storage-cards"><span><FolderOpen size={17}/><b>{storage.tier === 'pro' ? 'Pro' : storage.tier === 'subscription' ? 'Subscription' : storage.tier === 'paid' ? 'Satuan' : 'Gratis'}</b><small>{storage.retentionHint}</small></span><span><FileText size={17}/><b>Yang dihitung</b><small>Modul, bukti, template, data, dan export DOCX.</small></span></div></> : <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat ringkasan penyimpanan...</div>}<p className="settings-footnote">Chat teks dan preferensi tidak dihitung sebagai penyimpanan file.</p></div>}
-        {tab === 'safety' && <div className="settings-pane"><div className="safety-principles"><article><ShieldCheck size={18}/><div><b>Bukti tetap asli</b><p>Laprakin tidak membuat screenshot, data, atau hasil praktikum palsu.</p></div></article><article><FileText size={18}/><div><b>Draft tetap perlu ditinjau</b><p>Kamu memegang keputusan akhir sebelum dokumen diekspor atau dikumpulkan.</p></div></article><article><Eye size={18}/><div><b>Review secara kontekstual</b><p>Sinyal tidak biasa ditinjau sebagai metadata minimum, bukan isi pribadi.</p></div></article></div><div className="settings-info-banner"><CircleAlert size={16}/><p>Satu sinyal tidak menyebabkan pemblokiran otomatis. Jika ada batasan, Laprakin menjelaskan tindakan yang perlu dilakukan.</p></div></div>}
+        {tab === 'storage' && <div className="settings-pane">{storage ? <><div className="storage-overview"><div><span>Terpakai</span><b>{formatBytes(storage.usedBytes)}</b><small>dari {formatBytes(storage.limitBytes)}</small></div><strong>{storagePercentage}%</strong></div><div className="storage-meter"><i><em style={{ width: `${storagePercentage}%` }} /></i></div><div className="storage-cards"><span><FolderOpen size={17}/><b>{storage.tier === 'pro' ? 'Pro' : storage.tier === 'subscription' ? 'Subscription' : storage.tier === 'paid' ? 'Satuan' : 'Gratis'}</b><small>{storage.retentionHint}</small></span><span><FileText size={17}/><b>Yang dihitung</b><small>Modul, bukti, template, data, dan export DOCX.</small></span></div><section className="settings-group storage-file-manager"><div className="settings-group-heading"><b>File tersimpan</b><small>{storage.files?.length || 0} file bisa dikelola</small></div>{storage.files?.length ? <div className="storage-file-list">{storage.files.map((file) => <article key={`${file.kind}-${file.id}`}><FileText size={15}/><div><b>{file.name}</b><small>{file.sourceLabel} · {formatBytes(file.sizeBytes)} · {formatDate(file.createdAt)}</small></div><Button variant="secondary" onClick={() => deleteStorageFile(file)} disabled={Boolean(storageBusy)}>{storageBusy === file.id ? <LoaderCircle className="spin" size={14}/> : <Trash2 size={14}/>}Hapus</Button></article>)}</div> : <div className="settings-empty-state"><FolderOpen size={18}/><div><b>Belum ada file tersimpan</b><p>File modul, bukti, data, dan export akan muncul di sini.</p></div></div>}</section></> : <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat ringkasan penyimpanan...</div>}<p className="settings-footnote">Chat teks dan preferensi tidak dihitung sebagai penyimpanan file.</p></div>}
+        {tab === 'safety' && <div className="settings-pane"><section className={`safety-account-status ${safetyStatus?.hasAlert ? 'has-alert' : ''}`}>{safetyStatus ? safetyStatus.hasAlert ? <><CircleAlert size={20}/><div><b>Akun sedang mendapat alert</b><p>Ada sinyal penggunaan yang perlu ditinjau. Jika akses dibatasi, Laprakin akan menampilkan tindakan yang perlu kamu lakukan.</p><small>{safetyStatus.openAlerts} alert terbuka</small></div></> : <><ShieldCheck size={20}/><div><b>Tidak ada alert pada akun</b><p>Penggunaan akunmu tidak sedang memiliki sinyal safety terbuka.</p><small>Status terakhir diperbarui otomatis.</small></div></> : <><LoaderCircle className="spin" size={18}/><div><b>Memuat status akun</b><p>Safety status sedang diperiksa.</p></div></>}</section></div>}
         {tab === 'security' && <div className="settings-pane">
           {String(user.authProvider || 'password').includes('google') && <section className="settings-group"><Row title="Google terhubung" description="Akun Google ini dapat dipakai untuk masuk tanpa kata sandi."><span className="settings-connected-status"><CheckCircle2 size={14}/>Aktif</span></Row></section>}
           <section className="settings-group"><div className="settings-group-heading"><b>{user.authProvider === 'google' ? 'Buat kata sandi Laprakin' : 'Ubah kata sandi'}</b><small>Untuk keamanan, verifikasi dilakukan melalui link yang dikirim ke {user.email}.</small></div><Button type="button" variant="secondary" onClick={requestPasswordChange} disabled={busy}><Mail size={14}/>Kirim link verifikasi</Button></section>
@@ -3357,7 +3396,6 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
             <Button onClick={saveAcademic} disabled={busy}><Save size={14}/>Simpan profil akademik</Button>
           </section>
           <InstitutionLogoField logoUrl={user.institutionLogoUrl || ''} onChanged={onSaved} setNotice={setNotice} />
-          <p className="settings-note">Dosen pengampu dan NIP diisi per laprak lewat panel <b>Konfigurasi</b>, karena berbeda tiap mata kuliah.</p>
         </div>}
         {tab === 'keyboard' && <div className="settings-pane"><section className="settings-group"><Toggle checked={prefs.enterToSend !== false} onChange={(checked) => updatePrefs({ enterToSend: checked })} title="Enter untuk kirim" description="Gunakan Shift + Enter untuk membuat baris baru." /><Toggle checked={prefs.reducedMotion} onChange={(checked) => updatePrefs({ reducedMotion: checked })} title="Kurangi animasi" description="Pertahankan feedback penting dengan gerakan yang lebih singkat." /></section></div>}
       </div>
@@ -3404,7 +3442,7 @@ function FeedbackModal({ onClose }) {
   </Modal>;
 }
 
-function NotificationModal({ onClose }) { const { setNotice } = useApp(); const [data, setData] = useState({ notifications: [], unread: 0 }); const ref = useRef(null); useEffect(() => { api('/notifications').then(setData).catch((err) => setNotice(err.message)); }, []); useEffect(() => { const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose(); }; window.addEventListener('mousedown', closeOutside); return () => window.removeEventListener('mousedown', closeOutside); }, [onClose]); useEffect(() => { const timer = window.setTimeout(onClose, 5000); return () => window.clearTimeout(timer); }, [onClose]); const markRead = async () => { try { setData(await api('/notifications/read', { method: 'PUT', body: {} })); } catch (err) { setNotice(err.message); } }; return <aside ref={ref} className="notification-popover" role="dialog" aria-label="Notifikasi"><header><div><b>Notifikasi</b><small>{data.unread ? `${data.unread} baru` : 'Semua sudah dibaca'}</small></div><IconButton label="Tutup" onClick={onClose}><X size={16} /></IconButton></header>{data.unread ? <button className="notification-read" onClick={markRead}>Tandai semua dibaca</button> : null}<div className="notification-list">{data.notifications.length ? data.notifications.map((note) => <article key={note.id}><span /><div><b>{note.title}</b><p>{note.body}</p><small>{formatDate(note.created_at)}</small></div></article>) : <p className="muted-note">Belum ada notifikasi.</p>}</div></aside>; }
+function NotificationModal({ onClose }) { const { setNotice } = useApp(); const [data, setData] = useState({ notifications: [], unread: 0 }); const ref = useRef(null); useEffect(() => { api('/notifications').then(setData).catch((err) => setNotice(err.message)); }, []); useEffect(() => { const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose(); }; window.addEventListener('mousedown', closeOutside); return () => window.removeEventListener('mousedown', closeOutside); }, [onClose]); useEffect(() => { const timer = window.setTimeout(onClose, 5000); return () => window.clearTimeout(timer); }, [onClose]); const markRead = async () => { try { setData(await api('/notifications/read', { method: 'PUT', body: {} })); } catch (err) { setNotice(err.message); } }; return <aside ref={ref} className="notification-popover" role="dialog" aria-label="Notifikasi"><header><div><b>Notifikasi</b><small>{data.unread ? `${data.unread} baru` : 'Semua sudah dibaca'}</small></div><IconButton label="Tutup" onClick={onClose}><X size={16} /></IconButton></header>{data.unread ? <button className="notification-read" onClick={markRead}>Tandai semua dibaca</button> : null}<div className="notification-list">{data.notifications.length ? data.notifications.map((note) => <article key={note.id} className={note.is_read ? 'is-read' : ''}><span /> <div><b>{note.title}</b><p>{note.body}</p><small>{formatDate(note.created_at)}</small></div></article>) : <p className="muted-note">Belum ada notifikasi.</p>}</div></aside>; }
 
 function AppDialog({ dialog, onResolve }) {
   const [value, setValue] = useState('');

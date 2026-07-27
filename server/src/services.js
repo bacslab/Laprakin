@@ -1353,7 +1353,7 @@ Mode respons: ${modeInstruction}`;
     `Modul/konteks: ${chatConfig.moduleTitle || '-'}`,
     `Profil dokumen: ${chatConfig.documentProfile || session.structure_mode || 'langkah'}`,
     `Struktur khusus: ${chatConfig.customStructure || '-'}`,
-    `Gaya/sudut pandang: ${chatConfig.tone || 'semi-formal'} / ${chatConfig.perspective || 'saya'}`,
+    `Gaya/sudut pandang: ${chatConfig.tone || 'formal'} / ${chatConfig.perspective || 'saya'}`,
     `Instruksi workspace: ${chatConfig.instructions || '-'}`,
     `Mata kuliah yang sudah ada di workspace: ${knownWorkspaceCourses.join(', ') || '-'}`,
     `Lampiran tersedia: ${attachments.files.map((file) => String(file.original_name).slice(0, 100)).join(', ') || '-'}`,
@@ -2393,7 +2393,8 @@ Aturan keras:
 - Jika data belum cukup, jangan mengarang. Sebutkan kekurangan pada proses sebelum generate, bukan sebagai paragraf generik di laporan.
 - Bila sourceMode bernilai unavailable, kamu boleh memakai pengetahuan teknis umum untuk konsep dan prosedur standar. Jangan membuat referensi atau ketentuan dosen yang tidak diberikan.
 - Bila evidenceMode bernilai unavailable, tulis output sebagai "hasil yang diharapkan" atau "indikator keberhasilan", bukan sebagai pengamatan yang benar-benar terjadi. Sisipkan penanda singkat "[VERIFIKASI HASIL]" pada klaim yang harus diperiksa user.
-- Gunakan gaya ${recipe.tone || 'semi-formal'} dan fokus pada bagaimana serta mengapa.
+- Gunakan gaya ${recipe.tone || 'formal'} dan fokus pada bagaimana serta mengapa.
+- Gunakan sudut pandang ${recipe.perspective || 'saya'} secara konsisten sesuai preferensi user.
 - Identitas mahasiswa hanya untuk cover. Dilarang membuat bagian "Identitas Praktikum", biodata, nama, NPM/NIM, kelas, program studi, atau jurusan di isi laporan.
 - Sebarkan penjelasan konkret di setiap langkah, bukan hanya pada bagian awal. Hubungkan tindakan, bukti visual, dan hasil yang terlihat.
 - Jangan menulis daftar "Gambar 1", placeholder gambar, atau deskripsi generik di dalam content; sistem menempatkan setiap gambar dan caption tepat satu kali.

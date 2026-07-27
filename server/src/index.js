@@ -194,7 +194,7 @@ const documentSchema = z.object({
   deadlineAt: z.string().trim().max(40).optional().default(''),
   priority: z.enum(['low', 'normal', 'high']).optional().default('normal'),
   recipe: z.object({
-    tone: z.enum(['semi-formal', 'formal']).optional().default('semi-formal'),
+    tone: z.enum(['semi-formal', 'formal']).optional().default('formal'),
     perspective: z.enum(['saya', 'kita', 'impersonal']).optional().default('saya'),
     includeConclusion: z.boolean().optional().default(false),
     useTimesNewRoman: z.boolean().optional().default(true),
@@ -253,7 +253,7 @@ const chatConfigSchema = z.object({
   documentProfile: z.enum(['langkah', 'pengujian', 'proyek']).optional().default('langkah'),
   customStructure: z.string().trim().max(1600).optional().default(''),
   instructions: z.string().trim().max(2200).optional().default(''),
-  tone: z.enum(['semi-formal', 'formal']).optional().default('semi-formal'),
+  tone: z.enum(['semi-formal', 'formal']).optional().default('formal'),
   perspective: z.enum(['saya', 'kita', 'impersonal']).optional().default('saya'),
   allowExternalAi: z.boolean().optional().default(false),
 });
@@ -890,11 +890,42 @@ function storageSummaryForUser(userId) {
   `).get(userId));
   const tier = subscription?.plan_key === 'pro' ? 'pro' : subscription ? 'subscription' : hasPaidCredit ? 'paid' : 'free';
   const limitBytes = tier === 'pro' ? 5 * 1024 * 1024 * 1024 : tier === 'subscription' ? 1024 * 1024 * 1024 : tier === 'paid' ? 500 * 1024 * 1024 : 100 * 1024 * 1024;
+  const chatFiles = db.prepare(`
+    SELECT id, original_name AS name, kind AS type, size_bytes, created_at
+    FROM chat_attachments
+    WHERE owner_user_id = ? AND deleted_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT 80
+  `).all(userId).map((file) => ({
+    id: file.id,
+    kind: 'chat',
+    name: file.name,
+    sourceLabel: file.type === 'practice_evidence' ? 'Bukti chat' : file.type === 'template' ? 'Template chat' : 'Lampiran chat',
+    sizeBytes: Number(file.size_bytes || 0),
+    createdAt: file.created_at,
+  }));
+  const documentFiles = db.prepare(`
+    SELECT id, original_name AS name, category AS type, size_bytes, created_at
+    FROM document_files
+    WHERE owner_user_id = ? AND deleted_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT 80
+  `).all(userId).map((file) => ({
+    id: file.id,
+    kind: 'document',
+    name: file.name,
+    sourceLabel: file.type === 'evidence' ? 'Bukti dokumen' : file.type === 'template' ? 'Template dokumen' : 'File dokumen',
+    sizeBytes: Number(file.size_bytes || 0),
+    createdAt: file.created_at,
+  }));
   return {
     usedBytes: Number(used),
     limitBytes,
     tier,
     retentionHint: tier === 'pro' ? 'Selama Pro aktif + masa tenggang.' : tier === 'subscription' ? 'Selama subscription aktif + masa tenggang.' : tier === 'paid' ? '180 hari sejak aktivitas berbayar terakhir.' : '30 hari setelah laporan selesai.',
+    files: [...chatFiles, ...documentFiles]
+      .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
+      .slice(0, 120),
   };
 }
 
@@ -1852,6 +1883,42 @@ app.get('/api/storage/summary', requireAuth, (req, res) => {
   res.json(storageSummaryForUser(req.user.id));
 });
 
+app.delete('/api/storage/files/:kind/:id', requireAuth, requireCsrf, (req, res) => {
+  const kind = String(req.params.kind || '');
+  const deletedAt = now();
+  if (kind === 'chat') {
+    const attachment = db.prepare('SELECT * FROM chat_attachments WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL').get(req.params.id, req.user.id);
+    if (!attachment) throw new HttpError(404, 'File tidak ditemukan.', 'STORAGE_FILE_NOT_FOUND');
+    db.prepare('UPDATE chat_attachments SET deleted_at = ? WHERE id = ?').run(deletedAt, attachment.id);
+    db.prepare(`
+      UPDATE document_files SET deleted_at = ?
+      WHERE owner_user_id = ? AND sha256 = ? AND original_name = ? AND deleted_at IS NULL
+    `).run(deletedAt, req.user.id, attachment.sha256, attachment.original_name);
+    try { fs.unlinkSync(attachment.storage_path); } catch { /* best effort */ }
+    audit(req.user.id, 'storage.file_deleted', 'chat_attachment', attachment.id, { source: 'settings' });
+    return res.json({ ok: true, storage: storageSummaryForUser(req.user.id) });
+  }
+  if (kind === 'document') {
+    const file = db.prepare('SELECT * FROM document_files WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL').get(req.params.id, req.user.id);
+    if (!file) throw new HttpError(404, 'File tidak ditemukan.', 'STORAGE_FILE_NOT_FOUND');
+    db.prepare('UPDATE document_files SET deleted_at = ? WHERE id = ?').run(deletedAt, file.id);
+    db.prepare('UPDATE evidence_mappings SET status = ? WHERE file_id = ?').run('ignored', file.id);
+    try { fs.unlinkSync(file.storage_path); } catch { /* best effort */ }
+    audit(req.user.id, 'storage.file_deleted', 'document_file', file.id, { source: 'settings' });
+    return res.json({ ok: true, storage: storageSummaryForUser(req.user.id) });
+  }
+  throw new HttpError(400, 'Jenis file tidak valid.', 'STORAGE_FILE_KIND_INVALID');
+});
+
+app.get('/api/safety/status', requireAuth, (req, res) => {
+  const riskCount = Number(db.prepare("SELECT COUNT(*) AS count FROM risk_events WHERE subject_user_id = ? AND status = 'open'").get(req.user.id).count || 0);
+  const alertCount = Number(db.prepare("SELECT COUNT(*) AS count FROM admin_alerts WHERE user_id = ? AND status = 'open'").get(req.user.id).count || 0);
+  res.json({
+    hasAlert: riskCount + alertCount > 0,
+    openAlerts: riskCount + alertCount,
+  });
+});
+
 app.get('/api/wallet', requireAuth, (req, res) => {
   res.json({ ...getWallet(req.user.id), subscription: activeSubscription(req.user.id) });
 });
@@ -2318,6 +2385,28 @@ function normalizeLegacyEvidenceKinds() {
 
 normalizeLegacyEvidenceKinds();
 
+const RETIRED_ADMIN_EMAILS = new Set(['main.laprakin@gmail.com']);
+
+function retireRemovedAdminAccounts() {
+  const timestamp = now();
+  for (const email of RETIRED_ADMIN_EMAILS) {
+    const users = db.prepare('SELECT id, role, deleted_at FROM users WHERE email = ?').all(email);
+    for (const user of users) {
+      db.prepare(`
+        UPDATE users
+        SET role = 'student', deleted_at = COALESCE(deleted_at, ?), verification_token = NULL, updated_at = ?
+        WHERE id = ?
+      `).run(timestamp, timestamp, user.id);
+      db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(user.id);
+      if (!user.deleted_at || user.role === 'admin') {
+        audit(null, 'admin.account_retired', 'user', user.id, { email });
+      }
+    }
+  }
+}
+
+retireRemovedAdminAccounts();
+
 function chatConversationPayload(sessionOrId, user, extra = {}) {
   const row = typeof sessionOrId === 'string'
     ? db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(sessionOrId, user.id)
@@ -2444,7 +2533,7 @@ app.post('/api/chat/sessions', requireAuth, requireCsrf, asyncHandler(async (req
     documentProfile: input.configuration.documentProfile || 'langkah',
     customStructure: input.configuration.customStructure || '',
     instructions: input.configuration.instructions || '',
-    tone: input.configuration.tone || 'semi-formal',
+    tone: input.configuration.tone || 'formal',
     perspective: input.configuration.perspective || 'saya',
     allowExternalAi: input.configuration.allowExternalAi === true,
   };
@@ -3093,7 +3182,7 @@ app.post('/api/chat/sessions/:id/document', requireAuth, requireCsrf, asyncHandl
     || (session.title === 'Laprak baru' ? (sessionConfiguration.moduleTitle || sessionConfiguration.courseName || 'Laprak dengan konteks terbatas').slice(0, 120) : session.title);
   const id = nanoid(); const timestamp = now();
   const recipe = {
-    tone: sessionConfiguration.tone || 'semi-formal',
+    tone: sessionConfiguration.tone || 'formal',
     perspective: sessionConfiguration.perspective || 'saya',
     includeConclusion: false,
     useTimesNewRoman: true,
