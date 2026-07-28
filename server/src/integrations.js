@@ -74,10 +74,22 @@ export async function verifyGoogleOidcIntegration() {
   }
 }
 
+export async function verifyAzureBlobIntegration() {
+  if (!config.azureStorageConnectionString) return { ok: false, code: 'AZURE_BLOB_NOT_CONFIGURED', containerName: config.azureBlobContainerName };
+  try {
+    const { isAzureBlobConfigured } = await import('./azure-blob.js');
+    return { ok: isAzureBlobConfigured(), containerName: config.azureBlobContainerName };
+  } catch (error) {
+    return { ok: false, code: 'AZURE_BLOB_ERROR', error: error.message };
+  }
+}
+
 export async function verifyProductionIntegrations() {
-  const [gemini, googleOidc] = await Promise.all([
+  const [gemini, googleOidc, azureBlob] = await Promise.all([
     verifyGeminiIntegration(),
     verifyGoogleOidcIntegration(),
+    verifyAzureBlobIntegration(),
   ]);
-  return { ok: gemini.ok && googleOidc.ok, gemini, googleOidc, checkedAt: new Date().toISOString() };
+  return { ok: gemini.ok && googleOidc.ok, gemini, googleOidc, azureBlob, checkedAt: new Date().toISOString() };
 }
+
