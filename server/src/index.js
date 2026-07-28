@@ -11,6 +11,14 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { config, validateProductionConfig } from './config.js';
 import { audit, db, toUser } from './db.js';
+import {
+  AccountRestrictionEmail,
+  AdminSecurityAlertEmail,
+  AppealResultEmail,
+  accountRestrictionText,
+  adminSecurityAlertText,
+  appealResultText,
+} from './emails/templates.js';
 import { verifyProductionIntegrations } from './integrations.js';
 import {
   analyzeChatRequest,
@@ -1239,11 +1247,17 @@ function createAdminAlert({
     || String(kind || '').startsWith('risk_')
     || kind === 'account_appeal';
   if (shouldEmailAdmin && config.adminEmail) {
+    const emailProps = {
+      summary: String(summary || 'Aktivitas perlu ditinjau.').slice(0, 240),
+      adminUrl: `${config.appUrl}/admin`,
+      critical: severity === 'critical',
+    };
     queueTransactionalEmail({
       recipient: config.adminEmail,
       subject: `[Laprakin] ${severity === 'critical' ? 'Tindakan segera diperlukan' : 'Aktivitas perlu ditinjau'}`,
       kind: 'admin_security_alert',
-      text: `${String(summary || 'Aktivitas perlu ditinjau.').slice(0, 240)}\n\nBuka Admin Console untuk memeriksa metadata kejadian:\n${config.appUrl}/admin`,
+      text: adminSecurityAlertText(emailProps),
+      react: AdminSecurityAlertEmail(emailProps),
     }).catch((error) => {
       console.error('[admin-alert-email]', { code: error?.code || 'EMAIL_FAILED' });
     });
@@ -4571,12 +4585,19 @@ app.post('/api/admin/users/:id/restrictions', requireAuth, requireCsrf, requireA
   const durationText = expiresAt
     ? `Pembatasan berlaku sampai ${new Date(expiresAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}.`
     : 'Pembatasan ini berlaku sampai dicabut oleh tim Laprakin.';
+  const emailProps = {
+    name: user.full_name || '',
+    reason: input.reason,
+    durationText,
+    appealUrl: `${config.appUrl}/auth`,
+  };
   await queueTransactionalEmail({
     userId: user.id,
     recipient: user.email,
     subject: 'Akses akun Laprakin dibatasi',
     kind: 'account_restriction',
-    text: `Halo ${user.full_name || 'pengguna Laprakin'},\n\nAksesmu dibatasi karena: ${input.reason}\n${durationText}\n\nKamu dapat mengajukan appeal melalui halaman masuk Laprakin.`,
+    text: accountRestrictionText(emailProps),
+    react: AccountRestrictionEmail(emailProps),
   });
   audit(req.user.id, 'admin.restriction_created', 'user', user.id, {
     targetType: input.targetType,
@@ -4654,12 +4675,18 @@ app.put('/api/admin/appeals/:id', requireAuth, requireCsrf, requireAdmin, adminM
     throw error;
   }
   if (appeal.email) {
+    const emailProps = {
+      name: appeal.full_name || '',
+      approved: input.status === 'approved',
+      reply: input.reply,
+    };
     await queueTransactionalEmail({
       userId: appeal.user_id,
       recipient: appeal.email,
       subject: input.status === 'approved' ? 'Appeal Laprakin disetujui' : 'Hasil peninjauan appeal Laprakin',
       kind: 'account_appeal_result',
-      text: `Halo ${appeal.full_name || 'pengguna Laprakin'},\n\n${input.reply}`,
+      text: appealResultText(emailProps),
+      react: AppealResultEmail(emailProps),
     });
   }
   audit(req.user.id, 'admin.appeal_reviewed', 'account_appeal', appeal.id, {

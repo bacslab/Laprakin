@@ -5,12 +5,16 @@
 # saat runtime dari server/.env yang sama dengan aplikasi; nilainya tidak pernah
 # ditulis ke log atau stdout.
 #
-# Pemakaian: laprakin-notify.sh "<subjek>" "<isi pesan>"
+# Pemakaian: laprakin-notify.sh "<subjek>" "<isi pesan>" [environment] [revision] [ringkasan]
 set -euo pipefail
 
 ENV_FILE="${LAPRAKIN_ENV_FILE:-/opt/laprakin/server/.env}"
+EMAIL_RENDERER="${LAPRAKIN_EMAIL_RENDERER:-/opt/laprakin/ops/laprakin-email-renderer.mjs}"
 SUBJECT="${1:?subjek wajib diisi}"
 BODY="${2:?isi pesan wajib diisi}"
+DEPLOY_ENVIRONMENT="${3:-production}"
+DEPLOY_REVISION="${4:-}"
+DEPLOY_SUMMARY="${5:-}"
 
 if [[ ! -r "$ENV_FILE" ]]; then
   echo "notify: $ENV_FILE tidak terbaca; notifikasi dilewati" >&2
@@ -23,6 +27,8 @@ env_value() {
 
 API_KEY="$(env_value SMTP_PASS)"
 MAIL_FROM="$(env_value MAIL_FROM)"
+DEPLOYMENT_URL="$(env_value APP_URL)"
+DEPLOY_LOGS_URL="$(env_value OPS_LOGS_URL)"
 
 # OPS_ALERT_EMAIL sengaja dipisahkan dari ADMIN_EMAIL. ADMIN_EMAIL menentukan
 # akun mana yang dipromosikan menjadi admin aplikasi, jadi mengubahnya demi
@@ -41,17 +47,53 @@ if [[ "$ADMIN_EMAIL" == *@example.test || "$ADMIN_EMAIL" == *@example.com ]]; th
   exit 1
 fi
 
-payload="$(HOSTNAME_VALUE="$(hostname)" SUBJECT="$SUBJECT" BODY="$BODY" \
-  MAIL_FROM="$MAIL_FROM" ADMIN_EMAIL="$ADMIN_EMAIL" python3 - <<'PY'
-import json, os
+if [[ -r "$EMAIL_RENDERER" ]]; then
+  payload="$(HOSTNAME_VALUE="$(hostname)" SUBJECT="$SUBJECT" BODY="$BODY" \
+    MAIL_FROM="$MAIL_FROM" ADMIN_EMAIL="$ADMIN_EMAIL" \
+    DEPLOY_ENVIRONMENT="$DEPLOY_ENVIRONMENT" DEPLOY_REVISION="$DEPLOY_REVISION" \
+    DEPLOY_SUMMARY="$DEPLOY_SUMMARY" DEPLOYMENT_URL="$DEPLOYMENT_URL" \
+    DEPLOY_LOGS_URL="$DEPLOY_LOGS_URL" OCCURRED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+    node "$EMAIL_RENDERER")"
+else
+  echo "notify: renderer React Email tidak ditemukan; memakai fallback kompatibilitas" >&2
+  payload="$(HOSTNAME_VALUE="$(hostname)" SUBJECT="$SUBJECT" BODY="$BODY" \
+    MAIL_FROM="$MAIL_FROM" ADMIN_EMAIL="$ADMIN_EMAIL" DEPLOY_ENVIRONMENT="$DEPLOY_ENVIRONMENT" \
+    python3 - <<'PY'
+import html, json, os, re
+
+subject = os.environ["SUBJECT"].strip()
+environment = os.environ["DEPLOY_ENVIRONMENT"].strip() or "production"
+if subject.lower() == "deploy berhasil":
+    email_subject = f"Deploy berhasil \u00b7 {environment}"
+    status = "DEPLOY BERHASIL"
+    color = "#16A34A"
+elif subject.lower() == "deploy gagal":
+    email_subject = f"Deploy gagal \u00b7 {environment}"
+    status = "DEPLOY GAGAL"
+    color = "#DC2626"
+else:
+    email_subject = f"[Laprakin ops] {subject}"
+    status = "PERLU DITINJAU"
+    color = "#D97706"
+
+body = os.environ["BODY"].replace("\\n", "\n").strip()
+body = re.sub(r"(?i)\\b(api[_-]?key|authorization|bearer|password|secret|smtp[_-]?pass|token)\\b\\s*[:=]\\s*\\S+", r"\\1=[disembunyikan]", body)
+sender = os.environ["MAIL_FROM"].strip()
+if "<" not in sender:
+    sender = f"Laprakin <{sender}>"
+escaped_body = "<br>".join(html.escape(line) for line in body.splitlines())
+host = html.escape(os.environ["HOSTNAME_VALUE"])
+html_body = f"""<!doctype html><html lang="id"><body style="margin:0;padding:24px 12px;background:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#111827"><main style="box-sizing:border-box;width:100%;max-width:600px;margin:0 auto;padding:32px;background:#fff;border:1px solid #E5E7EB;border-radius:12px"><div style="font-size:18px;font-weight:700;margin-bottom:28px">Laprakin</div><div style="font-size:11px;font-weight:700;color:#6B7280;margin-bottom:12px"><span style="display:inline-block;width:8px;height:8px;margin-right:8px;border-radius:999px;background:{color}"></span>{status}</div><h1 style="font-size:23px;line-height:30px;margin:0 0 18px">{html.escape(subject)}</h1><p style="font-size:14px;line-height:21px;margin:0 0 18px">{escaped_body}</p><p style="font-size:13px;line-height:20px;color:#6B7280;margin:0">Host: <span style="font-family:Consolas,monospace;color:#111827">{host}</span></p><hr style="border:0;border-top:1px solid #E5E7EB;margin:28px 0 20px"><p style="font-size:12px;line-height:18px;color:#6B7280;margin:0">Email otomatis dari Laprakin. Tidak perlu membalas email ini.</p></main></body></html>"""
 print(json.dumps({
-    "from": os.environ["MAIL_FROM"],
+    "from": sender,
     "to": [os.environ["ADMIN_EMAIL"]],
-    "subject": f"[Laprakin ops] {os.environ['SUBJECT']}",
-    "text": f"{os.environ['BODY']}\n\nHost: {os.environ['HOSTNAME_VALUE']}\n",
+    "subject": email_subject,
+    "text": f"{subject}\n\n{body}\n\nHost: {os.environ['HOSTNAME_VALUE']}",
+    "html": html_body,
 }))
 PY
 )"
+fi
 
 status="$(curl -sS -o /tmp/laprakin-notify-response -w '%{http_code}' \
   -X POST https://api.resend.com/emails \

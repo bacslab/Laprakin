@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "esModuleInterop": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2023",
+    "types": ["node", "react"]
+  },
+  "include": [
+    "server/src/emails/**/*.js",
+    "server/emails/**/*.js",
+    "ops/laprakin-email-renderer-entry.mjs",
+    "scripts/build-ops-email-renderer.mjs",
+    "scripts/email-render-check.mjs",
+    "server/test/email-templates.test.mjs"
+  ]
+}

@@ -12,9 +12,14 @@
   },
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"npm run dev --workspace @laprakin/server\" \"npm run dev --workspace @laprakin/client\"",
-    "build": "npm run build --workspace @laprakin/client",
+    "build": "npm run email:ops:build && npm run build --workspace @laprakin/client",
     "start": "npm run start --workspace @laprakin/server",
     "test": "node --test \"server/test/*.test.mjs\"",
+    "lint": "eslint server/src/emails server/emails ops/laprakin-email-renderer-entry.mjs scripts/build-ops-email-renderer.mjs scripts/email-render-check.mjs server/test/email-templates.test.mjs",
+    "typecheck": "tsc -p tsconfig.email.json",
+    "email:dev": "email dev --dir server/emails",
+    "email:ops:build": "node scripts/build-ops-email-renderer.mjs",
+    "email:render:check": "node scripts/email-render-check.mjs",
     "test:smoke": "node scripts/smoke.mjs",
     "start:prod": "node scripts/start-production.mjs",
     "test:e2e": "node scripts/e2e.mjs",
@@ -33,7 +38,16 @@
     "test:payments": "node scripts/qris-payment-check.mjs"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@eslint/js": "^10.0.1",
+    "@react-email/ui": "^6.9.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^18.3.28",
+    "concurrently": "^9.1.2",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.8.0",
+    "globals": "^17.4.0",
+    "react-email": "^6.9.1",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "gsap": "^3.12.5",

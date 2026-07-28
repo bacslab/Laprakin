@@ -8,6 +8,8 @@ import bcrypt from 'bcryptjs';
 import mammoth from 'mammoth';
 import AdmZip from 'adm-zip';
 import nodemailer from 'nodemailer';
+import { render } from 'react-email';
+import { Resend } from 'resend';
 import { nanoid } from 'nanoid';
 import {
   AlignmentType,
@@ -23,6 +25,13 @@ import sizeOf from 'image-size';
 import { config } from './config.js';
 import { generateAiContent } from './ai.js';
 import { audit, db, notify, toUser } from './db.js';
+import {
+  PasswordResetEmail,
+  VerificationEmail,
+  passwordResetText,
+  verificationText,
+} from './emails/templates.js';
+import { normalizePlainText, sanitizeOperationalSummary } from './emails/text.js';
 import {
   defaultLaprakTemplatePath,
   inspectTemplateDocxBuffer,
@@ -300,6 +309,8 @@ function resetUrl(token) {
 }
 
 let transporter = null;
+let resendClient = null;
+
 function getMailer() {
   if (config.emailMode !== 'smtp') return null;
   if (!transporter) {
@@ -313,29 +324,78 @@ function getMailer() {
   return transporter;
 }
 
-export async function queueTransactionalEmail({ userId = null, recipient, subject, text, html = '', kind }) {
+function getResendClient() {
+  if (config.emailMode !== 'smtp' || !/resend\.com$/i.test(config.smtpHost) || !config.smtpPass) return null;
+  if (!resendClient) resendClient = new Resend(config.smtpPass);
+  return resendClient;
+}
+
+function friendlyMailFrom(value) {
+  const sender = String(value || '').trim();
+  if (!sender) return sender;
+  if (/^[^<>]+<[^<>]+>$/.test(sender)) return sender;
+  if (/^[^\s@]+@[^\s@]+$/.test(sender)) return `Laprakin <${sender}>`;
+  return sender;
+}
+
+export async function queueTransactionalEmail({
+  userId = null,
+  recipient,
+  subject,
+  text,
+  html = '',
+  react: reactTemplate = null,
+  kind,
+}) {
   const id = nanoid();
+  const textBody = normalizePlainText(text);
+  const htmlBody = reactTemplate ? await render(reactTemplate) : String(html || '');
   db.prepare(`
     INSERT INTO email_outbox (id, user_id, recipient, subject, text_body, html_body, kind, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?)
-  `).run(id, userId, recipient, subject, text, html, kind, now());
+  `).run(id, userId, recipient, subject, textBody, htmlBody, kind, now());
 
-  const mailer = getMailer();
-  if (!mailer) {
+  const resend = getResendClient();
+  const mailer = resend ? null : getMailer();
+  if (!resend && !mailer) {
     db.prepare(`UPDATE email_outbox SET status = 'logged', sent_at = ? WHERE id = ?`).run(now(), id);
-    if (!config.isProd) console.info(`[Laprakin email:${kind}] ${recipient}\n${text}`);
+    if (!config.isProd) console.info(`[Laprakin email:${kind}] disimpan dalam mode console`);
     return { id, delivered: false, mode: 'console' };
   }
 
   try {
-    const info = await mailer.sendMail({ from: config.mailFrom, to: recipient, subject, text, ...(html ? { html } : {}) });
+    let providerMessageId = null;
+    if (resend) {
+      const { data, error } = await resend.emails.send({
+        from: friendlyMailFrom(config.mailFrom),
+        to: [recipient],
+        subject,
+        text: textBody,
+        ...(reactTemplate ? { react: reactTemplate } : { html: htmlBody }),
+      });
+      if (error) {
+        const deliveryError = new Error(error.message || 'Resend menolak pengiriman email.');
+        deliveryError.code = error.name || 'RESEND_DELIVERY_FAILED';
+        throw deliveryError;
+      }
+      providerMessageId = data?.id || null;
+    } else {
+      const info = await mailer.sendMail({
+        from: friendlyMailFrom(config.mailFrom),
+        to: recipient,
+        subject,
+        text: textBody,
+        ...(htmlBody ? { html: htmlBody } : {}),
+      });
+      providerMessageId = info.messageId || null;
+    }
     db.prepare(`
       UPDATE email_outbox SET status = 'sent', provider_message_id = ?, sent_at = ? WHERE id = ?
-    `).run(info.messageId || null, now(), id);
+    `).run(providerMessageId, now(), id);
     return { id, delivered: true, mode: 'smtp' };
   } catch (error) {
     db.prepare(`UPDATE email_outbox SET status = 'failed', error_message = ? WHERE id = ?`)
-      .run(String(error?.message || 'Email gagal dikirim').slice(0, 800), id);
+      .run(sanitizeOperationalSummary(error?.message, 'Email gagal dikirim.'), id);
     if (config.isProd) throw error;
     return { id, delivered: false, mode: 'failed' };
   }
@@ -343,23 +403,27 @@ export async function queueTransactionalEmail({ userId = null, recipient, subjec
 
 export async function sendVerificationEmail(user, rawToken) {
   const url = verificationUrl(rawToken);
+  const props = { actionUrl: url };
   return queueTransactionalEmail({
     userId: user.id,
     recipient: user.email,
     subject: 'Verifikasi email Laprakin',
     kind: 'email_verification',
-    text: `Halo,\n\nVerifikasi emailmu untuk mengaktifkan akun Laprakin dan claim 2 credit gratis:\n${url}\n\nLink ini bersifat pribadi. Jika kamu tidak membuat akun, abaikan email ini.`,
+    text: verificationText(props),
+    react: VerificationEmail(props),
   });
 }
 
 export async function sendPasswordResetEmail(user, rawToken) {
   const url = resetUrl(rawToken);
+  const props = { actionUrl: url };
   return queueTransactionalEmail({
     userId: user.id,
     recipient: user.email,
     subject: 'Atur ulang kata sandi Laprakin',
     kind: 'password_reset',
-    text: `Halo,\n\nGunakan link berikut untuk mengatur ulang kata sandi Laprakin:\n${url}\n\nLink berlaku selama 30 menit. Jika kamu tidak meminta reset, abaikan email ini.`,
+    text: passwordResetText(props),
+    react: PasswordResetEmail(props),
   });
 }
 

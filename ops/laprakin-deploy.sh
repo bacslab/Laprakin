@@ -38,12 +38,12 @@ if ! flock -n 9; then
 fi
 
 notify() {
-  [[ -x "$NOTIFY" ]] && "$NOTIFY" "$1" "$2" >/dev/null 2>&1 || true
+  [[ -x "$NOTIFY" ]] && "$NOTIFY" "$@" >/dev/null 2>&1 || true
 }
 
 fail() {
   echo "deploy GAGAL: $1" >&2
-  notify "Deploy gagal" "$1"
+  notify "Deploy gagal" "$1" "production" "${TARGET:-}" "${SUBJECT:-}"
   exit 1
 }
 
@@ -168,4 +168,4 @@ printf '%s' "$TARGET" > "$STATE_DIR/deployed-revision"
 docker image prune -f --filter "until=168h" >/dev/null 2>&1 || true
 
 echo "deploy: berhasil pada ${TARGET:0:7}"
-notify "Deploy berhasil" "Revisi ${TARGET:0:7} aktif di production.\n\n$SUBJECT"
+notify "Deploy berhasil" "$SUBJECT" "production" "$TARGET" "$SUBJECT"
