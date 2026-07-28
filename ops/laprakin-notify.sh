@@ -47,15 +47,34 @@ if [[ "$ADMIN_EMAIL" == *@example.test || "$ADMIN_EMAIL" == *@example.com ]]; th
   exit 1
 fi
 
-if [[ -r "$EMAIL_RENDERER" ]]; then
-  payload="$(HOSTNAME_VALUE="$(hostname)" SUBJECT="$SUBJECT" BODY="$BODY" \
+render_react_email() {
+  if command -v node >/dev/null 2>&1; then
+    node "$EMAIL_RENDERER"
+    return
+  fi
+  if command -v docker >/dev/null 2>&1 \
+    && docker image inspect laprakin-laprakin:latest >/dev/null 2>&1; then
+    docker run --rm --network none --read-only --cap-drop ALL \
+      --security-opt no-new-privileges --memory 192m --pids-limit 64 \
+      --env HOSTNAME_VALUE --env SUBJECT --env BODY --env MAIL_FROM --env ADMIN_EMAIL \
+      --env DEPLOY_ENVIRONMENT --env DEPLOY_REVISION --env DEPLOY_SUMMARY \
+      --env DEPLOYMENT_URL --env DEPLOY_LOGS_URL --env OCCURRED_AT \
+      --volume "$EMAIL_RENDERER:/tmp/laprakin-email-renderer.mjs:ro" \
+      --entrypoint node laprakin-laprakin:latest /tmp/laprakin-email-renderer.mjs
+    return
+  fi
+  return 1
+}
+
+if [[ -r "$EMAIL_RENDERER" ]] && payload="$(HOSTNAME_VALUE="$(hostname)" SUBJECT="$SUBJECT" BODY="$BODY" \
     MAIL_FROM="$MAIL_FROM" ADMIN_EMAIL="$ADMIN_EMAIL" \
     DEPLOY_ENVIRONMENT="$DEPLOY_ENVIRONMENT" DEPLOY_REVISION="$DEPLOY_REVISION" \
     DEPLOY_SUMMARY="$DEPLOY_SUMMARY" DEPLOYMENT_URL="$DEPLOYMENT_URL" \
     DEPLOY_LOGS_URL="$DEPLOY_LOGS_URL" OCCURRED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-    node "$EMAIL_RENDERER")"
+    render_react_email)"; then
+  :
 else
-  echo "notify: renderer React Email tidak ditemukan; memakai fallback kompatibilitas" >&2
+  echo "notify: renderer React Email tidak tersedia; memakai fallback kompatibilitas" >&2
   payload="$(HOSTNAME_VALUE="$(hostname)" SUBJECT="$SUBJECT" BODY="$BODY" \
     MAIL_FROM="$MAIL_FROM" ADMIN_EMAIL="$ADMIN_EMAIL" DEPLOY_ENVIRONMENT="$DEPLOY_ENVIRONMENT" \
     python3 - <<'PY'
