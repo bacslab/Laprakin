@@ -52,7 +52,7 @@ export function aiThinkingConfigFor({ model, mode = 'basic', purpose = 'chat' })
   return null;
 }
 
-function reserveUsage({ userId, purpose, mode, model }) {
+function reserveUsage({ userId, purpose, mode, model, contextType = '', contextId = '' }) {
   const id = nanoid();
   let transactionOpen = false;
   try {
@@ -79,8 +79,9 @@ function reserveUsage({ userId, purpose, mode, model }) {
     db.prepare(`
       INSERT INTO ai_usage_events (
         id, user_id, purpose, mode, provider, model, status,
-        input_tokens, output_tokens, total_tokens, latency_ms, error_code, created_at
-      ) VALUES (?, ?, ?, ?, 'gemini', ?, 'pending', 0, 0, 0, 0, '', ?)
+        input_tokens, output_tokens, total_tokens, latency_ms, error_code, created_at,
+        context_type, context_id
+      ) VALUES (?, ?, ?, ?, 'gemini', ?, 'pending', 0, 0, 0, 0, '', ?, ?, ?)
     `).run(
       id,
       userId || null,
@@ -88,6 +89,8 @@ function reserveUsage({ userId, purpose, mode, model }) {
       String(mode || 'basic').slice(0, 24),
       String(model).slice(0, 100),
       now(),
+      String(contextType || '').slice(0, 32),
+      String(contextId || '').slice(0, 120),
     );
     db.exec('COMMIT');
     transactionOpen = false;
@@ -209,6 +212,8 @@ function responseFormatMimeType(responseMimeType) {
 
 export async function generateAiContent({
   userId = null,
+  contextType = '',
+  contextId = '',
   purpose = 'chat',
   mode = 'basic',
   contents,
@@ -228,7 +233,7 @@ export async function generateAiContent({
   const candidateModels = isDocumentPurpose(purpose)
     ? [...new Set([model, config.geminiModelThinking, config.geminiModelBasic].filter(Boolean))]
     : [model];
-  const usageEventId = reserveUsage({ userId, purpose, mode, model });
+  const usageEventId = reserveUsage({ userId, purpose, mode, model, contextType, contextId });
   const bodyForModel = (selectedModel, outputTokenBudget = maxOutputTokens) => {
     const generationConfig = { maxOutputTokens: outputTokenBudget };
     const thinkingConfig = aiThinkingConfigFor({ model: selectedModel, mode, purpose });

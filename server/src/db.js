@@ -963,3 +963,85 @@ CREATE INDEX IF NOT EXISTS idx_admin_alerts_status
 CREATE INDEX IF NOT EXISTS idx_admin_alerts_user
   ON admin_alerts(user_id, created_at DESC);
 `);
+
+// V30: reversible account restrictions, user appeals, admin broadcasts, and
+// server-authoritative pricing. Device/network targets stay pseudonymous.
+ensureColumn('email_outbox', 'html_body', "TEXT NOT NULL DEFAULT ''");
+db.exec(`
+CREATE TABLE IF NOT EXISTS access_restrictions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  target_type TEXT NOT NULL,
+  target_value TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  expires_at TEXT,
+  created_by_user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revoked_by_user_id TEXT,
+  revoked_at TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(created_by_user_id) REFERENCES users(id),
+  FOREIGN KEY(revoked_by_user_id) REFERENCES users(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_access_restrictions_active_target
+  ON access_restrictions(target_type, target_value)
+  WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_access_restrictions_user
+  ON access_restrictions(user_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_access_restrictions_expiry
+  ON access_restrictions(status, expires_at);
+
+CREATE TABLE IF NOT EXISTS account_appeals (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  email_hash TEXT NOT NULL,
+  message TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  admin_reply TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  reviewed_at TEXT,
+  reviewed_by_user_id TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY(reviewed_by_user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_account_appeals_status
+  ON account_appeals(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_account_appeals_user
+  ON account_appeals(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS admin_broadcasts (
+  id TEXT PRIMARY KEY,
+  admin_user_id TEXT NOT NULL,
+  audience TEXT NOT NULL,
+  target_user_ids_json TEXT NOT NULL DEFAULT '[]',
+  subject TEXT NOT NULL,
+  text_body TEXT NOT NULL,
+  html_body TEXT NOT NULL,
+  image_url TEXT NOT NULL DEFAULT '',
+  recipient_count INTEGER NOT NULL DEFAULT 0,
+  delivered_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(admin_user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_broadcasts_created
+  ON admin_broadcasts(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS pricing_overrides (
+  sku TEXT PRIMARY KEY,
+  unit_price_idr INTEGER NOT NULL,
+  discount_percent INTEGER NOT NULL DEFAULT 0,
+  discount_expires_at TEXT,
+  updated_by_user_id TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(updated_by_user_id) REFERENCES users(id)
+);
+`);
+ensureColumn('ai_usage_events', 'context_type', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('ai_usage_events', 'context_id', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('user_devices', 'profile_hash', "TEXT NOT NULL DEFAULT ''");
+db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_usage_context ON ai_usage_events(context_type, context_id, created_at);`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_user_devices_profile ON user_devices(profile_hash, user_id);`);

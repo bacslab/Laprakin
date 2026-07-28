@@ -134,6 +134,7 @@ export const config = {
   publicMediaDir,
   landingMediaDir: path.join(publicMediaDir, 'landing'),
   featureUpdateMediaDir: path.join(publicMediaDir, 'feature-updates'),
+  emailMediaDir: path.join(publicMediaDir, 'email'),
 };
 
 function productionUrl(value) {

@@ -27,7 +27,7 @@ export const PRICING = Object.freeze({
   revisions: { free: 3, single: 5, monthly: 5, pro: 15 },
 });
 
-const PRODUCT_CATALOGUE = Object.freeze({
+const DEFAULT_PRODUCT_CATALOGUE = Object.freeze({
   credit: {
     sku: 'credit', kind: 'credit', planKey: 'single', label: 'Credit Laprakin',
     unitPrice: PRICING.singleCreditIdr, maxQuantity: 20, creditPerUnit: 1,
@@ -44,6 +44,28 @@ const PRODUCT_CATALOGUE = Object.freeze({
     durationDays: 30,
   },
 });
+
+function productCatalogue() {
+  const overrides = new Map(db.prepare(`
+    SELECT sku, unit_price_idr, discount_percent, discount_expires_at
+    FROM pricing_overrides
+  `).all().map((row) => [row.sku, row]));
+  return Object.fromEntries(Object.entries(DEFAULT_PRODUCT_CATALOGUE).map(([sku, product]) => {
+    const override = overrides.get(sku);
+    const basePrice = Number(override?.unit_price_idr || product.unitPrice);
+    const discountActive = Number(override?.discount_percent || 0) > 0
+      && (!override.discount_expires_at || override.discount_expires_at > now());
+    const discountPercent = discountActive ? Number(override.discount_percent) : 0;
+    const effectivePrice = Math.max(1, Math.round(basePrice * (100 - discountPercent) / 100));
+    return [sku, {
+      ...product,
+      unitPrice: effectivePrice,
+      originalUnitPrice: basePrice,
+      discountPercent,
+      discountExpiresAt: discountActive ? override.discount_expires_at || null : null,
+    }];
+  }));
+}
 
 const checkoutItemSchema = z.object({
   sku: z.enum(['credit', 'monthly', 'pro']),
@@ -116,6 +138,7 @@ function legacyItems(plan, quantity) {
 /** Server-side catalogue lookup, normalization, and snapshot creation. */
 export function buildOrderQuote(input) {
   const rawItems = input.items?.length ? input.items : legacyItems(input.plan, input.quantity);
+  const catalogue = productCatalogue();
   const merged = new Map();
   for (const item of rawItems) {
     const sku = item.sku;
@@ -126,7 +149,7 @@ export function buildOrderQuote(input) {
   const items = [];
   let subscriptionCount = 0;
   for (const [sku, quantity] of merged.entries()) {
-    const product = PRODUCT_CATALOGUE[sku];
+    const product = catalogue[sku];
     if (!product) throw new HttpError(400, 'Produk tidak tersedia.', 'INVALID_PRODUCT');
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > product.maxQuantity) {
       throw new HttpError(400, `Jumlah ${product.label} tidak valid.`, 'INVALID_QUANTITY');
@@ -139,6 +162,8 @@ export function buildOrderQuote(input) {
       label: product.label,
       quantity,
       unitPriceIdr: product.unitPrice,
+      originalUnitPriceIdr: product.originalUnitPrice,
+      discountPercent: product.discountPercent,
       subtotalIdr: product.unitPrice * quantity,
       creditPerUnit: product.creditPerUnit,
       durationDays: product.durationDays,
@@ -149,8 +174,10 @@ export function buildOrderQuote(input) {
     throw new HttpError(400, 'Satu checkout hanya dapat memuat satu subscription. Tambahkan credit bila diperlukan.', 'MULTIPLE_SUBSCRIPTIONS');
   }
 
-  const subtotalIdr = items.reduce((total, item) => total + item.subtotalIdr, 0);
-  if (!Number.isSafeInteger(subtotalIdr) || subtotalIdr < 1 || subtotalIdr > 10_000_000) {
+  const subtotalIdr = items.reduce((total, item) => total + (item.originalUnitPriceIdr * item.quantity), 0);
+  const totalIdr = items.reduce((total, item) => total + item.subtotalIdr, 0);
+  const discountIdr = subtotalIdr - totalIdr;
+  if (!Number.isSafeInteger(totalIdr) || totalIdr < 1 || totalIdr > 10_000_000) {
     throw new HttpError(400, 'Total checkout berada di luar batas QRIS.', 'INVALID_GROSS_AMOUNT');
   }
   const subscription = items.find((item) => item.kind === 'subscription') || null;
@@ -161,32 +188,36 @@ export function buildOrderQuote(input) {
     currency: 'IDR',
     items,
     subtotalIdr,
-    discountIdr: 0,
-    totalIdr: subtotalIdr,
-    grossAmount: subtotalIdr,
+    discountIdr,
+    totalIdr,
+    grossAmount: totalIdr,
     primaryPlanKey,
     totalCredits,
-    displayTotal: currency(subtotalIdr),
+    displayTotal: currency(totalIdr),
   };
 }
 
 export function pricingPayload() {
+  const catalogue = productCatalogue();
   return {
     currency: 'IDR',
     qrisOnly: true,
-    products: Object.values(PRODUCT_CATALOGUE).map((item) => ({
+    products: Object.values(catalogue).map((item) => ({
       sku: item.sku,
       label: item.label,
       kind: item.kind,
       unitPriceIdr: item.unitPrice,
+      originalUnitPriceIdr: item.originalUnitPrice,
+      discountPercent: item.discountPercent,
+      discountExpiresAt: item.discountExpiresAt,
       maxQuantity: item.maxQuantity,
       credits: item.creditPerUnit,
       durationDays: item.durationDays,
     })),
     free: { credits: PRICING.freeCredits, revisionsPerReport: PRICING.revisions.free, storageMb: 100 },
-    single: { unitPrice: PRICING.singleCreditIdr, minQuantity: 1, maxQuantity: 20, label: 'Credit laprak', revisionsPerReport: PRICING.revisions.single, storageMb: 500 },
-    monthly: { label: 'Pro', price: PRICING.monthlyIdr, credits: PRICING.monthlyCredits, durationDays: 30, revisionsPerReport: PRICING.revisions.monthly, storageGb: 1 },
-    pro: { label: 'Max', price: PRICING.proIdr, credits: PRICING.proCredits, durationDays: 30, revisionsPerReport: PRICING.revisions.pro, storageGb: 5 },
+    single: { unitPrice: catalogue.credit.unitPrice, originalPrice: catalogue.credit.originalUnitPrice, discountPercent: catalogue.credit.discountPercent, discountExpiresAt: catalogue.credit.discountExpiresAt, minQuantity: 1, maxQuantity: 20, label: 'Credit laprak', revisionsPerReport: PRICING.revisions.single, storageMb: 500 },
+    monthly: { label: 'Pro', price: catalogue.monthly.unitPrice, originalPrice: catalogue.monthly.originalUnitPrice, discountPercent: catalogue.monthly.discountPercent, discountExpiresAt: catalogue.monthly.discountExpiresAt, credits: PRICING.monthlyCredits, durationDays: 30, revisionsPerReport: PRICING.revisions.monthly, storageGb: 1 },
+    pro: { label: 'Max', price: catalogue.pro.unitPrice, originalPrice: catalogue.pro.originalUnitPrice, discountPercent: catalogue.pro.discountPercent, discountExpiresAt: catalogue.pro.discountExpiresAt, credits: PRICING.proCredits, durationDays: 30, revisionsPerReport: PRICING.revisions.pro, storageGb: 5 },
   };
 }
 

@@ -9425,6 +9425,86 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 .workspace .empty-chat .chat-welcome.chat-welcome-minimal h1.greeting-name-long{font-size:1.85rem!important}
 .workspace .empty-chat .chat-welcome.chat-welcome-minimal h1.greeting-name-very-long{font-size:1.6rem!important}
 
+/* Room menu lives in viewport space so the sidebar cannot crop it. */
+.workspace .session-row-actions .session-menu{
+  position:fixed!important;
+  z-index:420!important;
+  top:var(--session-menu-top,8px)!important;
+  left:var(--session-menu-left,300px)!important;
+  right:auto!important;
+  transform:none!important;
+}
+.workspace .left-sidebar:has(.session-menu),
+.workspace .sidebar-session-scroll:has(.session-menu){overflow:visible!important}
+.workspace .session-row-actions .session-submenu{
+  top:0!important;
+  right:auto!important;
+  left:calc(100% + 13px)!important;
+}
+
+/* Pricing buttons move and invert subtly on hover without adding a shadow. */
+.pricing-compact-card>button{
+  transition:transform .16s ease,background-color .16s ease,color .16s ease,border-color .16s ease!important;
+}
+.pricing-compact-card>button:hover{
+  transform:translateY(-2px);
+  filter:none!important;
+  background:var(--pricing-accent);
+  border-color:var(--pricing-accent);
+  color:#fff;
+}
+.pricing-compact-card>button:hover svg{transform:translateX(2px)}
+.pricing-compact-card>button svg{transition:transform .16s ease}
+.pricing-compact-card>button.is-quiet:hover{
+  background:var(--pricing-hover);
+  border-color:var(--pricing-text);
+  color:var(--pricing-text);
+}
+.checkout-summary .checkout-pay-button{
+  background:var(--pricing-text)!important;
+  border-color:var(--pricing-text)!important;
+  color:var(--pricing-bg)!important;
+}
+.checkout-summary .checkout-pay-button:hover{
+  background:var(--pricing-accent)!important;
+  border-color:var(--pricing-accent)!important;
+  color:#fff!important;
+}
+.settings-pane:has(.nickname-settings){
+  display:grid;
+  gap:16px;
+}
+.settings-pane:has(.nickname-settings)>.settings-group,
+.settings-pane:has(.nickname-settings)>.settings-textarea{margin:0!important}
+.settings-pane:has(.nickname-settings) .nickname-settings-control{margin-top:12px}
+.workspace .safety-reason-list{
+  display:grid;
+  gap:5px;
+  margin:8px 0 0;
+  padding:0;
+  list-style:none;
+}
+.workspace .safety-reason-list li{
+  position:relative;
+  padding-left:12px;
+  color:var(--workspace-text);
+  font-size:9.5px;
+  line-height:1.45;
+}
+.workspace .safety-reason-list li::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:.55em;
+  width:4px;
+  height:4px;
+  border-radius:50%;
+  background:var(--danger);
+}
+@media(prefers-reduced-motion:reduce){
+  .pricing-compact-card>button,.pricing-compact-card>button svg{transition:none!important}
+}
+
 .workspace .identity-logo-field{
   grid-column:1/-1;
   display:grid;
@@ -9493,4 +9573,68 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   .workspace .identity-logo-control .button{grid-column:1/-1;justify-content:center}
   .workspace .chat-brief-panel>.button{justify-self:stretch;justify-content:center}
   .workspace .quiz-workspace-panel>header{align-items:flex-start;flex-direction:column}
+}
+
+.auth-appeal-panel{display:grid;gap:10px;border:1px solid color-mix(in srgb,#d46a5f 55%,var(--auth-line));border-radius:8px;padding:12px;background:color-mix(in srgb,#d46a5f 9%,var(--auth-surface))}
+.auth-appeal-panel>div{display:grid;gap:4px}
+.auth-appeal-panel b{font-size:.72rem}
+.auth-appeal-panel p,.auth-appeal-panel small{margin:0;color:var(--auth-muted);font-size:.61rem;line-height:1.5}
+.auth-appeal-panel label{display:grid;gap:6px}
+.auth-appeal-panel textarea{width:100%;min-height:88px;resize:vertical;border:1px solid var(--auth-line);border-radius:7px;padding:10px;background:var(--auth-input);color:var(--auth-text);font:inherit;font-size:.66rem}
+.auth-appeal-submit{min-height:34px;justify-self:start;border:1px solid var(--auth-line);border-radius:6px;padding:0 12px;background:var(--auth-text);color:var(--auth-surface);font:inherit;font-size:.62rem;font-weight:750}
+.pricing-compact-price .pricing-original-price{width:100%;color:var(--pricing-muted);font-size:.58rem;text-decoration:line-through}
+.pricing-compact-price em{margin-left:auto;border:1px solid color-mix(in srgb,var(--pricing-accent) 52%,var(--pricing-line));border-radius:5px;padding:3px 6px;color:var(--pricing-accent);font-size:.52rem;font-style:normal;font-weight:800}
+.checkout-discount{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--pricing-line);padding:12px 0 0;color:var(--pricing-muted);font-size:.62rem}
+.checkout-discount span{display:flex;gap:6px}
+.checkout-discount b{color:var(--pricing-accent)}
+.admin-access-layout{display:grid;grid-template-columns:minmax(240px,310px) minmax(0,1fr);align-items:start;gap:8px}
+.admin-user-picker{position:sticky;top:82px;max-height:calc(100dvh - 100px);overflow:hidden}
+.admin-user-picker .admin-list{max-height:calc(100dvh - 170px);overflow:auto}
+.admin-user-picker .admin-list>button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;border-bottom:1px solid var(--admin-line);padding:9px 6px;background:transparent;color:var(--admin-text);text-align:left}
+.admin-user-picker .admin-list>button:hover,.admin-user-picker .admin-list>button.active{background:var(--admin-hover)}
+.admin-user-picker button div{min-width:0;display:grid;gap:2px}
+.admin-user-picker button b,.admin-user-picker button small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.admin-user-picker button b{font-size:.61rem}
+.admin-user-picker button small,.admin-user-picker button>span{color:var(--admin-muted);font-size:.51rem}
+.admin-access-detail{display:grid;gap:8px}
+.admin-restriction-form{display:grid;grid-template-columns:minmax(180px,1fr) 110px 120px auto;align-items:end;gap:9px;padding-top:12px}
+.admin-restriction-form label,.admin-broadcast-form>label,.admin-form-row label,.admin-pricing-grid label{display:grid;gap:5px;color:var(--admin-muted);font-size:.55rem;font-weight:700}
+.admin-restriction-form input,.admin-restriction-form textarea,.admin-broadcast-form input,.admin-broadcast-form textarea,.admin-pricing-grid input{min-height:36px;border:1px solid var(--admin-line);padding:8px 10px;font:inherit;font-size:.61rem}
+.admin-restriction-form textarea,.admin-broadcast-form textarea{min-height:84px;resize:vertical}
+.admin-restriction-form .admin-form-wide{grid-column:1/-1}
+.admin-permanent-check{display:flex!important;align-items:center;gap:7px!important;min-height:36px}
+.admin-permanent-check input{width:15px;min-height:15px}
+.admin-actions button{border:1px solid var(--admin-line);border-radius:5px;padding:5px 8px;background:transparent;color:var(--admin-text);font-size:.52rem}
+.admin-appeal-list>article{align-items:start!important}
+.admin-appeal-copy{min-width:0;display:grid;gap:8px}
+.admin-appeal-copy p{margin:0;color:var(--admin-text);line-height:1.55}
+.admin-appeal-copy textarea{min-height:70px;resize:vertical;padding:9px;font:inherit;font-size:.59rem}
+.admin-broadcast-grid{grid-template-columns:minmax(0,1.12fr) minmax(300px,.88fr)!important}
+.admin-broadcast-form{display:grid;gap:10px}
+.admin-broadcast-form .admin-panel-head{margin-bottom:0}
+.admin-form-row,.admin-color-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.admin-color-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+.admin-color-row label{display:flex;align-items:center;justify-content:space-between;gap:6px;color:var(--admin-muted);font-size:.54rem;font-weight:700}
+.admin-color-row input{width:38px;min-height:28px;padding:2px}
+.admin-recipient-list{max-height:150px;display:grid;gap:2px;overflow:auto;border:1px solid var(--admin-line);border-radius:7px;padding:6px}
+.admin-recipient-list label{display:flex;align-items:center;gap:7px;padding:5px;color:var(--admin-muted);font-size:.55rem}
+.admin-recipient-list input{width:14px;min-height:14px}
+.admin-email-preview{min-height:280px;margin-bottom:8px;border:1px solid var(--admin-line);border-radius:8px;padding:28px 24px}
+.admin-email-preview img{display:block;width:100%;max-height:220px;object-fit:cover;margin-bottom:20px;border-radius:6px}
+.admin-email-preview h2{margin:0 0 14px;font-size:1.35rem}
+.admin-email-preview p{white-space:pre-wrap;font-size:.67rem;line-height:1.65}
+.admin-email-preview>span{display:inline-block;margin-top:16px;border-radius:6px;padding:10px 14px;font-size:.61rem;font-weight:800}
+.admin-pricing-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.admin-pricing-grid article{display:grid;gap:9px;border:1px solid var(--admin-line);border-radius:8px;padding:12px;background:var(--admin-panel)}
+.admin-pricing-grid h3{margin:0;font-size:.72rem}
+@media(max-width:900px){
+  .admin-access-layout{grid-template-columns:1fr}
+  .admin-user-picker{position:static;max-height:none}
+  .admin-user-picker .admin-list{max-height:240px}
+  .admin-restriction-form{grid-template-columns:1fr 1fr}
+  .admin-broadcast-grid{grid-template-columns:1fr!important}
+  .admin-pricing-grid{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+  .admin-restriction-form,.admin-form-row,.admin-color-row{grid-template-columns:1fr}
 }

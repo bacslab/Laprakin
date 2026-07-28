@@ -860,7 +860,12 @@ function AuthPage() {
     ? 'Masuk dengan Google dibatalkan.'
     : googleStatus === 'failed'
       ? 'Masuk dengan Google belum berhasil. Coba lagi.'
+      : googleStatus === 'restricted'
+        ? 'Akses akun atau perangkat ini sedang dibatasi.'
       : '');
+  const [restriction, setRestriction] = useState(googleStatus === 'restricted' ? { appealAllowed: true } : null);
+  const [appealMessage, setAppealMessage] = useState('');
+  const [appealOpen, setAppealOpen] = useState(googleStatus === 'restricted');
   const [success, setSuccess] = useState('');
   const [devToken, setDevToken] = useState('');
   const [googleEnabled, setGoogleEnabled] = useState(false);
@@ -874,6 +879,26 @@ function AuthPage() {
       if (mode === 'register') { const data = await api('/auth/register', { method: 'POST', body: { email: form.email, password: form.password, referralCode: form.referralCode }, includeCsrf: false }); setDevToken(data.developmentVerificationToken || ''); setSuccess('Akun dibuat. Verifikasi email sebelum memakai credit gratis.'); }
       if (mode === 'forgot') { const data = await api('/auth/request-password-reset', { method: 'POST', body: { email: form.email }, includeCsrf: false }); setDevToken(data.developmentResetToken || ''); setSuccess(data.message || 'Link reset telah diproses.'); }
       if (mode === 'reset') { const data = await api('/auth/reset-password', { method: 'POST', body: { token: resetToken || devToken, password: form.newPassword }, includeCsrf: false }); setCsrfToken(data.csrfToken || ''); if (!data.csrfToken) { setMessage(data.message); setMode('login'); return; } const nextSession = await refreshSession(); navigate(safeNext || (nextSession?.user?.role === 'admin' ? '/admin' : '/app')); }
+    } catch (err) {
+      setError(err.message);
+      if (err.code === 'ACCOUNT_RESTRICTED') {
+        setRestriction(err.payload?.error?.details || { appealAllowed: true });
+        setAppealOpen(true);
+      }
+    } finally { setBusy(false); }
+  };
+  const submitAppeal = async () => {
+    if (!form.email || appealMessage.trim().length < 20) return;
+    setBusy(true); setError('');
+    try {
+      const data = await api('/auth/appeals', {
+        method: 'POST',
+        body: { email: form.email, message: appealMessage },
+        includeCsrf: false,
+      });
+      setSuccess(data.message || 'Permohonan appeal telah diterima.');
+      setAppealOpen(false);
+      setAppealMessage('');
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
   const verifyDev = async () => { setBusy(true); try { const data = await api('/auth/verify', { method: 'POST', body: { token: devToken }, includeCsrf: false }); setCsrfToken(data.csrfToken); const nextSession = await refreshSession(); navigate(safeNext || (nextSession?.user?.role === 'admin' ? '/admin' : '/app')); } catch (err) { setError(err.message); } finally { setBusy(false); } };
@@ -906,7 +931,14 @@ function AuthPage() {
           {['login', 'register'].includes(mode) && <label><span>Kata sandi</span><input type="password" minLength={mode === 'register' ? 12 : 1} maxLength="64" required value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={mode === 'register' ? 'Minimal 12 karakter' : 'Kata sandi'} /></label>}
           {mode === 'register' && <label><span>Kode referral <small>opsional</small></span><input value={form.referralCode} onChange={(event) => setForm({ ...form, referralCode: event.target.value })} placeholder="R-XXXXXXXX" /></label>}
           {mode === 'reset' && <label><span>Kata sandi baru</span><input type="password" minLength="12" maxLength="64" required value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} placeholder="Minimal 12 karakter" /></label>}
-          {error && <div className="auth-notice error"><CircleAlert size={15} />{error}</div>}
+          {error && !restriction?.appealAllowed && <div className="auth-notice error"><CircleAlert size={15} />{error}</div>}
+          {restriction?.appealAllowed && <section className="auth-appeal-panel">
+            <div><b>Akses sedang dibatasi</b><p>{restriction.reason || 'Tim Laprakin perlu meninjau aktivitas akun atau perangkat ini.'}</p>{restriction.expiresAt && <small>Berlaku sampai {formatDate(restriction.expiresAt)}.</small>}</div>
+            {!appealOpen ? <button type="button" className="auth-text-button" onClick={() => setAppealOpen(true)}>Ajukan appeal</button> : <>
+              <label><span>Penjelasan appeal</span><textarea minLength="20" maxLength="1200" value={appealMessage} onChange={(event) => setAppealMessage(event.target.value)} placeholder="Jelaskan alasan aksesmu perlu ditinjau kembali." /></label>
+              <button type="button" className="auth-appeal-submit" disabled={busy || !form.email || appealMessage.trim().length < 20} onClick={submitAppeal}>Kirim appeal</button>
+            </>}
+          </section>}
           <button className="auth-submit" type="submit" disabled={busy}>{busy && <LoaderCircle className="spin" size={15} />}{mode === 'login' ? 'Masuk ke workspace' : mode === 'register' ? 'Buat akun' : mode === 'forgot' ? 'Kirim link reset' : 'Simpan kata sandi'} <ArrowRight size={15} /></button>
         </form>}
         <div className="auth-card-footer">
@@ -1003,15 +1035,15 @@ function PublicPricingPage() {
       features: [`${pricing.free?.credits || 2} credit awal`, `${pricing.free?.revisionsPerReport || 3} revisi per laprak`, `${pricing.free?.storageMb || 100} MB penyimpanan`],
     },
     {
-      key: 'credit', label: 'Satuan', note: 'Bayar sesuai kebutuhan', price: formatCurrency(pricing.single?.unitPrice || 3900), suffix: '/ laprak',
+      key: 'credit', label: 'Satuan', note: 'Bayar sesuai kebutuhan', price: formatCurrency(pricing.single?.unitPrice || 3900), originalPrice: formatCurrency(pricing.single?.originalPrice || pricing.single?.unitPrice || 3900), discountPercent: pricing.single?.discountPercent || 0, suffix: '/ laprak',
       features: ['Tanpa subscription', `${pricing.single?.revisionsPerReport || 5} revisi per laprak`, 'Aktif hingga 180 hari'],
     },
     {
-      key: 'monthly', label: 'Pro', note: 'Untuk laprak harian', recommended: true, price: formatCurrency(pricing.monthly?.price || 29900), suffix: '/ 30 hari',
+      key: 'monthly', label: 'Pro', note: 'Untuk laprak harian', recommended: true, price: formatCurrency(pricing.monthly?.price || 29900), originalPrice: formatCurrency(pricing.monthly?.originalPrice || pricing.monthly?.price || 29900), discountPercent: pricing.monthly?.discountPercent || 0, suffix: '/ 30 hari',
       features: [`${pricing.monthly?.credits || 12} credit / 30 hari`, 'Mode Thinking terbuka', `${pricing.monthly?.storageGb || 1} GB penyimpanan`],
     },
     {
-      key: 'pro', label: 'Max', note: 'Untuk semester padat', price: formatCurrency(pricing.pro?.price || 45900), suffix: '/ 30 hari',
+      key: 'pro', label: 'Max', note: 'Untuk semester padat', price: formatCurrency(pricing.pro?.price || 45900), originalPrice: formatCurrency(pricing.pro?.originalPrice || pricing.pro?.price || 45900), discountPercent: pricing.pro?.discountPercent || 0, suffix: '/ 30 hari',
       features: [`${pricing.pro?.credits || 20} credit / 30 hari`, 'Mode XtraThink terbuka', `${pricing.pro?.storageGb || 5} GB penyimpanan`],
     },
   ];
@@ -1131,7 +1163,7 @@ function PublicPricingPage() {
   return <div className={`pricing-compact-page ${isCheckoutPage ? 'pricing-checkout-page' : ''} ${resolvedTheme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
     {/* Dari halaman checkout, Kembali harus mengembalikan ke daftar plan supaya
     user dapat mengganti pilihan; hanya dari daftar plan ia keluar ke workspace. */}
-    <header className="pricing-compact-nav"><button type="button" onClick={() => (isCheckoutPage ? navigate('/pricing') : navigate(user ? '/app' : '/'))} aria-label="Kembali"><ArrowLeft size={18}/>{isCheckoutPage && <span>Pilih plan lain</span>}</button></header>
+    <header className="pricing-compact-nav"><button type="button" onClick={() => (isCheckoutPage ? navigate('/pricing') : navigate(user ? '/app' : '/'))} aria-label={isCheckoutPage ? 'Kembali ke pilihan plan' : 'Kembali'} title={isCheckoutPage ? 'Kembali ke pilihan plan' : 'Kembali'}><ArrowLeft size={18}/></button></header>
     <main className="pricing-compact-main">
       <section className="pricing-compact-intro" aria-labelledby="pricing-compact-title">
         <span>Pilihan Laprakin</span>
@@ -1147,7 +1179,7 @@ function PublicPricingPage() {
           return <article key={card.key} className={`pricing-compact-card ${card.recommended ? 'is-recommended' : ''} ${isSelected ? 'is-selected' : ''} ${isCurrent ? 'is-current' : ''}`}>
             {card.recommended && <span className="pricing-recommended-badge">Rekomendasi</span>}
             <div className="pricing-compact-card-head"><div><b>{card.label}</b><small>{isCurrent ? 'Plan aktif' : card.note}</small></div></div>
-            <div className="pricing-compact-price"><strong>{card.price}</strong>{card.suffix && <span>{card.suffix}</span>}</div>
+            <div className="pricing-compact-price">{card.discountPercent > 0 && <small className="pricing-original-price">{card.originalPrice}</small>}<strong>{card.price}</strong>{card.suffix && <span>{card.suffix}</span>}{card.discountPercent > 0 && <em>Hemat {card.discountPercent}%</em>}</div>
             <div className="pricing-compact-action-slot">
               {card.key === 'credit' ? <div className="pricing-compact-quantity" onClick={(event) => event.stopPropagation()}><span>Jumlah</span><div><button type="button" aria-label="Kurangi credit" onClick={() => updateCreditQuantity(creditQuantity - 1)}>-</button><b>{creditQuantity}</b><button type="button" aria-label="Tambah credit" onClick={() => updateCreditQuantity(creditQuantity + 1)}>+</button></div></div> : <span className="pricing-compact-quantity-placeholder" aria-hidden="true" />}
             </div>
@@ -1178,6 +1210,7 @@ function PublicPricingPage() {
           {!quote?.items?.length && <li className="checkout-lines-empty"><span>{quoteBusy ? 'Menghitung pesanan…' : 'Belum ada produk terpilih.'}</span></li>}
         </ul>
 
+        {Number(quote?.discountIdr || 0) > 0 && <div className="checkout-discount"><span>Subtotal <s>{formatCurrency(quote.subtotalIdr)}</s></span><b>Diskon -{formatCurrency(quote.discountIdr)}</b></div>}
         <div className="checkout-total">
           <div><span>Total</span><small>Sudah termasuk seluruh biaya.</small></div>
           <b>{quoteBusy ? 'Menghitung…' : quote?.displayTotal || 'Rp0'}</b>
@@ -1185,7 +1218,7 @@ function PublicPricingPage() {
 
         {quote?.totalCredits > 0 && <p className="checkout-gain"><Check size={14} />Kamu mendapat <b>{quote.totalCredits} credit</b> begitu pembayaran terverifikasi.</p>}
 
-        <Button onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>
+        <Button className="checkout-pay-button" onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>
           {busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? 'Bayar dengan QRIS' : 'Gateway belum aktif'}
         </Button>
 
@@ -2074,7 +2107,6 @@ function ChatSessionRow({ item, active, onOpen, editing, setEditing, onRename, d
   const [menuOpen, setMenuOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   useEffect(() => setTitle(item.title), [item.title]);
-  useEffect(() => { if (!menuOpen) return undefined; const timer = window.setTimeout(() => { setMenuOpen(false); setMoveOpen(false); }, 5000); return () => window.clearTimeout(timer); }, [menuOpen]);
   useEffect(() => {
     if (!menuOpen) return undefined;
     const closeOutside = (event) => {
@@ -2085,6 +2117,28 @@ function ChatSessionRow({ item, active, onOpen, editing, setEditing, onRename, d
     window.addEventListener('mousedown', closeOutside);
     return () => window.removeEventListener('mousedown', closeOutside);
   }, [menuOpen]);
+  useEffect(() => {
+    const closeOtherMenu = (event) => {
+      if (event.detail?.id !== item.id) {
+        setMenuOpen(false);
+        setMoveOpen(false);
+      }
+    };
+    window.addEventListener('laprakin:session-menu-open', closeOtherMenu);
+    return () => window.removeEventListener('laprakin:session-menu-open', closeOtherMenu);
+  }, [item.id]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const trigger = document.activeElement?.classList?.contains('session-menu-trigger') ? document.activeElement : null;
+    const menu = trigger?.closest('.session-row')?.querySelector('.session-menu');
+    if (trigger && menu) {
+      const rect = trigger.getBoundingClientRect();
+      const sidebarRight = trigger.closest('.left-sidebar')?.getBoundingClientRect().right || 0;
+      menu.style.setProperty('--session-menu-top', `${Math.max(8, Math.min(rect.top - 10, window.innerHeight - 232))}px`);
+      menu.style.setProperty('--session-menu-left', `${Math.max(8, Math.min(Math.max(rect.right + 8, sidebarRight + 6), window.innerWidth - 206))}px`);
+    }
+    window.dispatchEvent(new CustomEvent('laprakin:session-menu-open', { detail: { id: item.id } }));
+  }, [menuOpen, item.id]);
   const submit = (event) => { event.preventDefault(); onRename(item.id, title); };
   const chooseFolder = async (folder) => { await onMove(item, folder); setMenuOpen(false); setMoveOpen(false); };
   const createFolder = async () => { const folder = await showDialog({ kind: 'prompt', title: 'Folder baru', message: 'Masukkan nama folder untuk mengelompokkan chat.', placeholder: 'Contoh: Modul 5 Firewall', confirmLabel: 'Buat folder' }); if (folder?.trim()) chooseFolder(folder.trim().slice(0, 100)); };
@@ -2684,7 +2738,7 @@ function ReportPreview({ documentState, user, embedded = false }) {
         <p className="report-cover-kicker">LAPORAN PRAKTIKUM</p>
         <h2>{documentState.course_name || 'MATA KULIAH'}</h2>
         <h3>{documentState.module_title || documentState.title}</h3>
-        <img className="report-cover-logo" src={user.institutionLogoUrl || '/pnc-logo.png'} alt={`Logo ${user.institutionName || 'institusi'}`} />
+        {user.institutionLogoUrl && <img className="report-cover-logo" src={user.institutionLogoUrl} alt={`Logo ${user.institutionName || 'institusi'}`} />}
         <div className="report-cover-lecturer"><small>Dosen Pengampu:</small><b>{documentState.lecturer_name || '-'}</b><span>NIP : -</span></div>
         <div className="report-cover-identity"><small>Disusun Oleh:</small><b>{user.fullName || 'Nama mahasiswa'} ({user.nim || 'NPM / NIM'})</b><span>{user.className || 'Kelas'}</span></div>
         <div className="report-cover-institution"><b>PROGRAM STUDI {studyProgram.toUpperCase()}</b><span>{department.toUpperCase()}</span><span>POLITEKNIK NEGERI CILACAP</span><span>TAHUN AKADEMIK {documentState.academic_year || '2025/2026'}</span></div>
@@ -2947,7 +3001,7 @@ function InstitutionLogoField({ logoUrl = '', onChanged, setNotice }) {
     <div className="settings-group-heading"><b>Logo institusi</b><small>Dipakai pada cover dokumen. PNG, maksimal 5 MB.</small></div>
     <div className="institution-logo-row">
       <div className="institution-logo-preview">
-        {hasLogo ? <img src={logoUrl} alt="Logo institusi" /> : <ImageIcon size={20} aria-hidden="true" />}
+        {hasLogo && <img src={logoUrl} alt="Logo institusi" />}
       </div>
       <div className="institution-logo-actions">
         <input ref={inputRef} type="file" accept=".png,image/png" onChange={pick} hidden />
@@ -3337,7 +3391,7 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
       setBusy(false);
     }
   };
-  const saveAcademic = async () => { setBusy(true); try { await api('/profile', { method: 'PUT', body: { fullName: form.fullName, nim: form.nim, className: form.className, institutionName: form.institutionName, institutionLogoUrl: form.institutionLogoUrl, facultyName: form.facultyName, studyProgramName: form.studyProgramName, lecturerName: form.lecturerName, lecturerNip: form.lecturerNip, departmentKey: form.departmentKey, studyProgramKey: form.studyProgramKey } }); await onSaved(); setNotice('Profil akademik disimpan.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
+  const saveAcademic = async () => { setBusy(true); try { await api('/profile', { method: 'PUT', body: { fullName: form.fullName, nim: form.nim, className: form.className, institutionName: form.institutionName, facultyName: form.facultyName, studyProgramName: form.studyProgramName, lecturerName: form.lecturerName, lecturerNip: form.lecturerNip, departmentKey: form.departmentKey, studyProgramKey: form.studyProgramKey } }); await onSaved(); setNotice('Profil akademik disimpan.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   const requestPasswordChange = async () => { setBusy(true); try { await api('/auth/password-change-request', { method: 'POST', body: {} }); setNotice('Link verifikasi perubahan kata sandi sudah dikirim ke email akunmu.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   const restoreArchivedChat = async (sessionId) => {
     setBusy(true);
@@ -3413,7 +3467,7 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
           </section>
         </div>}
         {tab === 'storage' && <div className="settings-pane">{storage ? <><div className="storage-overview"><div><span>Terpakai</span><b>{formatBytes(storage.usedBytes)}</b><small>dari {formatBytes(storage.limitBytes)}</small></div><strong>{storagePercentage}%</strong></div><div className="storage-meter"><i><em style={{ width: `${storagePercentage}%` }} /></i></div><div className="storage-cards"><span><FolderOpen size={17}/><b>{storage.tier === 'pro' ? 'Pro' : storage.tier === 'subscription' ? 'Subscription' : storage.tier === 'paid' ? 'Satuan' : 'Gratis'}</b><small>{storage.retentionHint}</small></span><span><FileText size={17}/><b>Yang dihitung</b><small>Modul, bukti, template, data, dan export DOCX.</small></span></div><section className="settings-group storage-file-manager"><div className="settings-group-heading"><b>File tersimpan</b><small>{storage.files?.length || 0} file bisa dikelola</small></div>{storage.files?.length ? <div className="storage-file-list">{storage.files.map((file) => <article key={`${file.kind}-${file.id}`}><FileText size={15}/><div><b>{file.name}</b><small>{file.sourceLabel} · {formatBytes(file.sizeBytes)} · {formatDate(file.createdAt)}</small></div><Button variant="secondary" onClick={() => deleteStorageFile(file)} disabled={Boolean(storageBusy)}>{storageBusy === file.id ? <LoaderCircle className="spin" size={14}/> : <Trash2 size={14}/>}Hapus</Button></article>)}</div> : <div className="settings-empty-state"><FolderOpen size={18}/><div><b>Belum ada file tersimpan</b><p>File modul, bukti, data, dan export akan muncul di sini.</p></div></div>}</section></> : <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat ringkasan penyimpanan...</div>}<p className="settings-footnote">Chat teks dan preferensi tidak dihitung sebagai penyimpanan file.</p></div>}
-        {tab === 'safety' && <div className="settings-pane"><section className={`safety-account-status ${safetyStatus?.hasAlert ? 'has-alert' : ''}`}>{safetyStatus ? safetyStatus.hasAlert ? <><CircleAlert size={20}/><div><b>Akun sedang mendapat alert</b><p>Ada sinyal penggunaan yang perlu ditinjau. Jika akses dibatasi, Laprakin akan menampilkan tindakan yang perlu kamu lakukan.</p><small>{safetyStatus.openAlerts} alert terbuka</small></div></> : <><ShieldCheck size={20}/><div><b>Tidak ada alert pada akun</b><p>Penggunaan akunmu tidak sedang memiliki sinyal safety terbuka.</p><small>Status terakhir diperbarui otomatis.</small></div></> : <><LoaderCircle className="spin" size={18}/><div><b>Memuat status akun</b><p>Safety status sedang diperiksa.</p></div></>}</section></div>}
+        {tab === 'safety' && <div className="settings-pane"><section className={`safety-account-status ${safetyStatus?.hasAlert ? 'has-alert' : ''}`}>{safetyStatus ? safetyStatus.hasAlert ? <><CircleAlert size={20}/><div><b>Akun sedang mendapat alert</b><p>Berikut alasan yang perlu kamu periksa:</p><ul className="safety-reason-list">{(safetyStatus.reasons || []).map((item, index) => <li key={`${item.createdAt || ''}-${index}`}>{item.reason}</li>)}</ul><small>{safetyStatus.openAlerts} alert terbuka</small></div></> : <><ShieldCheck size={20}/><div><b>Tidak ada alert pada akun</b><p>Penggunaan akunmu tidak sedang memiliki sinyal safety terbuka.</p><small>Status terakhir diperbarui otomatis.</small></div></> : <><LoaderCircle className="spin" size={18}/><div><b>Memuat status akun</b><p>Safety status sedang diperiksa.</p></div></>}</section></div>}
         {tab === 'security' && <div className="settings-pane">
           {String(user.authProvider || 'password').includes('google') && <section className="settings-group"><Row title="Google terhubung" description="Akun Google ini dapat dipakai untuk masuk tanpa kata sandi."><span className="settings-connected-status"><CheckCircle2 size={14}/>Aktif</span></Row></section>}
           <section className="settings-group"><div className="settings-group-heading"><b>{user.authProvider === 'google' ? 'Buat kata sandi Laprakin' : 'Ubah kata sandi'}</b><small>Untuk keamanan, verifikasi dilakukan melalui link yang dikirim ke {user.email}.</small></div><Button type="button" variant="secondary" onClick={requestPasswordChange} disabled={busy}><Mail size={14}/>Kirim link verifikasi</Button></section>
@@ -3491,6 +3545,131 @@ function AppDialog({ dialog, onResolve }) {
 function Modal({ title, onClose, children, className = '' }) {
   useEffect(() => { const closeOnEscape = (event) => { if (event.key === 'Escape') onClose(); }; window.addEventListener('keydown', closeOnEscape); return () => window.removeEventListener('keydown', closeOnEscape); }, [onClose]);
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className={`modal ${className}`} role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title"><header><b id="workspace-modal-title">{title}</b><IconButton label="Tutup" onClick={onClose}><X size={16}/></IconButton></header>{children}</section></div>;
+}
+
+function AdminAccessPanel({ users, setNotice, onRefresh }) {
+  const [selectedId, setSelectedId] = useState(users[0]?.id || '');
+  const [rooms, setRooms] = useState([]);
+  const [restrictions, setRestrictions] = useState([]);
+  const [form, setForm] = useState({ targetType: 'account', durationDays: '7', permanent: false, reason: '' });
+  const [busy, setBusy] = useState(false);
+  const selected = users.find((item) => item.id === selectedId);
+  const loadDetails = useCallback(async (userId) => {
+    if (!userId) return;
+    try {
+      const [roomData, restrictionData] = await Promise.all([
+        api(`/admin/users/${userId}/rooms`),
+        api(`/admin/users/${userId}/restrictions`),
+      ]);
+      setRooms(roomData.rooms || []);
+      setRestrictions(restrictionData.restrictions || []);
+    } catch (error) { setNotice(error.message); }
+  }, [setNotice]);
+  useEffect(() => { loadDetails(selectedId); }, [selectedId, loadDetails]);
+  const createRestriction = async () => {
+    if (!selectedId || form.reason.trim().length < 8) return;
+    setBusy(true);
+    try {
+      await api(`/admin/users/${selectedId}/restrictions`, {
+        method: 'POST',
+        body: {
+          targetType: form.targetType,
+          durationDays: form.permanent ? null : Number(form.durationDays),
+          reason: form.reason,
+        },
+      });
+      setForm((value) => ({ ...value, reason: '' }));
+      await Promise.all([loadDetails(selectedId), onRefresh()]);
+      setNotice('Pembatasan diterapkan dan user menerima pemberitahuan email.');
+    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  };
+  const revokeRestriction = async (restrictionId) => {
+    setBusy(true);
+    try {
+      await api(`/admin/users/${selectedId}/restrictions/${restrictionId}`, { method: 'DELETE' });
+      await Promise.all([loadDetails(selectedId), onRefresh()]);
+      setNotice('Pembatasan dicabut.');
+    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  };
+  return <section className="admin-content admin-access-layout">
+    <section className="admin-panel admin-user-picker"><div className="admin-panel-head"><h2>User</h2><small>{users.length} akun</small></div><div className="admin-list">{users.map((item) => <button type="button" key={item.id} className={selectedId === item.id ? 'active' : ''} onClick={() => setSelectedId(item.id)}><div><b>{item.fullName || item.email}</b><small>{item.email} · {item.plan}</small></div><span>{item.restrictionCount ? `${item.restrictionCount} batasan` : `${item.roomCount} room`}</span></button>)}</div></section>
+    <div className="admin-access-detail">
+      <section className="admin-panel"><div className="admin-panel-head"><div><h2>{selected?.fullName || selected?.email || 'Pilih user'}</h2><small>{selected ? `${selected.messageCount} pesan · ${Number(selected.totalTokens || 0).toLocaleString('id-ID')} token` : ''}</small></div></div>{selected && <div className="admin-restriction-form"><label>Jenis pembatasan<CustomSelect value={form.targetType} onChange={(targetType) => setForm((value) => ({ ...value, targetType }))} options={[{value:'account',label:'Suspend akun'},{value:'device',label:'Blokir perangkat terkait'},{value:'ip',label:'Blokir jaringan terkait'}]} /></label><label className="admin-permanent-check"><input type="checkbox" checked={form.permanent} onChange={(event) => setForm((value) => ({ ...value, permanent: event.target.checked }))}/><span>Permanen</span></label>{!form.permanent && <label>Durasi hari<input type="number" min="1" max="3650" value={form.durationDays} onChange={(event) => setForm((value) => ({ ...value, durationDays: event.target.value }))}/></label>}<label className="admin-form-wide">Alasan untuk user<textarea maxLength="280" value={form.reason} onChange={(event) => setForm((value) => ({ ...value, reason: event.target.value }))} placeholder="Jelaskan alasan tanpa istilah teknis."/></label><Button onClick={createRestriction} disabled={busy || form.reason.trim().length < 8}><Shield size={14}/>Terapkan pembatasan</Button></div>}</section>
+      <section className="admin-panel"><div className="admin-panel-head"><h2>Pembatasan</h2><small>Target disimpan secara pseudonim</small></div><div className="admin-list">{restrictions.length ? restrictions.map((item) => <article key={item.id}><div><b>{item.targetType === 'account' ? 'Akun' : item.targetType === 'device' ? 'Perangkat' : 'Jaringan'}</b><small>{item.reason} · {item.permanent ? 'Permanen' : `hingga ${formatDate(item.expiresAt)}`}</small></div><div className="admin-actions"><span className={`status-${item.status === 'active' ? 'failed' : 'completed'}`}>{item.status}</span>{item.status === 'active' && <button type="button" onClick={() => revokeRestriction(item.id)}>Cabut</button>}</div></article>) : <p className="empty-admin">Tidak ada pembatasan.</p>}</div></section>
+      <section className="admin-panel"><div className="admin-panel-head"><h2>Roomchat</h2><small>Hanya metadata pemakaian</small></div><div className="admin-list">{rooms.length ? rooms.map((room) => <article key={room.id}><div><b>{room.title}</b><small>Diperbarui {formatDate(room.updatedAt)}</small></div><span>{room.messageCount} pesan · {Number(room.totalTokens || 0).toLocaleString('id-ID')} token</span></article>) : <p className="empty-admin">Belum ada roomchat.</p>}</div></section>
+    </div>
+  </section>;
+}
+
+function AdminAppealsPanel({ setNotice, onRefresh }) {
+  const [appeals, setAppeals] = useState([]);
+  const [replies, setReplies] = useState({});
+  const [busy, setBusy] = useState(false);
+  const loadAppeals = useCallback(() => api('/admin/appeals?status=all').then((data) => setAppeals(data.appeals || [])).catch((error) => setNotice(error.message)), [setNotice]);
+  useEffect(() => { loadAppeals(); }, [loadAppeals]);
+  const review = async (appeal, status) => {
+    const reply = (replies[appeal.id] || '').trim();
+    if (reply.length < 4) return;
+    setBusy(true);
+    try {
+      await api(`/admin/appeals/${appeal.id}`, {
+        method: 'PUT',
+        body: { status, reply, liftRestrictions: status === 'approved' },
+      });
+      await Promise.all([loadAppeals(), onRefresh()]);
+      setNotice(status === 'approved' ? 'Appeal disetujui dan pembatasan akun dicabut.' : 'Hasil appeal dikirim ke user.');
+    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  };
+  return <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Appeal akun</h2><small>User menerima hasil lewat email</small></div><div className="admin-list admin-appeal-list">{appeals.length ? appeals.map((appeal) => <article key={appeal.id}><div className="admin-appeal-copy"><div><b>{appeal.userName || appeal.userEmail || 'Akun tidak aktif'}</b><small>{appeal.userEmail || 'Email terlindungi'} · {formatDate(appeal.createdAt)}</small></div><p>{appeal.message}</p>{appeal.status === 'open' ? <textarea value={replies[appeal.id] || ''} onChange={(event) => setReplies((value) => ({ ...value, [appeal.id]: event.target.value }))} placeholder="Tulis hasil peninjauan untuk user."/> : <small className="admin-reply">{appeal.adminReply}</small>}</div><div className="admin-actions"><span className={`status-${appeal.status === 'approved' ? 'completed' : appeal.status === 'open' ? 'queued' : 'failed'}`}>{appeal.status}</span>{appeal.status === 'open' && <><button disabled={busy} onClick={() => review(appeal, 'approved')}>Setujui</button><button disabled={busy} onClick={() => review(appeal, 'rejected')}>Tolak</button></>}</div></article>) : <p className="empty-admin">Belum ada appeal.</p>}</div></div></section>;
+}
+
+function AdminBroadcastPanel({ users, setNotice }) {
+  const [form, setForm] = useState({ audience: 'all', userIds: [], subject: '', heading: '', body: '', ctaLabel: '', ctaUrl: '', imageUrl: '', accentColor: '#b7ff24', backgroundColor: '#f5f5f2', textColor: '#171715' });
+  const [history, setHistory] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const loadHistory = useCallback(() => api('/admin/broadcasts').then((data) => setHistory(data.broadcasts || [])).catch((error) => setNotice(error.message)), [setNotice]);
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+  const toggleRecipient = (id) => setForm((value) => ({ ...value, userIds: value.userIds.includes(id) ? value.userIds.filter((item) => item !== id) : [...value.userIds, id] }));
+  const uploadImage = async (event) => {
+    const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
+    setBusy(true);
+    try {
+      const body = new FormData(); body.append('file', file);
+      const result = await api('/admin/broadcasts/image', { method: 'POST', body, form: true });
+      setForm((value) => ({ ...value, imageUrl: result.imageUrl }));
+    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  };
+  const sendBroadcast = async () => {
+    setBusy(true);
+    try {
+      const result = await api('/admin/broadcasts', { method: 'POST', body: form });
+      setNotice(`${result.deliveredCount} dari ${result.recipientCount} email berhasil diproses.`);
+      setForm((value) => ({ ...value, subject: '', heading: '', body: '', ctaLabel: '', ctaUrl: '', imageUrl: '' }));
+      await loadHistory();
+    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  };
+  const invalid = form.subject.trim().length < 3 || form.heading.trim().length < 2 || form.body.trim().length < 10 || (form.audience === 'selected' && !form.userIds.length);
+  return <section className="admin-content"><div className="admin-grid admin-broadcast-grid"><section className="admin-panel admin-broadcast-form"><div className="admin-panel-head"><h2>Email user</h2><small>Promosi, update, atau maintenance</small></div><label>Target<CustomSelect value={form.audience} onChange={(audience) => setForm((value) => ({ ...value, audience }))} options={[{value:'all',label:'Semua user terverifikasi'},{value:'paid',label:'Semua user paid'},{value:'selected',label:'User terpilih'}]}/></label>{form.audience === 'selected' && <div className="admin-recipient-list">{users.map((item) => <label key={item.id}><input type="checkbox" checked={form.userIds.includes(item.id)} onChange={() => toggleRecipient(item.id)}/><span>{item.email}</span></label>)}</div>}<label>Subjek<input maxLength="140" value={form.subject} onChange={(event) => setForm((value) => ({ ...value, subject: event.target.value }))}/></label><label>Judul email<input maxLength="140" value={form.heading} onChange={(event) => setForm((value) => ({ ...value, heading: event.target.value }))}/></label><label>Isi<textarea maxLength="6000" value={form.body} onChange={(event) => setForm((value) => ({ ...value, body: event.target.value }))}/></label><div className="admin-form-row"><label>Label tombol<input maxLength="50" value={form.ctaLabel} onChange={(event) => setForm((value) => ({ ...value, ctaLabel: event.target.value }))}/></label><label>URL tombol<input type="url" value={form.ctaUrl} onChange={(event) => setForm((value) => ({ ...value, ctaUrl: event.target.value }))}/></label></div><label>Gambar<input type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadImage}/></label><div className="admin-color-row"><label>Aksen<input type="color" value={form.accentColor} onChange={(event) => setForm((value) => ({ ...value, accentColor: event.target.value }))}/></label><label>Latar<input type="color" value={form.backgroundColor} onChange={(event) => setForm((value) => ({ ...value, backgroundColor: event.target.value }))}/></label><label>Teks<input type="color" value={form.textColor} onChange={(event) => setForm((value) => ({ ...value, textColor: event.target.value }))}/></label></div><Button onClick={sendBroadcast} disabled={busy || invalid}><Send size={14}/>Kirim email</Button></section><div><section className="admin-email-preview" style={{background:form.backgroundColor,color:form.textColor}}>{form.imageUrl && <img src={form.imageUrl} alt="Preview email"/>}<h2>{form.heading || 'Judul email'}</h2><p>{form.body || 'Isi email akan tampil di sini.'}</p>{form.ctaLabel && <span style={{background:form.accentColor,color:form.textColor}}>{form.ctaLabel}</span>}</section><section className="admin-panel"><div className="admin-panel-head"><h2>Riwayat</h2><small>{history.length} email</small></div><div className="admin-list">{history.slice(0,20).map((item) => <article key={item.id}><div><b>{item.subject}</b><small>{item.audience} · {formatDate(item.createdAt)}</small></div><span>{item.deliveredCount}/{item.recipientCount}</span></article>)}</div></section></div></div></section>;
+}
+
+function AdminPricingPanel({ setNotice }) {
+  const [products, setProducts] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const loadPricing = useCallback(() => api('/admin/pricing').then((data) => setProducts([
+    { sku: 'credit', label: 'Satuan', unitPriceIdr: data.single?.originalPrice || data.single?.unitPrice || 3900, discountPercent: data.single?.discountPercent || 0, discountExpiresAt: data.single?.discountExpiresAt || '' },
+    { sku: 'monthly', label: 'Pro', unitPriceIdr: data.monthly?.originalPrice || data.monthly?.price || 29900, discountPercent: data.monthly?.discountPercent || 0, discountExpiresAt: data.monthly?.discountExpiresAt || '' },
+    { sku: 'pro', label: 'Max', unitPriceIdr: data.pro?.originalPrice || data.pro?.price || 45900, discountPercent: data.pro?.discountPercent || 0, discountExpiresAt: data.pro?.discountExpiresAt || '' },
+  ])).catch((error) => setNotice(error.message)), [setNotice]);
+  useEffect(() => { loadPricing(); }, [loadPricing]);
+  const update = (sku, patch) => setProducts((items) => items.map((item) => item.sku === sku ? { ...item, ...patch } : item));
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api('/admin/pricing', { method: 'PUT', body: { products: products.map(({ sku, unitPriceIdr, discountPercent, discountExpiresAt }) => ({ sku, unitPriceIdr: Number(unitPriceIdr), discountPercent: Number(discountPercent), discountExpiresAt })) } });
+      await loadPricing(); setNotice('Harga dan diskon berhasil diperbarui.');
+    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  };
+  return <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Harga dan diskon</h2><small>Harga checkout selalu mengikuti pengaturan server</small></div><div className="admin-pricing-grid">{products.map((product) => <article key={product.sku}><h3>{product.label}</h3><label>Harga rupiah<input type="number" min="1000" max="10000000" value={product.unitPriceIdr} onChange={(event) => update(product.sku, { unitPriceIdr: event.target.value })}/></label><label>Diskon persen<input type="number" min="0" max="90" value={product.discountPercent} onChange={(event) => update(product.sku, { discountPercent: event.target.value })}/></label><label>Berakhir<input type="datetime-local" value={product.discountExpiresAt ? product.discountExpiresAt.slice(0,16) : ''} onChange={(event) => update(product.sku, { discountExpiresAt: event.target.value })}/></label></article>)}</div><Button onClick={save} disabled={busy || products.length !== 3}><Save size={14}/>Simpan harga</Button></div></section>;
 }
 
 function AdminWorkspace() {
@@ -3604,12 +3783,12 @@ function AdminWorkspace() {
     } catch (error) { setNotice(error.message); } finally { setBusy(false); }
   };
   const tabs = [
-    ['overview', 'Monitoring', LayoutDashboard], ['credits', 'Kredit user', CreditCard], ['alerts', 'Error realtime', BellRing], ['integrations', 'AI & Login', Sparkles], ['updates', 'Updates', BellRing], ['feedback', 'Feedback', MessageSquareText], ['risk', 'Risk review', AlertTriangle], ['cms', 'Landing CMS', Megaphone], ['audit', 'Audit log', ClipboardList], ['retention', 'Retensi', FileCog],
+    ['overview', 'Monitoring', LayoutDashboard], ['credits', 'Kredit user', CreditCard], ['pricing', 'Harga & diskon', CreditCard], ['alerts', 'Error realtime', BellRing], ['integrations', 'AI & Login', Sparkles], ['updates', 'Updates', BellRing], ['broadcasts', 'Email user', Mail], ['feedback', 'Feedback', MessageSquareText], ['users', 'Akses user', Shield], ['appeals', 'Appeal', MessageCircle], ['risk', 'Risk review', AlertTriangle], ['cms', 'Landing CMS', Megaphone], ['audit', 'Audit log', ClipboardList], ['retention', 'Retensi', FileCog],
   ];
   const tabGroups = [
-    ['Operasional', ['overview', 'credits', 'alerts', 'integrations']],
-    ['Konten', ['updates', 'feedback', 'cms']],
-    ['Keamanan', ['risk', 'audit', 'retention']],
+    ['Operasional', ['overview', 'credits', 'pricing', 'alerts', 'integrations']],
+    ['Konten', ['updates', 'broadcasts', 'feedback', 'cms']],
+    ['Keamanan', ['users', 'appeals', 'risk', 'audit', 'retention']],
   ];
   if (!overview || !landing) return <div className="admin-loading-state"><LoaderCircle className="spin" size={20} /><b>Memuat Admin Console…</b><span>Jika data belum masuk, gunakan tombol muat ulang setelah beberapa saat.</span><Button variant="secondary" onClick={load}>Coba muat ulang</Button></div>;
   return <div className={`admin-workspace ${adminTheme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
@@ -3617,6 +3796,10 @@ function AdminWorkspace() {
     <main className="admin-main"><header className="admin-header"><div><p>Admin console</p><h1>{tabs.find(([key]) => key === tab)?.[1]}</h1></div><div className="admin-header-actions"><button className="admin-theme-toggle" onClick={() => setAdminTheme((value) => value === 'dark' ? 'light' : 'dark')} title="Ubah tema admin" aria-label="Ubah tema admin">{adminTheme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}</button><button className="admin-refresh" onClick={load}><RefreshCw size={15} /><span>Muat ulang</span></button></div></header>
       {tab === 'overview' && <section className="admin-content"><div className="admin-privacy-note"><ShieldCheck size={17} /><div><b>Privacy-first monitoring</b><span>Hanya metadata operasional. Isi chat, dokumen, file, NIM, IP, fingerprint, prompt, dan output AI tidak ditampilkan.</span></div></div><div className="admin-metric-grid">{[['User aktif',overview.stats.users,Users],['Dokumen aktif',overview.stats.documents,FileText],['Job berjalan',overview.stats.queuedJobs,Activity],['AI call 24j',overview.stats.aiCalls24h,Sparkles],['Token AI 24j',Number(overview.stats.aiTokens24h || 0).toLocaleString('id-ID'),Activity],['Error AI 24j',overview.stats.aiErrors24h,AlertTriangle],['Alert terbuka',overview.stats.openAdminAlerts || 0,BellRing],['Feedback terbuka',overview.stats.openFeedback,MessageCircle],['Risk terbuka',overview.stats.openRiskEvents,AlertTriangle],['Storage',formatBytes(overview.storageBytes),Database]].map(([label,value,Icon]) => <article key={label}><Icon size={16}/><span>{label}</span><b>{value}</b></article>)}</div><div className="admin-grid"><section className="admin-panel"><div className="admin-panel-head"><h2>Aktivitas 7 hari</h2><small>Event agregat</small></div><div className="activity-bars">{overview.dailyActivity?.length ? overview.dailyActivity.map((day) => <div key={day.day}><i style={{height:`${Math.max(8, Math.min(100, day.count * 12))}%`}} /><span>{day.day.slice(5)}</span><b>{day.count}</b></div>) : <p>Belum ada aktivitas.</p>}</div></section><section className="admin-panel"><div className="admin-panel-head"><h2>Job terbaru</h2><small>Tanpa isi dokumen</small></div><div className="admin-list">{overview.jobs?.length ? overview.jobs.map((job) => <article key={job.id}><div><b>{job.job_type}</b><small>{job.message || 'Memproses'}</small></div><span className={`status-${job.status}`}>{job.status}</span></article>) : <p>Belum ada job.</p>}</div></section></div></section>}
       {tab === 'credits' && <section className="admin-content"><div className="admin-grid"><section className="admin-panel admin-credit-panel"><div className="admin-panel-head"><h2>Tambahkan kredit</h2><small>Tercatat di wallet dan audit log</small></div><label>Target<CustomSelect value={creditForm.audience} onChange={(audience) => setCreditForm((value) => ({ ...value, audience }))} options={[{value:'user',label:'Satu user'},{value:'all',label:'Semua user terverifikasi'},{value:'paid',label:'Semua user paid'}]} /></label>{creditForm.audience === 'user' && <label>User<CustomSelect value={creditForm.userId} onChange={(userId) => setCreditForm((value) => ({ ...value, userId }))} options={[{value:'',label:'Pilih user'},...adminUsers.map((item)=>({value:item.id,label:`${item.email} · ${item.credits} kredit`}))]} /></label>}<label>Jumlah<input type="number" min="1" max="100" value={creditForm.amount} onChange={(event) => setCreditForm((value) => ({ ...value, amount: event.target.value }))} /></label><label>Alasan<input maxLength="160" value={creditForm.reason} onChange={(event) => setCreditForm((value) => ({ ...value, reason: event.target.value }))} /></label><Button onClick={grantAdminCredit} disabled={busy || (creditForm.audience === 'user' && !creditForm.userId)}><CreditCard size={14}/>Tambahkan kredit</Button></section><section className="admin-panel"><div className="admin-panel-head"><h2>User terbaru</h2><small>{adminUsers.length} akun</small></div><div className="admin-list admin-user-list">{adminUsers.slice(0,30).map((item)=><article key={item.id}><div><b>{item.fullName || item.email}</b><small>{item.email} · {item.plan}</small></div><span>{item.credits} kredit</span></article>)}</div></section></div></section>}
+      {tab === 'pricing' && <AdminPricingPanel setNotice={setNotice}/>}
+      {tab === 'users' && <AdminAccessPanel users={adminUsers} setNotice={setNotice} onRefresh={load}/>}
+      {tab === 'appeals' && <AdminAppealsPanel setNotice={setNotice} onRefresh={load}/>}
+      {tab === 'broadcasts' && <AdminBroadcastPanel users={adminUsers} setNotice={setNotice}/>}
       {tab === 'alerts' && <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Error operasional</h2><small>Diperbarui realtime, tanpa isi dokumen</small></div><div className="admin-list admin-alert-list">{adminAlerts.length ? adminAlerts.map((alert)=><article key={alert.id} className={`admin-alert-${alert.severity}`}><div><b>{alert.summary}</b><small>{alert.userEmail || 'Sistem'} · {alert.kind}{alert.errorCode ? ` · ${alert.errorCode}` : ''} · {formatDate(alert.createdAt)}</small></div><div className="admin-actions"><span className={`status-${alert.status === 'resolved' ? 'completed' : 'failed'}`}>{alert.status}</span><button onClick={()=>updateAdminAlert(alert.id,alert.status === 'open' ? 'resolved' : 'open')}>{alert.status === 'open' ? 'Tandai selesai' : 'Buka lagi'}</button></div></article>) : <p className="empty-admin">Belum ada error operasional.</p>}</div></div></section>}
       {tab === 'integrations' && <section className="admin-content"><div className="admin-privacy-note"><ShieldCheck size={17}/><div><b>Credential tetap di server</b><span>Health check hanya menampilkan status model dan metadata OIDC. API key, client secret, prompt, serta output AI tidak pernah dikirim ke browser.</span></div></div><div className="admin-metric-grid">{[['Call 30 hari',aiUsage?.totals?.calls || 0,Sparkles],['Berhasil',aiUsage?.totals?.successful || 0,CheckCircle2],['Gagal',aiUsage?.totals?.failed || 0,AlertTriangle],['Input token',Number(aiUsage?.totals?.input_tokens || 0).toLocaleString('id-ID'),Activity],['Output token',Number(aiUsage?.totals?.output_tokens || 0).toLocaleString('id-ID'),Activity],['Latency rata-rata',`${aiUsage?.totals?.average_latency_ms || 0} ms`,Activity]].map(([label,value,Icon])=><article key={label}><Icon size={16}/><span>{label}</span><b>{value}</b></article>)}</div><div className="admin-grid"><section className="admin-panel"><div className="admin-panel-head"><h2>Status integrasi</h2><Button variant="secondary" onClick={checkIntegrations} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14}/> : <RefreshCw size={14}/>}Cek sekarang</Button></div><div className="admin-list"><article><div><b>Gemini API</b><small>{integrationStatus?.gemini?.models?.length ? integrationStatus.gemini.models.map((item)=>`${item.model}: ${item.ok?'ready':'gagal'}`).join(' · ') : 'Jalankan pengecekan menggunakan credential server.'}</small></div><span className={integrationStatus?.gemini?.ok?'status-completed':integrationStatus?'status-failed':''}>{integrationStatus?.gemini?.ok?'ready':integrationStatus?'belum siap':'belum dicek'}</span></article><article><div><b>Google Login</b><small>{integrationStatus?.googleOidc?.redirectOrigin || 'Memvalidasi OIDC Discovery, PKCE S256, dan callback origin.'}</small></div><span className={integrationStatus?.googleOidc?.ok?'status-completed':integrationStatus?'status-failed':''}>{integrationStatus?.googleOidc?.ok?'ready':integrationStatus?'belum siap':'belum dicek'}</span></article></div></section><section className="admin-panel"><div className="admin-panel-head"><h2>Pemakaian per model</h2><small>30 hari</small></div><div className="admin-list">{aiUsage?.breakdown?.length?aiUsage.breakdown.slice(0,10).map((item)=><article key={`${item.purpose}-${item.mode}-${item.model}-${item.status}`}><div><b>{item.purpose} · {item.mode}</b><small>{item.model} · {Number(item.total_tokens || 0).toLocaleString('id-ID')} token · {item.average_latency_ms || 0} ms</small></div><span className={`status-${item.status==='success'?'completed':'failed'}`}>{item.calls} call</span></article>):<p>Belum ada pemakaian AI.</p>}</div></section></div></section>}
       {tab === 'integrations' && <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Pemakaian AI per user</h2><small>Metadata 30 hari, tanpa prompt dan output</small></div><div className="admin-list admin-user-usage">{aiUsage?.byUser?.length ? aiUsage.byUser.map((item)=><article key={item.userId}><div><b>{item.fullName || item.email}</b><small>{item.email} · {item.errors} error · rata-rata {item.averageLatencyMs} ms</small></div><span>{item.calls} call · {Number(item.totalTokens || 0).toLocaleString('id-ID')} token</span></article>) : <p>Belum ada pemakaian per user.</p>}</div></div></section>}

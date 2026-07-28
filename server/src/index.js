@@ -21,7 +21,7 @@ import {
   inferChatContext,
   isPlausibleAcademicContext,
 } from './report-quality.js';
-import { asyncHandler, hmac, HttpError, now, parseJson, randomToken, sanitizeFilename, sha256, detectBufferType } from './utils.js';
+import { addDays, asyncHandler, hmac, HttpError, now, parseJson, randomToken, sanitizeFilename, sha256, detectBufferType } from './utils.js';
 import {
   activateSandboxSubscription,
   analyzeDocument,
@@ -52,7 +52,9 @@ import {
   ensureEvidenceMappings,
   ensureReviewChecks,
   activeSubscription,
+  assertAccessAllowed,
   notifyUser,
+  queueTransactionalEmail,
   listNotifications,
   markNotificationsRead,
   documentReadiness,
@@ -366,6 +368,53 @@ const adminAlertStatusSchema = z.object({
   status: z.enum(['open', 'resolved']),
 });
 
+const accountAppealSchema = z.object({
+  email: z.string().email('Masukkan email akun yang valid.').max(180),
+  message: z.string().trim().min(20, 'Jelaskan permohonanmu minimal 20 karakter.').max(1200),
+});
+
+const adminRestrictionSchema = z.object({
+  targetType: z.enum(['account', 'device', 'ip']),
+  durationDays: z.number().int().min(1).max(3650).nullable().optional().default(null),
+  reason: z.string().trim().min(8, 'Berikan alasan yang mudah dipahami user.').max(280),
+});
+
+const adminAppealReviewSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+  reply: z.string().trim().min(4).max(800),
+  liftRestrictions: z.boolean().optional().default(false),
+});
+
+const adminBroadcastSchema = z.object({
+  audience: z.enum(['all', 'paid', 'selected']),
+  userIds: z.array(z.string().trim().min(8).max(80)).max(100).optional().default([]),
+  subject: z.string().trim().min(3).max(140),
+  heading: z.string().trim().min(2).max(140),
+  body: z.string().trim().min(10).max(6000),
+  ctaLabel: z.string().trim().max(50).optional().default(''),
+  ctaUrl: z.string().url().max(500).optional().or(z.literal('')).default(''),
+  imageUrl: z.string().trim().max(500).refine(
+    (value) => !value || /^\/api\/public\/email-media\/[A-Za-z0-9._-]+$/.test(value),
+    'Gambar email wajib berasal dari upload admin.',
+  ).optional().default(''),
+  accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().default('#b7ff24'),
+  backgroundColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().default('#f5f5f2'),
+  textColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().default('#171715'),
+}).superRefine((value, context) => {
+  if (value.audience === 'selected' && !value.userIds.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['userIds'], message: 'Pilih minimal satu user.' });
+  }
+});
+
+const adminPricingSchema = z.object({
+  products: z.array(z.object({
+    sku: z.enum(['credit', 'monthly', 'pro']),
+    unitPriceIdr: z.number().int().min(1000).max(10_000_000),
+    discountPercent: z.number().int().min(0).max(90).optional().default(0),
+    discountExpiresAt: z.string().trim().max(40).optional().default(''),
+  })).length(3),
+});
+
 const landingMediaUrlSchema = z.string().trim().max(420).optional().default('');
 const internalPathSchema = z.string().trim().max(420).refine(
   (value) => !value || (value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')),
@@ -605,6 +654,12 @@ function addRiskEvent({ subjectUserId = null, category, severity = 'low', summar
   db.prepare(`INSERT INTO risk_events (id, subject_user_id, category, severity, summary, metadata_json, fingerprint, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`)
     .run(id, subjectUserId, category, severity, summary, JSON.stringify(metadata), fingerprint, now());
+  createAdminAlert({
+    kind: `risk_${String(category || 'activity').slice(0, 48)}`,
+    severity: severity === 'high' || severity === 'critical' ? 'critical' : 'warning',
+    userId: subjectUserId,
+    summary: String(summary || 'Aktivitas akun perlu ditinjau.').slice(0, 240),
+  });
   return id;
 }
 
@@ -892,7 +947,7 @@ function storageSummaryForUser(userId) {
   const tier = subscription?.plan_key === 'pro' ? 'pro' : subscription ? 'subscription' : hasPaidCredit ? 'paid' : 'free';
   const limitBytes = tier === 'pro' ? 5 * 1024 * 1024 * 1024 : tier === 'subscription' ? 1024 * 1024 * 1024 : tier === 'paid' ? 500 * 1024 * 1024 : 100 * 1024 * 1024;
   const chatFiles = db.prepare(`
-    SELECT id, original_name AS name, kind AS type, size_bytes, created_at
+    SELECT id, original_name AS name, kind AS type, size_bytes, sha256, created_at
     FROM chat_attachments
     WHERE owner_user_id = ? AND deleted_at IS NULL
     ORDER BY created_at DESC
@@ -903,10 +958,11 @@ function storageSummaryForUser(userId) {
     name: file.name,
     sourceLabel: file.type === 'practice_evidence' ? 'Bukti chat' : file.type === 'template' ? 'Template chat' : 'Lampiran chat',
     sizeBytes: Number(file.size_bytes || 0),
+    sha256: file.sha256 || '',
     createdAt: file.created_at,
   }));
   const documentFiles = db.prepare(`
-    SELECT id, original_name AS name, category AS type, size_bytes, created_at
+    SELECT id, original_name AS name, category AS type, size_bytes, sha256, created_at
     FROM document_files
     WHERE owner_user_id = ? AND deleted_at IS NULL
     ORDER BY created_at DESC
@@ -917,16 +973,26 @@ function storageSummaryForUser(userId) {
     name: file.name,
     sourceLabel: file.type === 'evidence' ? 'Bukti dokumen' : file.type === 'template' ? 'Template dokumen' : 'File dokumen',
     sizeBytes: Number(file.size_bytes || 0),
+    sha256: file.sha256 || '',
     createdAt: file.created_at,
   }));
+  const seenFiles = new Set();
+  const files = [...chatFiles, ...documentFiles]
+    .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
+    .filter((file) => {
+      const key = file.sha256 || `${file.kind}:${file.id}`;
+      if (seenFiles.has(key)) return false;
+      seenFiles.add(key);
+      return true;
+    })
+    .slice(0, 120)
+    .map(({ sha256: _sha256, ...file }) => file);
   return {
     usedBytes: Number(used),
     limitBytes,
     tier,
     retentionHint: tier === 'pro' ? 'Selama Pro aktif + masa tenggang.' : tier === 'subscription' ? 'Selama subscription aktif + masa tenggang.' : tier === 'paid' ? '180 hari sejak aktivitas berbayar terakhir.' : '30 hari setelah laporan selesai.',
-    files: [...chatFiles, ...documentFiles]
-      .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
-      .slice(0, 120),
+    files,
   };
 }
 
@@ -1169,6 +1235,19 @@ function createAdminAlert({
     now(),
   );
   publishAdminEvent('alert', { id, kind, severity, createdAt: now() });
+  const shouldEmailAdmin = severity === 'critical'
+    || String(kind || '').startsWith('risk_')
+    || kind === 'account_appeal';
+  if (shouldEmailAdmin && config.adminEmail) {
+    queueTransactionalEmail({
+      recipient: config.adminEmail,
+      subject: `[Laprakin] ${severity === 'critical' ? 'Tindakan segera diperlukan' : 'Aktivitas perlu ditinjau'}`,
+      kind: 'admin_security_alert',
+      text: `${String(summary || 'Aktivitas perlu ditinjau.').slice(0, 240)}\n\nBuka Admin Console untuk memeriksa metadata kejadian:\n${config.appUrl}/admin`,
+    }).catch((error) => {
+      console.error('[admin-alert-email]', { code: error?.code || 'EMAIL_FAILED' });
+    });
+  }
   return id;
 }
 
@@ -1679,6 +1758,7 @@ app.get('/api/meta', (_req, res) => {
 
 app.get('/api/auth/google/start', authLimiter, (req, res, next) => {
   try {
+    assertAccessAllowed(req, '');
     const redirectPath = String(req.query.next || '/app');
     const { state, url } = createGoogleAuthorizationState(redirectPath);
     res.cookie('laprakin_google_state', state, { httpOnly: true, sameSite: 'lax', secure: config.isProd, maxAge: 10 * 60 * 1000, path: '/' });
@@ -1708,6 +1788,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
       },
     });
     const googleDeviceId = observeDevice(req, completed.user.id);
+    assertAccessAllowed(req, completed.user.id);
     evaluateSharedDeviceRisk(googleDeviceId, completed.user.id);
     try { claimWelcomeCredits(completed.user.id, googleDeviceId); } catch { /* akun lama atau shared-device review tidak boleh memblokir login */ }
     setSession(res, completed.user);
@@ -1718,11 +1799,12 @@ app.get('/api/auth/google/callback', async (req, res) => {
       code: error?.code || 'GOOGLE_LOGIN_FAILED',
       status: Number(error?.status || 500),
     });
-    return res.redirect(`${config.appUrl}/auth?google=failed`);
+    return res.redirect(`${config.appUrl}/auth?google=${error?.code === 'ACCOUNT_RESTRICTED' ? 'restricted' : 'failed'}`);
   }
 });
 
 app.post('/api/auth/register', authLimiter, asyncHandler(async (req, res) => {
+  assertAccessAllowed(req, '');
   const input = registerSchema.parse(req.body || {});
   const guardId = reserveRegistration(req, input.email);
   let created;
@@ -1744,6 +1826,7 @@ app.post('/api/auth/register', authLimiter, asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/auth/verify', authLimiter, asyncHandler(async (req, res) => {
+  assertAccessAllowed(req, '');
   const token = String(req.body?.token || '');
   const user = verifyEmailToken(token);
   const verifiedDeviceId = observeDevice(req, user.id);
@@ -1773,6 +1856,7 @@ app.post('/api/auth/request-password-reset', authLimiter, asyncHandler(async (re
 app.post('/api/auth/reset-password', authLimiter, asyncHandler(async (req, res) => {
   const input = passwordResetSchema.parse(req.body || {});
   const user = await resetPassword(input.token, input.password);
+  assertAccessAllowed(req, user.id);
   if (!user.emailVerified) {
     clearSession(res);
     return res.json({ user, csrfToken: null, message: 'Kata sandi berhasil diperbarui. Verifikasi email sebelum masuk.' });
@@ -1785,10 +1869,38 @@ app.post('/api/auth/login', authLimiter, asyncHandler(async (req, res) => {
   const input = loginSchema.parse(req.body || {});
   const user = await authenticateUser(input);
   const verifiedDeviceId = observeDevice(req, user.id);
+  assertAccessAllowed(req, user.id);
   evaluateSharedDeviceRisk(verifiedDeviceId, user.id);
   const csrfToken = setSession(res, user);
   audit(user.id, 'auth.login', 'user', user.id, {});
   res.json({ user, wallet: getWallet(user.id), csrfToken });
+}));
+
+app.post('/api/auth/appeals', authLimiter, asyncHandler(async (req, res) => {
+  const input = accountAppealSchema.parse(req.body || {});
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const emailHash = hmac(normalizedEmail, config.tokenSecret);
+  const user = db.prepare('SELECT id FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
+  const prior = db.prepare(`
+    SELECT id FROM account_appeals
+    WHERE email_hash = ? AND status = 'open'
+    ORDER BY created_at DESC LIMIT 1
+  `).get(emailHash);
+  if (!prior) {
+    const id = nanoid();
+    db.prepare(`
+      INSERT INTO account_appeals (id, user_id, email_hash, message, status, created_at)
+      VALUES (?, ?, ?, ?, 'open', ?)
+    `).run(id, user?.id || null, emailHash, input.message, now());
+    createAdminAlert({
+      kind: 'account_appeal',
+      severity: 'warning',
+      userId: user?.id || null,
+      summary: 'Permohonan peninjauan pembatasan akun menunggu respons admin.',
+    });
+    audit(user?.id || null, 'auth.appeal_submitted', 'account_appeal', id, {});
+  }
+  res.status(202).json({ message: 'Permohonan peninjauan diterima. Tim Laprakin akan mengirim hasilnya melalui email.' });
 }));
 
 app.post('/api/auth/logout', requireAuth, requireCsrf, (req, res) => {
@@ -1902,6 +2014,10 @@ app.delete('/api/storage/files/:kind/:id', requireAuth, requireCsrf, (req, res) 
     const file = db.prepare('SELECT * FROM document_files WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL').get(req.params.id, req.user.id);
     if (!file) throw new HttpError(404, 'File tidak ditemukan.', 'STORAGE_FILE_NOT_FOUND');
     db.prepare('UPDATE document_files SET deleted_at = ? WHERE id = ?').run(deletedAt, file.id);
+    db.prepare(`
+      UPDATE chat_attachments SET deleted_at = ?
+      WHERE owner_user_id = ? AND sha256 = ? AND original_name = ? AND deleted_at IS NULL
+    `).run(deletedAt, req.user.id, file.sha256, file.original_name);
     db.prepare('UPDATE evidence_mappings SET status = ? WHERE file_id = ?').run('ignored', file.id);
     try { fs.unlinkSync(file.storage_path); } catch { /* best effort */ }
     audit(req.user.id, 'storage.file_deleted', 'document_file', file.id, { source: 'settings' });
@@ -1911,11 +2027,39 @@ app.delete('/api/storage/files/:kind/:id', requireAuth, requireCsrf, (req, res) 
 });
 
 app.get('/api/safety/status', requireAuth, (req, res) => {
-  const riskCount = Number(db.prepare("SELECT COUNT(*) AS count FROM risk_events WHERE subject_user_id = ? AND status = 'open'").get(req.user.id).count || 0);
-  const alertCount = Number(db.prepare("SELECT COUNT(*) AS count FROM admin_alerts WHERE user_id = ? AND status = 'open'").get(req.user.id).count || 0);
+  const rows = db.prepare(`
+    SELECT 'risk' AS source, category AS code, summary, created_at
+    FROM risk_events WHERE subject_user_id = ? AND status = 'open'
+    UNION ALL
+    SELECT 'alert' AS source, kind AS code, summary, created_at
+    FROM admin_alerts WHERE user_id = ? AND status = 'open'
+    ORDER BY created_at DESC
+    LIMIT 12
+  `).all(req.user.id, req.user.id);
+  const seenReasons = new Set();
+  const reasons = rows.map((row) => {
+    const labels = {
+      shared_device: 'Perangkat yang sama terhubung ke lebih dari satu akun.',
+      device_registration_limit: 'Perangkat ini telah digunakan untuk beberapa pendaftaran akun.',
+      upload_burst: 'Banyak file diunggah dalam waktu yang sangat singkat.',
+      generation_burst: 'Banyak permintaan pembuatan dokumen dikirim berdekatan.',
+      support_scope_burst: 'Bantuan digunakan berulang kali untuk permintaan di luar layanan Laprakin.',
+      payment_mismatch: 'Ada pembayaran yang perlu dikonfirmasi kembali.',
+      job_failed: 'Proses dokumen mengalami kegagalan berulang.',
+    };
+    return {
+      reason: labels[row.code] || (row.source === 'risk' ? row.summary : 'Aktivitas akun perlu ditinjau oleh tim Laprakin.'),
+      createdAt: row.created_at,
+    };
+  }).filter((item) => {
+    if (seenReasons.has(item.reason)) return false;
+    seenReasons.add(item.reason);
+    return true;
+  });
   res.json({
-    hasAlert: riskCount + alertCount > 0,
-    openAlerts: riskCount + alertCount,
+    hasAlert: reasons.length > 0,
+    openAlerts: reasons.length,
+    reasons,
   });
 });
 
@@ -2479,6 +2623,16 @@ const featureUpdateMediaUpload = multer({
   fileFilter: (_req, file, callback) => {
     const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
     if (!allowed.has(file.mimetype)) return callback(new HttpError(400, 'Gambar update hanya mendukung PNG, JPG, atau WEBP.', 'FEATURE_UPDATE_MEDIA_TYPE'));
+    return callback(null, true);
+  },
+});
+
+const emailMediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
+    if (!allowed.has(file.mimetype)) return callback(new HttpError(400, 'Gambar email hanya mendukung PNG, JPG, atau WEBP.', 'EMAIL_MEDIA_TYPE'));
     return callback(null, true);
   },
 });
@@ -4184,6 +4338,84 @@ function requireAdmin(req, _res, next) {
   return next();
 }
 
+function escapeEmailHtml(value = '') {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  })[character]);
+}
+
+function renderBroadcastEmail(input) {
+  const paragraphs = String(input.body || '')
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p style="margin:0 0 16px;line-height:1.65">${escapeEmailHtml(paragraph).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+  const absoluteImageUrl = input.imageUrl
+    ? new URL(input.imageUrl, config.appUrl).toString()
+    : '';
+  const image = absoluteImageUrl
+    ? `<img src="${escapeEmailHtml(absoluteImageUrl)}" alt="" style="display:block;width:100%;height:auto;margin:0 0 24px;border-radius:8px">`
+    : '';
+  const cta = input.ctaLabel && input.ctaUrl
+    ? `<p style="margin:24px 0 0"><a href="${escapeEmailHtml(input.ctaUrl)}" style="display:inline-block;padding:12px 18px;border-radius:6px;background:${input.accentColor};color:${input.textColor};font-weight:700;text-decoration:none">${escapeEmailHtml(input.ctaLabel)}</a></p>`
+    : '';
+  return `<!doctype html><html><body style="margin:0;background:${input.backgroundColor};color:${input.textColor};font-family:Arial,sans-serif"><div style="max-width:640px;margin:0 auto;padding:32px 20px">${image}<h1 style="margin:0 0 18px;font-size:28px;line-height:1.2">${escapeEmailHtml(input.heading)}</h1>${paragraphs}${cta}<p style="margin:32px 0 0;padding-top:16px;border-top:1px solid rgba(127,127,127,.35);font-size:12px;opacity:.72">Laprakin</p></div></body></html>`;
+}
+
+function broadcastRecipients(input) {
+  if (input.audience === 'selected') {
+    const placeholders = input.userIds.map(() => '?').join(',');
+    return db.prepare(`
+      SELECT id, email FROM users
+      WHERE id IN (${placeholders}) AND deleted_at IS NULL AND role != 'admin'
+        AND email_verified_at IS NOT NULL
+      ORDER BY created_at
+    `).all(...input.userIds);
+  }
+  if (input.audience === 'paid') {
+    return db.prepare(`
+      SELECT user.id, user.email
+      FROM users user
+      WHERE user.deleted_at IS NULL AND user.role != 'admin'
+        AND user.email_verified_at IS NOT NULL
+        AND (
+          EXISTS (
+            SELECT 1 FROM subscriptions subscription
+            WHERE subscription.user_id = user.id
+              AND subscription.status = 'active' AND subscription.ends_at > ?
+          )
+          OR EXISTS (
+            SELECT 1 FROM wallet_entries entry
+            WHERE entry.user_id = user.id AND entry.bucket = 'paid' AND entry.amount > 0
+          )
+        )
+      ORDER BY user.created_at
+    `).all(now());
+  }
+  return db.prepare(`
+    SELECT id, email FROM users
+    WHERE deleted_at IS NULL AND role != 'admin' AND email_verified_at IS NOT NULL
+    ORDER BY created_at
+  `).all();
+}
+
+function exposeRestriction(row) {
+  return {
+    id: row.id,
+    userId: row.user_id || null,
+    targetType: row.target_type,
+    reason: row.reason,
+    status: row.status,
+    expiresAt: row.expires_at || null,
+    permanent: !row.expires_at,
+    createdAt: row.created_at,
+    revokedAt: row.revoked_at || null,
+  };
+}
+
 app.get('/api/admin/events', requireAuth, requireAdmin, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -4216,6 +4448,14 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
     const hasPaidCredit = Boolean(db.prepare(`
       SELECT 1 FROM wallet_entries WHERE user_id = ? AND bucket = 'paid' AND amount > 0 LIMIT 1
     `).get(user.id));
+    const activity = db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM chat_sessions WHERE owner_user_id = ?) AS room_count,
+        (SELECT COUNT(*) FROM chat_messages WHERE owner_user_id = ?) AS message_count,
+        (SELECT COALESCE(SUM(total_tokens), 0) FROM ai_usage_events WHERE user_id = ? AND status = 'success') AS total_tokens,
+        (SELECT COUNT(*) FROM access_restrictions WHERE user_id = ? AND status = 'active'
+          AND (expires_at IS NULL OR expires_at > ?)) AS restriction_count
+    `).get(user.id, user.id, user.id, user.id, now());
     return {
       id: user.id,
       email: user.email,
@@ -4223,10 +4463,322 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
       emailVerified: Boolean(user.email_verified_at),
       credits: wallet.balances.total,
       plan: subscription?.plan_key === 'pro' ? 'Max' : subscription ? 'Pro' : hasPaidCredit ? 'Satuan' : 'Gratis',
+      roomCount: Number(activity?.room_count || 0),
+      messageCount: Number(activity?.message_count || 0),
+      totalTokens: Number(activity?.total_tokens || 0),
+      restrictionCount: Number(activity?.restriction_count || 0),
       createdAt: user.created_at,
     };
   });
   res.json({ users });
+});
+
+app.get('/api/admin/users/:id/rooms', requireAuth, requireAdmin, (req, res) => {
+  const user = db.prepare("SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND role != 'admin'").get(req.params.id);
+  if (!user) throw new HttpError(404, 'User tidak ditemukan.', 'ADMIN_USER_NOT_FOUND');
+  const rooms = db.prepare(`
+    SELECT session.id, session.title, session.document_id, session.updated_at,
+      COUNT(DISTINCT message.id) AS message_count,
+      COALESCE((
+        SELECT SUM(usage.total_tokens)
+        FROM ai_usage_events usage
+        WHERE usage.user_id = session.owner_user_id AND usage.status = 'success'
+          AND (
+            (usage.context_type = 'chat_session' AND usage.context_id = session.id)
+            OR (usage.context_type = 'document' AND usage.context_id = session.document_id)
+          )
+      ), 0) AS total_tokens
+    FROM chat_sessions session
+    LEFT JOIN chat_messages message ON message.session_id = session.id
+    WHERE session.owner_user_id = ?
+    GROUP BY session.id
+    ORDER BY session.updated_at DESC
+    LIMIT 100
+  `).all(user.id).map((room) => ({
+    id: room.id,
+    title: room.title,
+    messageCount: Number(room.message_count || 0),
+    totalTokens: Number(room.total_tokens || 0),
+    updatedAt: room.updated_at,
+  }));
+  res.json({ rooms });
+});
+
+app.get('/api/admin/users/:id/restrictions', requireAuth, requireAdmin, (req, res) => {
+  db.prepare(`
+    UPDATE access_restrictions SET status = 'expired'
+    WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at <= ?
+  `).run(now());
+  const rows = db.prepare(`
+    SELECT * FROM access_restrictions
+    WHERE user_id = ? ORDER BY created_at DESC LIMIT 100
+  `).all(req.params.id).map(exposeRestriction);
+  res.json({ restrictions: rows });
+});
+
+app.post('/api/admin/users/:id/restrictions', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, asyncHandler(async (req, res) => {
+  const input = adminRestrictionSchema.parse(req.body || {});
+  const user = db.prepare("SELECT id, email, full_name FROM users WHERE id = ? AND deleted_at IS NULL AND role != 'admin'").get(req.params.id);
+  if (!user) throw new HttpError(404, 'User tidak ditemukan.', 'ADMIN_USER_NOT_FOUND');
+  let targets = [];
+  if (input.targetType === 'account') {
+    targets = [user.id];
+  } else if (input.targetType === 'device') {
+    targets = [...new Set(db.prepare(`
+      SELECT device_id, profile_hash FROM user_devices WHERE user_id = ?
+    `).all(user.id).flatMap((row) => [row.device_id, row.profile_hash]).filter(Boolean))];
+  } else {
+    targets = db.prepare("SELECT DISTINCT ip_hash AS value FROM user_devices WHERE user_id = ? AND ip_hash IS NOT NULL AND ip_hash != ''").all(user.id).map((row) => row.value);
+  }
+  if (!targets.length) {
+    throw new HttpError(400, 'Belum ada riwayat perangkat atau jaringan yang dapat dibatasi untuk user ini.', 'RESTRICTION_TARGET_EMPTY');
+  }
+  const expiresAt = input.durationDays ? addDays(input.durationDays) : null;
+  const timestamp = now();
+  const ids = [];
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const target of targets) {
+      const existing = db.prepare(`
+        SELECT id FROM access_restrictions
+        WHERE target_type = ? AND target_value = ? AND status = 'active'
+      `).get(input.targetType, target);
+      if (existing) {
+        db.prepare(`
+          UPDATE access_restrictions SET
+            user_id = ?, reason = ?, expires_at = ?, created_by_user_id = ?, created_at = ?,
+            revoked_by_user_id = NULL, revoked_at = NULL
+          WHERE id = ?
+        `).run(user.id, input.reason, expiresAt, req.user.id, timestamp, existing.id);
+        ids.push(existing.id);
+      } else {
+        const id = nanoid();
+        db.prepare(`
+          INSERT INTO access_restrictions (
+            id, user_id, target_type, target_value, reason, status,
+            expires_at, created_by_user_id, created_at
+          ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
+        `).run(id, user.id, input.targetType, target, input.reason, expiresAt, req.user.id, timestamp);
+        ids.push(id);
+      }
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw error;
+  }
+  invalidateAllSessions(user.id);
+  const durationText = expiresAt
+    ? `Pembatasan berlaku sampai ${new Date(expiresAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}.`
+    : 'Pembatasan ini berlaku sampai dicabut oleh tim Laprakin.';
+  await queueTransactionalEmail({
+    userId: user.id,
+    recipient: user.email,
+    subject: 'Akses akun Laprakin dibatasi',
+    kind: 'account_restriction',
+    text: `Halo ${user.full_name || 'pengguna Laprakin'},\n\nAksesmu dibatasi karena: ${input.reason}\n${durationText}\n\nKamu dapat mengajukan appeal melalui halaman masuk Laprakin.`,
+  });
+  audit(req.user.id, 'admin.restriction_created', 'user', user.id, {
+    targetType: input.targetType,
+    targetCount: targets.length,
+    permanent: !expiresAt,
+  });
+  createAdminAlert({
+    kind: 'account_restricted',
+    severity: 'warning',
+    userId: user.id,
+    summary: `Akses ${user.email} dibatasi oleh admin.`,
+  });
+  res.status(201).json({
+    restrictions: db.prepare(`SELECT * FROM access_restrictions WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids).map(exposeRestriction),
+  });
+}));
+
+app.delete('/api/admin/users/:id/restrictions/:restrictionId', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, (req, res) => {
+  const result = db.prepare(`
+    UPDATE access_restrictions SET status = 'revoked', revoked_by_user_id = ?, revoked_at = ?
+    WHERE id = ? AND user_id = ? AND status = 'active'
+  `).run(req.user.id, now(), req.params.restrictionId, req.params.id);
+  if (!result.changes) throw new HttpError(404, 'Pembatasan aktif tidak ditemukan.', 'RESTRICTION_NOT_FOUND');
+  audit(req.user.id, 'admin.restriction_revoked', 'user', req.params.id, { restrictionId: req.params.restrictionId });
+  res.status(204).end();
+});
+
+app.get('/api/admin/appeals', requireAuth, requireAdmin, (req, res) => {
+  const status = z.enum(['open', 'approved', 'rejected', 'all']).catch('open').parse(req.query.status);
+  const appeals = db.prepare(`
+    SELECT appeal.*, user.email, user.full_name
+    FROM account_appeals appeal
+    LEFT JOIN users user ON user.id = appeal.user_id
+    WHERE (? = 'all' OR appeal.status = ?)
+    ORDER BY CASE appeal.status WHEN 'open' THEN 0 ELSE 1 END, appeal.created_at DESC
+    LIMIT 200
+  `).all(status, status).map((appeal) => ({
+    id: appeal.id,
+    userId: appeal.user_id || null,
+    userEmail: appeal.email || '',
+    userName: appeal.full_name || '',
+    message: appeal.message,
+    status: appeal.status,
+    adminReply: appeal.admin_reply || '',
+    createdAt: appeal.created_at,
+    reviewedAt: appeal.reviewed_at || null,
+  }));
+  res.json({ appeals });
+});
+
+app.put('/api/admin/appeals/:id', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, asyncHandler(async (req, res) => {
+  const input = adminAppealReviewSchema.parse(req.body || {});
+  const appeal = db.prepare(`
+    SELECT appeal.*, user.email, user.full_name
+    FROM account_appeals appeal LEFT JOIN users user ON user.id = appeal.user_id
+    WHERE appeal.id = ?
+  `).get(req.params.id);
+  if (!appeal) throw new HttpError(404, 'Appeal tidak ditemukan.', 'APPEAL_NOT_FOUND');
+  if (appeal.status !== 'open') throw new HttpError(409, 'Appeal ini sudah ditinjau.', 'APPEAL_ALREADY_REVIEWED');
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare(`
+      UPDATE account_appeals SET status = ?, admin_reply = ?, reviewed_at = ?, reviewed_by_user_id = ?
+      WHERE id = ?
+    `).run(input.status, input.reply, now(), req.user.id, appeal.id);
+    if (input.status === 'approved' && input.liftRestrictions && appeal.user_id) {
+      db.prepare(`
+        UPDATE access_restrictions SET status = 'revoked', revoked_by_user_id = ?, revoked_at = ?
+        WHERE user_id = ? AND status = 'active'
+      `).run(req.user.id, now(), appeal.user_id);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw error;
+  }
+  if (appeal.email) {
+    await queueTransactionalEmail({
+      userId: appeal.user_id,
+      recipient: appeal.email,
+      subject: input.status === 'approved' ? 'Appeal Laprakin disetujui' : 'Hasil peninjauan appeal Laprakin',
+      kind: 'account_appeal_result',
+      text: `Halo ${appeal.full_name || 'pengguna Laprakin'},\n\n${input.reply}`,
+    });
+  }
+  audit(req.user.id, 'admin.appeal_reviewed', 'account_appeal', appeal.id, {
+    status: input.status,
+    restrictionsLifted: Boolean(input.status === 'approved' && input.liftRestrictions),
+  });
+  res.json({ ok: true });
+}));
+
+app.get('/api/admin/broadcasts', requireAuth, requireAdmin, (req, res) => {
+  const broadcasts = db.prepare(`
+    SELECT id, audience, subject, image_url, recipient_count, delivered_count, created_at
+    FROM admin_broadcasts ORDER BY created_at DESC LIMIT 100
+  `).all().map((row) => ({
+    id: row.id,
+    audience: row.audience,
+    subject: row.subject,
+    imageUrl: row.image_url || '',
+    recipientCount: Number(row.recipient_count || 0),
+    deliveredCount: Number(row.delivered_count || 0),
+    createdAt: row.created_at,
+  }));
+  res.json({ broadcasts });
+});
+
+app.post('/api/admin/broadcasts/image', requireAuth, requireCsrf, requireAdmin, uploadLimiter, emailMediaUpload.single('file'), asyncHandler(async (req, res) => {
+  if (!req.file) throw new HttpError(400, 'Pilih gambar terlebih dahulu.', 'EMAIL_IMAGE_REQUIRED');
+  const detectedMime = detectBufferType(req.file.buffer);
+  if (detectedMime !== req.file.mimetype || !['image/png', 'image/jpeg', 'image/webp'].includes(detectedMime)) {
+    throw new HttpError(400, 'Isi file tidak cocok dengan format gambar yang dipilih.', 'EMAIL_IMAGE_SIGNATURE');
+  }
+  const extension = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }[detectedMime];
+  fs.mkdirSync(config.emailMediaDir, { recursive: true });
+  const filename = `email-${Date.now()}-${nanoid(10)}${extension}`;
+  fs.writeFileSync(path.join(config.emailMediaDir, filename), req.file.buffer, { flag: 'wx' });
+  audit(req.user.id, 'admin.broadcast_image_uploaded', 'email_media', filename, {
+    mimeType: detectedMime,
+    size: req.file.size,
+  });
+  res.status(201).json({ imageUrl: `/api/public/email-media/${filename}` });
+}));
+
+app.post('/api/admin/broadcasts', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, asyncHandler(async (req, res) => {
+  const input = adminBroadcastSchema.parse(req.body || {});
+  const recipients = broadcastRecipients(input);
+  if (!recipients.length) throw new HttpError(404, 'Tidak ada user yang cocok dengan target email.', 'BROADCAST_TARGET_EMPTY');
+  const html = renderBroadcastEmail(input);
+  const text = `${input.heading}\n\n${input.body}${input.ctaLabel && input.ctaUrl ? `\n\n${input.ctaLabel}: ${input.ctaUrl}` : ''}`;
+  const id = nanoid();
+  db.prepare(`
+    INSERT INTO admin_broadcasts (
+      id, admin_user_id, audience, target_user_ids_json, subject, text_body,
+      html_body, image_url, recipient_count, delivered_count, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+  `).run(
+    id,
+    req.user.id,
+    input.audience,
+    JSON.stringify(input.audience === 'selected' ? recipients.map((recipient) => recipient.id) : []),
+    input.subject,
+    text,
+    html,
+    input.imageUrl,
+    recipients.length,
+    now(),
+  );
+  const results = await Promise.allSettled(recipients.map((recipient) => queueTransactionalEmail({
+    userId: recipient.id,
+    recipient: recipient.email,
+    subject: input.subject,
+    text,
+    html,
+    kind: 'admin_broadcast',
+  })));
+  const deliveredCount = results.filter((result) => result.status === 'fulfilled').length;
+  db.prepare('UPDATE admin_broadcasts SET delivered_count = ? WHERE id = ?').run(deliveredCount, id);
+  audit(req.user.id, 'admin.broadcast_sent', 'admin_broadcast', id, {
+    audience: input.audience,
+    recipientCount: recipients.length,
+    deliveredCount,
+  });
+  res.status(201).json({ id, recipientCount: recipients.length, deliveredCount });
+}));
+
+app.get('/api/admin/pricing', requireAuth, requireAdmin, (_req, res) => {
+  res.json(pricingPayload());
+});
+
+app.put('/api/admin/pricing', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, (req, res) => {
+  const input = adminPricingSchema.parse(req.body || {});
+  const timestamp = now();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const product of input.products) {
+      const expiresAt = normalizeDateTime(product.discountExpiresAt);
+      if (product.discountExpiresAt && !expiresAt) {
+        throw new HttpError(400, 'Waktu berakhir diskon tidak valid.', 'PRICING_DISCOUNT_EXPIRY_INVALID');
+      }
+      db.prepare(`
+        INSERT INTO pricing_overrides (
+          sku, unit_price_idr, discount_percent, discount_expires_at, updated_by_user_id, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(sku) DO UPDATE SET
+          unit_price_idr = excluded.unit_price_idr,
+          discount_percent = excluded.discount_percent,
+          discount_expires_at = excluded.discount_expires_at,
+          updated_by_user_id = excluded.updated_by_user_id,
+          updated_at = excluded.updated_at
+      `).run(product.sku, product.unitPriceIdr, product.discountPercent, expiresAt, req.user.id, timestamp);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw error;
+  }
+  audit(req.user.id, 'admin.pricing_updated', 'pricing', 'catalogue', {
+    products: input.products.map((product) => product.sku),
+  });
+  res.json(pricingPayload());
 });
 
 app.post('/api/admin/credits/grant', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, asyncHandler(async (req, res) => {
@@ -4721,8 +5273,18 @@ app.post('/api/admin/retention/run', requireAuth, requireCsrf, requireAdmin, asy
 
 fs.mkdirSync(config.landingMediaDir, { recursive: true });
 fs.mkdirSync(config.featureUpdateMediaDir, { recursive: true });
+fs.mkdirSync(config.emailMediaDir, { recursive: true });
 app.use('/api/public/landing-media', express.static(config.landingMediaDir, { index: false, maxAge: '1h', fallthrough: false }));
 app.use('/api/public/update-media', express.static(config.featureUpdateMediaDir, {
+  index: false,
+  maxAge: '1h',
+  fallthrough: false,
+  setHeaders: (res) => {
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  },
+}));
+app.use('/api/public/email-media', express.static(config.emailMediaDir, {
   index: false,
   maxAge: '1h',
   fallthrough: false,
@@ -4781,6 +5343,7 @@ app.use((err, req, res, _next) => {
     error: {
       message: status >= 500 ? 'Terjadi kesalahan pada server.' : (err.message || 'Permintaan tidak dapat diproses.'),
       code: err.code || 'INTERNAL_ERROR',
+      ...(status < 500 && err.details ? { details: err.details } : {}),
       requestId: req.requestId,
     },
   });

@@ -45,9 +45,9 @@ function createClient(base, device) {
       const separator = nameValue.indexOf('=');
       if (separator > 0) cookies.set(nameValue.slice(0, separator), nameValue.slice(separator + 1));
     }
-    const payload = await response.json();
+    const payload = response.status === 204 ? null : await response.json();
     assert.equal(response.status, expectedStatus, payload?.error?.message || `${options.method || 'GET'} ${endpoint}`);
-    if (payload.csrfToken) csrf = payload.csrfToken;
+    if (payload?.csrfToken) csrf = payload.csrfToken;
     return payload;
   }
 
@@ -216,6 +216,94 @@ try {
   const resolved = await admin.request('/admin/alerts?status=resolved');
   assert.ok(resolved.alerts.some((alert) => alert.id === alertId && alert.status === 'resolved'));
 
+  const restriction = await admin.request(`/admin/users/${userA.id}/restrictions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      targetType: 'account',
+      durationDays: 7,
+      reason: 'Aktivitas akun perlu dikonfirmasi sebelum akses dilanjutkan.',
+    }),
+  }, 201);
+  assert.equal(restriction.restrictions[0].targetType, 'account');
+  await studentA.request('/auth/me', {}, 401);
+  const restrictedSession = await studentA.request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: userA.email, password: 'KataSandi-Uji-2026' }),
+  }, 403);
+  assert.equal(restrictedSession.error.code, 'ACCOUNT_RESTRICTED');
+
+  await studentA.request('/auth/appeals', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: userA.email,
+      message: 'Saya mengenali aktivitas akun tersebut dan meminta akses ditinjau kembali.',
+    }),
+  }, 202);
+  const appeals = await admin.request('/admin/appeals?status=open');
+  const appeal = appeals.appeals.find((item) => item.userId === userA.id);
+  assert.ok(appeal);
+  await admin.request(`/admin/appeals/${appeal.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      status: 'approved',
+      reply: 'Appeal disetujui. Akses akun sudah dipulihkan.',
+      liftRestrictions: true,
+    }),
+  });
+  await studentA.request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: userA.email, password: 'KataSandi-Uji-2026' }),
+  });
+
+  const deviceRestriction = await admin.request(`/admin/users/${userA.id}/restrictions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      targetType: 'device',
+      durationDays: 1,
+      reason: 'Perangkat terkait perlu ditinjau sebelum digunakan kembali.',
+    }),
+  }, 201);
+  assert.ok(deviceRestriction.restrictions.length >= 2);
+  const blockedSharedProfile = await studentB.request('/auth/me', {}, 403);
+  assert.equal(blockedSharedProfile.error.code, 'ACCOUNT_RESTRICTED');
+  for (const item of deviceRestriction.restrictions) {
+    await admin.request(`/admin/users/${userA.id}/restrictions/${item.id}`, { method: 'DELETE' }, 204);
+  }
+  await studentB.request('/auth/me');
+
+  const broadcast = await admin.request('/admin/broadcasts', {
+    method: 'POST',
+    body: JSON.stringify({
+      audience: 'selected',
+      userIds: [userA.id, userB.id],
+      subject: 'Update Laprakin',
+      heading: 'Pembaruan layanan',
+      body: 'Laprakin akan menjalani pemeliharaan terjadwal malam ini.',
+      ctaLabel: 'Buka Laprakin',
+      ctaUrl: 'http://localhost:5173/app',
+      accentColor: '#b7ff24',
+      backgroundColor: '#f5f5f2',
+      textColor: '#171715',
+    }),
+  }, 201);
+  assert.equal(broadcast.recipientCount, 2);
+  assert.equal(broadcast.deliveredCount, 2);
+
+  await admin.request('/admin/pricing', {
+    method: 'PUT',
+    body: JSON.stringify({
+      products: [
+        { sku: 'credit', unitPriceIdr: 5000, discountPercent: 10, discountExpiresAt: '' },
+        { sku: 'monthly', unitPriceIdr: 30000, discountPercent: 0, discountExpiresAt: '' },
+        { sku: 'pro', unitPriceIdr: 45000, discountPercent: 0, discountExpiresAt: '' },
+      ],
+    }),
+  });
+  const pricing = await admin.request('/pricing');
+  assert.equal(pricing.single.originalPrice, 5000);
+  assert.equal(pricing.single.unitPrice, 4500);
+  assert.equal(pricing.single.discountPercent, 10);
+
   const controller = new AbortController();
   const stream = await fetch(`${base}/api/admin/events`, {
     headers: admin.headers(),
@@ -226,7 +314,7 @@ try {
   controller.abort();
   assert.match(new TextDecoder().decode(firstEvent.value), /event: ready/);
 
-  console.log('Admin operations passed: credit grants are targeted and idempotent, AI telemetry is metadata-only, and alerts stream in real time.');
+  console.log('Admin operations passed: credits, restrictions and appeals, broadcasts, pricing, metadata-only telemetry, and realtime alerts.');
 } finally {
   testDb?.close();
   server.kill();

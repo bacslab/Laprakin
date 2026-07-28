@@ -313,12 +313,12 @@ function getMailer() {
   return transporter;
 }
 
-export async function queueTransactionalEmail({ userId = null, recipient, subject, text, kind }) {
+export async function queueTransactionalEmail({ userId = null, recipient, subject, text, html = '', kind }) {
   const id = nanoid();
   db.prepare(`
-    INSERT INTO email_outbox (id, user_id, recipient, subject, text_body, kind, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'queued', ?)
-  `).run(id, userId, recipient, subject, text, kind, now());
+    INSERT INTO email_outbox (id, user_id, recipient, subject, text_body, html_body, kind, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?)
+  `).run(id, userId, recipient, subject, text, html, kind, now());
 
   const mailer = getMailer();
   if (!mailer) {
@@ -328,7 +328,7 @@ export async function queueTransactionalEmail({ userId = null, recipient, subjec
   }
 
   try {
-    const info = await mailer.sendMail({ from: config.mailFrom, to: recipient, subject, text });
+    const info = await mailer.sendMail({ from: config.mailFrom, to: recipient, subject, text, ...(html ? { html } : {}) });
     db.prepare(`
       UPDATE email_outbox SET status = 'sent', provider_message_id = ?, sent_at = ? WHERE id = ?
     `).run(info.messageId || null, now(), id);
@@ -616,10 +616,86 @@ export function getSession(req) {
   }
 }
 
+function requestDeviceProfileTarget(req) {
+  const browserMaterial = [
+    String(req.get?.('user-agent') || '').trim().slice(0, 300),
+    String(req.get?.('accept-language') || '').trim().slice(0, 120),
+    String(req.get?.('sec-ch-ua-platform') || '').trim().slice(0, 80),
+    String(req.get?.('sec-ch-ua') || '').trim().slice(0, 180),
+    String(req.get?.('x-laprakin-client-profile') || '').trim().slice(0, 500),
+  ].join('|');
+  return `profile:${hmac(browserMaterial, `${config.deviceSecret}:browser`)}`;
+}
+
+export function activeAccessRestriction(req, userId) {
+  const timestamp = now();
+  db.prepare(`
+    UPDATE access_restrictions
+    SET status = 'expired'
+    WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at <= ?
+  `).run(timestamp);
+
+  const user = userId ? db.prepare('SELECT role FROM users WHERE id = ? AND deleted_at IS NULL').get(userId) : null;
+  if (userId && (!user || user.role === 'admin')) return null;
+
+  const suppliedDevice = req.laprakinDeviceToken || req.get?.('x-laprakin-device') || `missing:${userId || 'anonymous'}`;
+  const deviceHash = hmac(suppliedDevice, config.deviceSecret);
+  const deviceId = db.prepare('SELECT id FROM devices WHERE device_hash = ?').get(deviceHash)?.id || '';
+  const profileTarget = requestDeviceProfileTarget(req);
+  const ipHash = hmac(req.ip || 'unknown', `${config.deviceSecret}:ip`);
+  const row = db.prepare(`
+    SELECT id, target_type, reason, expires_at, created_at
+    FROM access_restrictions
+    WHERE status = 'active'
+      AND (expires_at IS NULL OR expires_at > ?)
+      AND (
+        (target_type = 'account' AND target_value = ?)
+        OR (target_type = 'device' AND target_value IN (?, ?))
+        OR (target_type = 'ip' AND target_value = ?)
+      )
+    ORDER BY CASE target_type WHEN 'account' THEN 0 WHEN 'device' THEN 1 ELSE 2 END,
+      created_at DESC
+    LIMIT 1
+  `).get(timestamp, userId, deviceId, profileTarget, ipHash);
+  if (!row) return null;
+  return {
+    id: row.id,
+    type: row.target_type,
+    reason: row.reason,
+    expiresAt: row.expires_at || null,
+    permanent: !row.expires_at,
+  };
+}
+
+export function assertAccessAllowed(req, userId) {
+  const restriction = activeAccessRestriction(req, userId);
+  if (!restriction) return null;
+  const until = restriction.expiresAt
+    ? ` sampai ${new Date(restriction.expiresAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}`
+    : '';
+  throw new HttpError(
+    403,
+    `Akses akun dibatasi${until}. ${restriction.reason}`,
+    'ACCOUNT_RESTRICTED',
+    {
+      type: restriction.type,
+      reason: restriction.reason,
+      expiresAt: restriction.expiresAt,
+      permanent: restriction.permanent,
+      appealAllowed: true,
+    },
+  );
+}
+
 export function requireAuth(req, _res, next) {
   const session = getSession(req);
   if (!session) {
     return next(new HttpError(401, 'Silakan masuk terlebih dahulu.', 'UNAUTHORIZED'));
+  }
+  try {
+    assertAccessAllowed(req, session.user.id);
+  } catch (error) {
+    return next(error);
   }
   req.user = session.user;
   req.session = session;
@@ -640,6 +716,7 @@ export function observeDevice(req, userId) {
   const suppliedDevice = req.laprakinDeviceToken || req.get('x-laprakin-device') || `missing:${userId}`;
   const deviceHash = hmac(suppliedDevice, config.deviceSecret);
   const ipHash = hmac(req.ip || 'unknown', `${config.deviceSecret}:ip`);
+  const profileHash = requestDeviceProfileTarget(req);
   const timestamp = now();
   let device = db.prepare('SELECT * FROM devices WHERE device_hash = ?').get(deviceHash);
 
@@ -659,14 +736,14 @@ export function observeDevice(req, userId) {
 
   if (!existing) {
     db.prepare(`
-      INSERT INTO user_devices (user_id, device_id, ip_hash, first_seen_at, last_seen_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(userId, device.id, ipHash, timestamp, timestamp);
+      INSERT INTO user_devices (user_id, device_id, ip_hash, profile_hash, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(userId, device.id, ipHash, profileHash, timestamp, timestamp);
   } else {
     db.prepare(`
-      UPDATE user_devices SET ip_hash = ?, last_seen_at = ?
+      UPDATE user_devices SET ip_hash = ?, profile_hash = ?, last_seen_at = ?
       WHERE user_id = ? AND device_id = ?
-    `).run(ipHash, timestamp, userId, device.id);
+    `).run(ipHash, profileHash, timestamp, userId, device.id);
   }
 
   return device.id;
@@ -1294,6 +1371,8 @@ Aturan:
   try {
     const result = await generateAiContent({
       userId: user.id,
+      contextType: 'chat_session',
+      contextId: session.id,
       purpose: 'chat',
       mode: aiMode,
       systemInstruction,
@@ -1445,6 +1524,8 @@ Mode respons: ${modeInstruction}`;
   const userText = `${taskContext}\n\n${attachments.text ? `Konteks lampiran:\n${attachments.text}\n\n` : ''}Permintaan terbaru user:\n${String(content).slice(0, 1800)}`;
   const result = await generateAiContent({
     userId: user.id,
+    contextType: 'chat_session',
+    contextId: session.id,
     purpose: 'chat',
     mode: aiMode,
     systemInstruction,
@@ -1547,6 +1628,8 @@ export async function validateDocumentRevision({ document, session, user, instru
   ].join('\n');
   const result = await generateAiContent({
     userId: user.id,
+    contextType: 'chat_session',
+    contextId: session.id,
     purpose: 'chat',
     mode: aiMode,
     systemInstruction: `Kamu memutuskan tindakan untuk pesan user pada dokumen laprak yang sudah jadi.
@@ -1639,6 +1722,8 @@ export async function summarizeDocumentWorkResult({
   try {
     const result = await generateAiContent({
       userId,
+      contextType: 'document',
+      contextId: documentId,
       purpose: 'chat',
       mode: aiMode,
       systemInstruction: `Tulis satu respons singkat setelah pekerjaan dokumen selesai.
@@ -2402,6 +2487,8 @@ Aturan:
     }
     const result = await generateAiContent({
       userId: user.id,
+      contextType: 'document',
+      contextId: document.id,
       purpose: 'document_evidence',
       mode: 'thinking',
       systemInstruction: 'Kamu adalah pemeriksa bukti visual laporan praktikum. Deskripsikan hanya fakta visual yang dapat diverifikasi dan jangan mengarang.',
@@ -2539,6 +2626,8 @@ ${parameters.filter((parameter) => parameter.includeInDraft).map((parameter) => 
       const requestParts = [{ text: `${requestPrompt}${retryInstruction}` }];
       const result = await generateAiContent({
         userId: user.id,
+        contextType: 'document',
+        contextId: document.id,
         purpose: 'document',
         mode: 'thinking',
         systemInstruction,
@@ -2914,6 +3003,8 @@ async function buildDocumentQuizPool(documentId, userId, sections, targetCount) 
     try {
       const result = await generateAiContent({
         userId,
+        contextType: 'document',
+        contextId: documentId,
         purpose: 'document_quiz',
         mode: 'thinking',
         systemInstruction: `Buat quiz pemahaman dari laporan praktikum yang diberikan.
