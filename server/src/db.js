@@ -1043,5 +1043,10 @@ CREATE TABLE IF NOT EXISTS pricing_overrides (
 ensureColumn('ai_usage_events', 'context_type', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('ai_usage_events', 'context_id', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('user_devices', 'profile_hash', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('pricing_overrides', 'credits', 'INTEGER');
+ensureColumn('pricing_overrides', 'duration_days', 'INTEGER');
+ensureColumn('pricing_overrides', 'revisions_per_report', 'INTEGER');
+ensureColumn('pricing_overrides', 'storage_mb', 'INTEGER');
+ensureColumn('pricing_overrides', 'features_json', 'TEXT');
 db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_usage_context ON ai_usage_events(context_type, context_id, created_at);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_user_devices_profile ON user_devices(profile_hash, user_id);`);

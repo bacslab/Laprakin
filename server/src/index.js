@@ -100,7 +100,6 @@ import {
   syncConfiguredAdminAccount,
 } from './services.js';
 import {
-  PRICING,
   buildOrderQuote,
   checkoutRequestSchema,
   createQrisCheckout,
@@ -111,6 +110,7 @@ import {
   refreshPaymentOrderForUser,
   simulateLocalCheckout,
 } from './payments.js';
+import { PLAN_SKUS, planBenefits } from './pricing-config.js';
 
 validateProductionConfig();
 
@@ -389,6 +389,11 @@ const adminRestrictionSchema = z.object({
   reason: z.string().trim().min(8, 'Berikan alasan yang mudah dipahami user.').max(280),
 });
 
+const adminUserPlanSchema = z.object({
+  planKey: z.enum(['free', 'monthly', 'pro']),
+  durationDays: z.coerce.number().int().min(1).max(3650).optional().default(30),
+});
+
 const adminAppealReviewSchema = z.object({
   status: z.enum(['approved', 'rejected']),
   reply: z.string().trim().min(4).max(800),
@@ -418,11 +423,32 @@ const adminBroadcastSchema = z.object({
 
 const adminPricingSchema = z.object({
   products: z.array(z.object({
-    sku: z.enum(['credit', 'monthly', 'pro']),
-    unitPriceIdr: z.number().int().min(1000).max(10_000_000),
+    sku: z.enum(PLAN_SKUS),
+    unitPriceIdr: z.number().int().min(0).max(10_000_000),
     discountPercent: z.number().int().min(0).max(90).optional().default(0),
     discountExpiresAt: z.string().trim().max(40).optional().default(''),
-  })).length(3),
+    credits: z.number().int().min(1).max(1000),
+    durationDays: z.number().int().min(1).max(3650),
+    revisionsPerReport: z.number().int().min(0).max(100),
+    storageMb: z.number().int().min(1).max(102_400),
+    features: z.array(z.string().trim().min(1).max(120)).max(10),
+  })).length(4),
+}).superRefine((value, context) => {
+  const skus = new Set(value.products.map((product) => product.sku));
+  for (const sku of PLAN_SKUS) {
+    if (!skus.has(sku)) context.addIssue({ code: z.ZodIssueCode.custom, path: ['products'], message: `Plan ${sku} wajib disertakan.` });
+  }
+  value.products.forEach((product, index) => {
+    if (product.sku === 'free' && product.unitPriceIdr !== 0) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['products', index, 'unitPriceIdr'], message: 'Harga plan Free wajib Rp0.' });
+    }
+    if (product.sku !== 'free' && product.unitPriceIdr < 1000) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['products', index, 'unitPriceIdr'], message: 'Harga plan berbayar minimal Rp1.000.' });
+    }
+    if (product.sku === 'free' && (product.discountPercent !== 0 || product.discountExpiresAt)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['products', index], message: 'Plan Free tidak menggunakan diskon.' });
+    }
+  });
 });
 
 const landingMediaUrlSchema = z.string().trim().max(420).optional().default('');
@@ -955,7 +981,9 @@ function storageSummaryForUser(userId) {
     SELECT 1 FROM wallet_entries WHERE user_id = ? AND bucket = 'paid' AND amount > 0 LIMIT 1
   `).get(userId));
   const tier = subscription?.plan_key === 'pro' ? 'pro' : subscription ? 'subscription' : hasPaidCredit ? 'paid' : 'free';
-  const limitBytes = tier === 'pro' ? 5 * 1024 * 1024 * 1024 : tier === 'subscription' ? 1024 * 1024 * 1024 : tier === 'paid' ? 500 * 1024 * 1024 : 100 * 1024 * 1024;
+  const benefitSku = tier === 'pro' ? 'pro' : tier === 'subscription' ? 'monthly' : tier === 'paid' ? 'credit' : 'free';
+  const benefit = planBenefits(benefitSku);
+  const limitBytes = benefit.storageMb * 1024 * 1024;
   const chatFiles = db.prepare(`
     SELECT id, original_name AS name, kind AS type, size_bytes, sha256, created_at
     FROM chat_attachments
@@ -1001,17 +1029,19 @@ function storageSummaryForUser(userId) {
     usedBytes: Number(used),
     limitBytes,
     tier,
-    retentionHint: tier === 'pro' ? 'Selama Pro aktif + masa tenggang.' : tier === 'subscription' ? 'Selama subscription aktif + masa tenggang.' : tier === 'paid' ? '180 hari sejak aktivitas berbayar terakhir.' : '30 hari setelah laporan selesai.',
+    retentionHint: tier === 'pro' ? 'Selama Max aktif + masa tenggang.' : tier === 'subscription' ? 'Selama Pro aktif + masa tenggang.' : tier === 'paid' ? `${benefit.durationDays} hari sejak aktivitas berbayar terakhir.` : `${benefit.durationDays} hari sejak credit awal diaktifkan.`,
     files,
   };
 }
 
 function revisionEntitlementForUser(userId) {
   const subscription = activeSubscription(userId);
-  if (subscription?.plan_key === 'pro') return { plan: 'pro', maxRevisions: PRICING.revisions.pro };
-  if (subscription) return { plan: 'monthly', maxRevisions: PRICING.revisions.monthly };
+  if (subscription?.plan_key === 'pro') return { plan: 'pro', maxRevisions: planBenefits('pro').revisionsPerReport };
+  if (subscription) return { plan: 'monthly', maxRevisions: planBenefits('monthly').revisionsPerReport };
   const hasPaidCredit = Boolean(db.prepare(`SELECT 1 FROM wallet_entries WHERE user_id = ? AND bucket = 'paid' AND amount > 0 LIMIT 1`).get(userId));
-  return hasPaidCredit ? { plan: 'single', maxRevisions: PRICING.revisions.single } : { plan: 'free', maxRevisions: PRICING.revisions.free };
+  return hasPaidCredit
+    ? { plan: 'single', maxRevisions: planBenefits('credit').revisionsPerReport }
+    : { plan: 'free', maxRevisions: planBenefits('free').revisionsPerReport };
 }
 
 /**
@@ -1835,7 +1865,7 @@ app.post('/api/auth/register', authLimiter, asyncHandler(async (req, res) => {
   evaluateSharedDeviceRisk(registeredDeviceId, created.user.id);
   const response = {
     user: created.user,
-    message: 'Akun dibuat. Verifikasi email untuk mengaktifkan 2 credit gratis.',
+    message: 'Akun dibuat. Verifikasi email untuk mengaktifkan credit gratis.',
   };
   if (!config.isProd) response.developmentVerificationToken = created.verificationToken;
   res.status(201).json(response);
@@ -1850,7 +1880,7 @@ app.post('/api/auth/verify', authLimiter, asyncHandler(async (req, res) => {
   let welcomeGranted = false;
   try { claimWelcomeCredits(user.id, verifiedDeviceId); welcomeGranted = true; } catch { /* shared-device review can defer the promo without blocking verification */ }
   const csrfToken = setSession(res, user);
-  res.json({ user, wallet: getWallet(user.id), csrfToken, welcomeGranted, message: welcomeGranted ? 'Email berhasil diverifikasi. 2 credit gratis aktif.' : 'Email berhasil diverifikasi.' });
+  res.json({ user, wallet: getWallet(user.id), csrfToken, welcomeGranted, message: welcomeGranted ? `${planBenefits('free').credits} credit gratis aktif.` : 'Email berhasil diverifikasi.' });
 }));
 
 app.post('/api/auth/resend-verification', authLimiter, asyncHandler(async (req, res) => {
@@ -1993,16 +2023,17 @@ app.post('/api/purchases/sandbox-single', requireAuth, requireCsrf, asyncHandler
     throw new HttpError(501, 'Payment provider belum dikonfigurasi untuk environment ini.', 'PAYMENT_NOT_CONFIGURED');
   }
   if (!req.user.emailVerified) throw new HttpError(400, 'Verifikasi email terlebih dahulu.', 'EMAIL_NOT_VERIFIED');
+  const item = buildOrderQuote(input).items[0];
   grantCredit({
     userId: req.user.id,
     bucket: 'paid',
-    amount: buildOrderQuote(input).items[0].quantity,
+    amount: item.creditPerUnit * item.quantity,
     reason: `Credit satuan sandbox ×${buildOrderQuote(input).items[0].quantity}`,
     referenceType: 'sandbox_purchase',
     referenceId: nanoid(),
-    expiresInDays: 180,
+    expiresInDays: item.durationDays,
   });
-  const singleQuantity = buildOrderQuote(input).items[0].quantity;
+  const singleQuantity = item.quantity;
   audit(req.user.id, 'pricing.single_sandbox_activated', 'wallet', req.user.id, { quantity: singleQuantity });
   res.status(201).json({ wallet: getWallet(req.user.id), quantity: singleQuantity });
 }));
@@ -4481,6 +4512,8 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
       emailVerified: Boolean(user.email_verified_at),
       credits: wallet.balances.total,
       plan: subscription?.plan_key === 'pro' ? 'Max' : subscription ? 'Pro' : hasPaidCredit ? 'Satuan' : 'Gratis',
+      planKey: subscription?.plan_key || (hasPaidCredit ? 'single' : 'free'),
+      planEndsAt: subscription?.ends_at || null,
       roomCount: Number(activity?.room_count || 0),
       messageCount: Number(activity?.message_count || 0),
       totalTokens: Number(activity?.total_tokens || 0),
@@ -4489,6 +4522,62 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
     };
   });
   res.json({ users });
+});
+
+app.put('/api/admin/users/:id/plan', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, (req, res) => {
+  const input = adminUserPlanSchema.parse(req.body || {});
+  const user = db.prepare("SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND role != 'admin'").get(req.params.id);
+  if (!user) throw new HttpError(404, 'User tidak ditemukan.', 'ADMIN_USER_NOT_FOUND');
+
+  const changedAt = now();
+  const subscriptionId = input.planKey === 'free' ? null : nanoid();
+  const endsAt = input.planKey === 'free' ? null : addDays(input.durationDays);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare(`
+      UPDATE subscriptions SET status = 'canceled'
+      WHERE user_id = ? AND status = 'active'
+    `).run(user.id);
+    if (subscriptionId) {
+      db.prepare(`
+        INSERT INTO subscriptions (
+          id, user_id, plan_key, status, provider, provider_reference,
+          starts_at, ends_at, created_at
+        ) VALUES (?, ?, ?, 'active', 'admin', ?, ?, ?, ?)
+      `).run(
+        subscriptionId,
+        user.id,
+        input.planKey,
+        `admin-${req.user.id}-${subscriptionId}`,
+        changedAt,
+        endsAt,
+        changedAt,
+      );
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw error;
+  }
+
+  const label = input.planKey === 'pro' ? 'Max' : input.planKey === 'monthly' ? 'Pro' : 'Gratis';
+  notifyUser(user.id, {
+    kind: 'billing',
+    title: `Plan diubah menjadi ${label}`,
+    body: endsAt ? `Plan aktif sampai ${new Date(endsAt).toLocaleDateString('id-ID')}.` : 'Subscription aktif telah dihentikan.',
+    href: '/app',
+  });
+  audit(req.user.id, 'admin.user_plan_changed', 'user', user.id, {
+    planKey: input.planKey,
+    durationDays: input.planKey === 'free' ? null : input.durationDays,
+    subscriptionId,
+  });
+  res.json({
+    userId: user.id,
+    planKey: input.planKey,
+    plan: label,
+    endsAt,
+  });
 });
 
 app.get('/api/admin/users/:id/rooms', requireAuth, requireAdmin, (req, res) => {
@@ -4791,15 +4880,34 @@ app.put('/api/admin/pricing', requireAuth, requireCsrf, requireAdmin, adminMutat
       }
       db.prepare(`
         INSERT INTO pricing_overrides (
-          sku, unit_price_idr, discount_percent, discount_expires_at, updated_by_user_id, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
+          sku, unit_price_idr, discount_percent, discount_expires_at,
+          credits, duration_days, revisions_per_report, storage_mb, features_json,
+          updated_by_user_id, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(sku) DO UPDATE SET
           unit_price_idr = excluded.unit_price_idr,
           discount_percent = excluded.discount_percent,
           discount_expires_at = excluded.discount_expires_at,
+          credits = excluded.credits,
+          duration_days = excluded.duration_days,
+          revisions_per_report = excluded.revisions_per_report,
+          storage_mb = excluded.storage_mb,
+          features_json = excluded.features_json,
           updated_by_user_id = excluded.updated_by_user_id,
           updated_at = excluded.updated_at
-      `).run(product.sku, product.unitPriceIdr, product.discountPercent, expiresAt, req.user.id, timestamp);
+      `).run(
+        product.sku,
+        product.unitPriceIdr,
+        product.discountPercent,
+        expiresAt,
+        product.credits,
+        product.durationDays,
+        product.revisionsPerReport,
+        product.storageMb,
+        JSON.stringify(product.features),
+        req.user.id,
+        timestamp,
+      );
     }
     db.exec('COMMIT');
   } catch (error) {

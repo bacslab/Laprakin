@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { config } from './config.js';
 import { audit, db } from './db.js';
+import { allPlanBenefits, DEFAULT_PLAN_BENEFITS } from './pricing-config.js';
 import { HttpError, now, parseJson } from './utils.js';
 import {
   activeSubscription,
@@ -30,22 +31,23 @@ export const PRICING = Object.freeze({
 const DEFAULT_PRODUCT_CATALOGUE = Object.freeze({
   credit: {
     sku: 'credit', kind: 'credit', planKey: 'single', label: 'Credit Laprakin',
-    unitPrice: PRICING.singleCreditIdr, maxQuantity: 20, creditPerUnit: 1,
-    durationDays: null,
+    unitPrice: PRICING.singleCreditIdr, maxQuantity: 20, creditPerUnit: DEFAULT_PLAN_BENEFITS.credit.credits,
+    durationDays: DEFAULT_PLAN_BENEFITS.credit.durationDays,
   },
   monthly: {
     sku: 'monthly', kind: 'subscription', planKey: 'monthly', label: 'Plan Pro',
-    unitPrice: PRICING.monthlyIdr, maxQuantity: 1, creditPerUnit: PRICING.monthlyCredits,
-    durationDays: 30,
+    unitPrice: PRICING.monthlyIdr, maxQuantity: 1, creditPerUnit: DEFAULT_PLAN_BENEFITS.monthly.credits,
+    durationDays: DEFAULT_PLAN_BENEFITS.monthly.durationDays,
   },
   pro: {
     sku: 'pro', kind: 'subscription', planKey: 'pro', label: 'Plan Max',
-    unitPrice: PRICING.proIdr, maxQuantity: 1, creditPerUnit: PRICING.proCredits,
-    durationDays: 30,
+    unitPrice: PRICING.proIdr, maxQuantity: 1, creditPerUnit: DEFAULT_PLAN_BENEFITS.pro.credits,
+    durationDays: DEFAULT_PLAN_BENEFITS.pro.durationDays,
   },
 });
 
 function productCatalogue() {
+  const benefits = allPlanBenefits();
   const overrides = new Map(db.prepare(`
     SELECT sku, unit_price_idr, discount_percent, discount_expires_at
     FROM pricing_overrides
@@ -59,6 +61,11 @@ function productCatalogue() {
     const effectivePrice = Math.max(1, Math.round(basePrice * (100 - discountPercent) / 100));
     return [sku, {
       ...product,
+      creditPerUnit: benefits[sku].credits,
+      durationDays: benefits[sku].durationDays,
+      revisionsPerReport: benefits[sku].revisionsPerReport,
+      storageMb: benefits[sku].storageMb,
+      features: benefits[sku].features,
       unitPrice: effectivePrice,
       originalUnitPrice: basePrice,
       discountPercent,
@@ -199,6 +206,7 @@ export function buildOrderQuote(input) {
 
 export function pricingPayload() {
   const catalogue = productCatalogue();
+  const benefits = allPlanBenefits();
   return {
     currency: 'IDR',
     qrisOnly: true,
@@ -213,11 +221,14 @@ export function pricingPayload() {
       maxQuantity: item.maxQuantity,
       credits: item.creditPerUnit,
       durationDays: item.durationDays,
+      revisionsPerReport: item.revisionsPerReport,
+      storageMb: item.storageMb,
+      features: item.features,
     })),
-    free: { credits: PRICING.freeCredits, revisionsPerReport: PRICING.revisions.free, storageMb: 100 },
-    single: { unitPrice: catalogue.credit.unitPrice, originalPrice: catalogue.credit.originalUnitPrice, discountPercent: catalogue.credit.discountPercent, discountExpiresAt: catalogue.credit.discountExpiresAt, minQuantity: 1, maxQuantity: 20, label: 'Credit laprak', revisionsPerReport: PRICING.revisions.single, storageMb: 500 },
-    monthly: { label: 'Pro', price: catalogue.monthly.unitPrice, originalPrice: catalogue.monthly.originalUnitPrice, discountPercent: catalogue.monthly.discountPercent, discountExpiresAt: catalogue.monthly.discountExpiresAt, credits: PRICING.monthlyCredits, durationDays: 30, revisionsPerReport: PRICING.revisions.monthly, storageGb: 1 },
-    pro: { label: 'Max', price: catalogue.pro.unitPrice, originalPrice: catalogue.pro.originalUnitPrice, discountPercent: catalogue.pro.discountPercent, discountExpiresAt: catalogue.pro.discountExpiresAt, credits: PRICING.proCredits, durationDays: 30, revisionsPerReport: PRICING.revisions.pro, storageGb: 5 },
+    free: { label: 'Free', price: 0, originalPrice: 0, discountPercent: 0, discountExpiresAt: null, ...benefits.free },
+    single: { unitPrice: catalogue.credit.unitPrice, originalPrice: catalogue.credit.originalUnitPrice, discountPercent: catalogue.credit.discountPercent, discountExpiresAt: catalogue.credit.discountExpiresAt, minQuantity: 1, maxQuantity: catalogue.credit.maxQuantity, label: 'Credit laprak', ...benefits.credit },
+    monthly: { label: 'Pro', price: catalogue.monthly.unitPrice, originalPrice: catalogue.monthly.originalUnitPrice, discountPercent: catalogue.monthly.discountPercent, discountExpiresAt: catalogue.monthly.discountExpiresAt, ...benefits.monthly, storageGb: benefits.monthly.storageMb / 1024 },
+    pro: { label: 'Max', price: catalogue.pro.unitPrice, originalPrice: catalogue.pro.originalUnitPrice, discountPercent: catalogue.pro.discountPercent, discountExpiresAt: catalogue.pro.discountExpiresAt, ...benefits.pro, storageGb: benefits.pro.storageMb / 1024 },
   };
 }
 
@@ -392,7 +403,7 @@ function activatePaidOrder(order) {
           reason: `Pembelian ${item.label}`,
           referenceType: 'payment_order',
           referenceId: order.id,
-          expiresInDays: 180,
+          expiresInDays: Math.max(1, Number(item.durationDays || DEFAULT_PLAN_BENEFITS.credit.durationDays)),
         });
         continue;
       }

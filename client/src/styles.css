@@ -9451,7 +9451,7 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   filter:none!important;
   background:var(--pricing-accent);
   border-color:var(--pricing-accent);
-  color:#fff;
+  color:#0b1105;
 }
 .pricing-compact-card>button:hover svg{transform:translateX(2px)}
 .pricing-compact-card>button svg{transition:transform .16s ease}
@@ -9468,7 +9468,7 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 .checkout-summary .checkout-pay-button:hover{
   background:var(--pricing-accent)!important;
   border-color:var(--pricing-accent)!important;
-  color:#fff!important;
+  color:#0b1105!important;
 }
 .settings-pane:has(.nickname-settings){
   display:grid;
@@ -9598,8 +9598,221 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 .admin-user-picker button small,.admin-user-picker button>span{color:var(--admin-muted);font-size:.51rem}
 .admin-access-detail{display:grid;gap:8px}
 .admin-restriction-form{display:grid;grid-template-columns:minmax(180px,1fr) 110px 120px auto;align-items:end;gap:9px;padding-top:12px}
+
+/* Chat output: code tetap terbaca sebagai artefak, bukan paragraf biasa. */
+.workspace .message-content{display:grid;gap:9px;min-width:0}
+.workspace .message-content>p{margin:0;white-space:pre-wrap}
+.workspace .message-inline-code{
+  border:1px solid var(--workspace-line);
+  border-radius:5px;
+  padding:1px 5px;
+  background:var(--workspace-hover);
+  color:var(--workspace-text);
+  font-family:"DM Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-size:.9em;
+}
+.workspace .message-code-block{
+  min-width:0;
+  overflow:hidden;
+  border:1px solid color-mix(in srgb,var(--workspace-text) 24%,var(--workspace-line));
+  border-radius:8px;
+  background:color-mix(in srgb,var(--workspace-bg) 72%,#0d0d0d);
+}
+.workspace .message-code-block>div{
+  height:31px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  border-bottom:1px solid color-mix(in srgb,var(--workspace-text) 16%,var(--workspace-line));
+  padding:0 11px;
+  color:var(--workspace-muted);
+  font:600 .56rem "DM Mono",ui-monospace,monospace;
+  text-transform:lowercase;
+}
+.workspace .message-code-block pre{
+  max-width:100%;
+  overflow:auto;
+  margin:0;
+  padding:14px;
+  color:#f3f3ef;
+  font:400 .69rem/1.7 "DM Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+  tab-size:2;
+  white-space:pre;
+}
+.workspace:not(.theme-dark) .message-code-block{background:#20211f}
+
+/* Quiz dibuat netral dan diberi ruang aman saat preview dokumen terbuka. */
+.workspace .quiz-workspace-panel{
+  width:min(760px,calc(100% - 64px))!important;
+  margin:clamp(28px,5vh,52px) auto auto!important;
+  align-self:start!important;
+  gap:16px!important;
+}
+.workspace .quiz-workspace-panel>header{
+  align-items:center!important;
+  padding:0 2px!important;
+}
+.workspace .quiz-workspace-panel>header small{
+  color:var(--workspace-muted)!important;
+  font-size:.58rem!important;
+  font-weight:700!important;
+}
+.workspace .quiz-workspace-panel>header h2{
+  margin:2px 0 0!important;
+  color:var(--workspace-text)!important;
+  font-size:1.08rem!important;
+  letter-spacing:0!important;
+}
+.workspace .quiz-workspace-panel>header button{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  border-color:var(--workspace-line)!important;
+  border-radius:7px!important;
+  padding:7px 9px!important;
+  background:transparent!important;
+  color:var(--workspace-muted)!important;
+  font-size:.62rem!important;
+}
+.workspace .quiz-workspace-panel>header button:hover{background:var(--workspace-hover)!important;color:var(--workspace-text)!important}
+.workspace .quiz-workspace-panel .quiz-player,
+.workspace .quiz-workspace-panel .quiz-gate,
+.workspace .quiz-workspace-panel .quiz-result{
+  width:100%!important;
+  margin:0!important;
+  border:1px solid var(--workspace-line)!important;
+  border-radius:9px!important;
+  background:var(--workspace-panel)!important;
+  color:var(--workspace-text)!important;
+  box-shadow:none!important;
+}
+.workspace .quiz-workspace-panel .quiz-player{gap:14px!important;padding:17px!important}
+.workspace .quiz-workspace-panel .quiz-player>header span,
+.workspace .quiz-workspace-panel .quiz-player>header b{color:var(--workspace-muted)!important}
+.workspace .quiz-workspace-panel .quiz-player>header div{background:var(--workspace-hover)!important}
+.workspace .quiz-workspace-panel .quiz-player>header div i{background:var(--workspace-text)!important}
+.workspace .quiz-workspace-panel .quiz-question-card{
+  min-height:0!important;
+  display:block!important;
+  border:0!important;
+  border-radius:0!important;
+  padding:8px 0 4px!important;
+  background:transparent!important;
+  color:var(--workspace-text)!important;
+}
+.workspace .quiz-workspace-panel .quiz-question-card small{color:var(--workspace-muted)!important;font-size:.58rem!important}
+.workspace .quiz-workspace-panel .quiz-question-card h3{
+  margin-top:7px!important;
+  color:var(--workspace-text)!important;
+  font-size:.9rem!important;
+  line-height:1.55!important;
+}
+.workspace .quiz-workspace-panel .quiz-options{display:grid!important;grid-template-columns:1fr!important;gap:7px!important}
+.workspace .quiz-workspace-panel .quiz-option{
+  min-height:46px!important;
+  display:grid!important;
+  grid-template-columns:26px minmax(0,1fr)!important;
+  gap:10px!important;
+  border:1px solid var(--workspace-line)!important;
+  border-radius:7px!important;
+  padding:9px 11px!important;
+  background:var(--workspace-card)!important;
+  color:var(--workspace-text)!important;
+  box-shadow:none!important;
+}
+.workspace .quiz-workspace-panel .quiz-option:hover{background:var(--workspace-hover)!important}
+.workspace .quiz-workspace-panel .quiz-option span{
+  width:24px!important;
+  height:24px!important;
+  border-color:var(--workspace-line)!important;
+  border-radius:6px!important;
+  background:transparent!important;
+  color:var(--workspace-muted)!important;
+}
+.workspace .quiz-workspace-panel .quiz-option b{color:var(--workspace-text)!important;font-size:.72rem!important;line-height:1.5!important}
+.workspace .quiz-workspace-panel .quiz-option.selected{
+  border-color:var(--workspace-text)!important;
+  background:var(--workspace-hover)!important;
+  box-shadow:inset 3px 0 0 var(--workspace-text)!important;
+}
+.workspace .quiz-workspace-panel .quiz-gate,
+.workspace .quiz-workspace-panel .quiz-result{padding:14px 15px!important}
+
+.workspace .institution-logo-preview.is-empty{background:transparent}
+
+/* Detail alert terpisah agar tinggi daftar tidak mengubah layout ikon status. */
+.workspace .safety-settings-pane{align-content:start}
+.workspace .safety-reasons-panel{
+  display:grid;
+  gap:8px;
+  padding:2px 4px 0;
+}
+.workspace .safety-reasons-panel>b{font-size:.62rem;color:var(--workspace-text)}
+.workspace .safety-reasons-panel .safety-reason-list{margin:0!important}
+
+/* Arsip berupa daftar kerja ringkas tanpa kartu besar bertingkat. */
+.workspace .archived-chat-settings{min-width:0}
+.workspace .archived-chat-list{display:grid;border-top:1px solid var(--workspace-line)}
+.workspace .archived-chat-list article{
+  min-width:0;
+  display:grid;
+  grid-template-columns:32px minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+  border-bottom:1px solid var(--workspace-line);
+  padding:11px 2px;
+  background:transparent;
+}
+.workspace .archived-chat-icon{
+  width:30px;
+  height:30px;
+  display:grid;
+  place-items:center;
+  border-radius:7px;
+  background:var(--workspace-hover);
+  color:var(--workspace-muted);
+}
+.workspace .archived-chat-list article>div{min-width:0;display:grid;gap:2px}
+.workspace .archived-chat-list b,
+.workspace .archived-chat-list small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.workspace .archived-chat-list b{font-size:.64rem}
+.workspace .archived-chat-list small,
+.workspace .archived-chat-list time{color:var(--workspace-muted);font-size:.53rem}
+.workspace .archived-chat-list time{margin-top:2px}
+
+.admin-plan-control{
+  display:grid;
+  grid-template-columns:minmax(160px,220px) 120px auto minmax(0,1fr);
+  align-items:end;
+  gap:9px;
+  border-bottom:1px solid var(--admin-line);
+  padding:12px 0;
+}
+.admin-plan-control label{display:grid;gap:5px;color:var(--admin-muted);font-size:.55rem;font-weight:700}
+.admin-plan-control label small{position:absolute;margin:30px 0 0 92px}
+.admin-plan-control input{
+  min-height:34px;
+  border:1px solid var(--admin-line);
+  border-radius:5px;
+  padding:7px 9px;
+  background:var(--admin-card);
+  color:var(--admin-text);
+  font:inherit;
+  font-size:.59rem;
+}
+.admin-plan-control>span{align-self:center;color:var(--admin-muted);font-size:.56rem;text-align:right}
+.admin-plan-control>span b{color:var(--admin-text)}
+
+@media(max-width:700px){
+  .workspace .quiz-workspace-panel{width:calc(100% - 24px)!important;margin:18px auto auto!important}
+  .workspace .quiz-workspace-panel>header{align-items:center!important;flex-direction:row!important}
+  .workspace .archived-chat-list article{grid-template-columns:30px minmax(0,1fr)}
+  .workspace .archived-chat-list article>.button{grid-column:1/-1;justify-content:center}
+  .admin-plan-control{grid-template-columns:1fr}
+  .admin-plan-control>span{text-align:left}
+}
 .admin-restriction-form label,.admin-broadcast-form>label,.admin-form-row label,.admin-pricing-grid label{display:grid;gap:5px;color:var(--admin-muted);font-size:.55rem;font-weight:700}
-.admin-restriction-form input,.admin-restriction-form textarea,.admin-broadcast-form input,.admin-broadcast-form textarea,.admin-pricing-grid input{min-height:36px;border:1px solid var(--admin-line);padding:8px 10px;font:inherit;font-size:.61rem}
+.admin-restriction-form input,.admin-restriction-form textarea,.admin-broadcast-form input,.admin-broadcast-form textarea,.admin-pricing-grid input,.admin-pricing-grid textarea{min-height:36px;border:1px solid var(--admin-line);padding:8px 10px;font:inherit;font-size:.61rem}
 .admin-restriction-form textarea,.admin-broadcast-form textarea{min-height:84px;resize:vertical}
 .admin-restriction-form .admin-form-wide{grid-column:1/-1}
 .admin-permanent-check{display:flex!important;align-items:center;gap:7px!important;min-height:36px}
@@ -9624,9 +9837,13 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 .admin-email-preview h2{margin:0 0 14px;font-size:1.35rem}
 .admin-email-preview p{white-space:pre-wrap;font-size:.67rem;line-height:1.65}
 .admin-email-preview>span{display:inline-block;margin-top:16px;border-radius:6px;padding:10px 14px;font-size:.61rem;font-weight:800}
-.admin-pricing-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
-.admin-pricing-grid article{display:grid;gap:9px;border:1px solid var(--admin-line);border-radius:8px;padding:12px;background:var(--admin-panel)}
-.admin-pricing-grid h3{margin:0;font-size:.72rem}
+.admin-pricing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.admin-pricing-grid article{display:grid;align-content:start;gap:12px;border:1px solid var(--admin-line);border-radius:8px;padding:14px;background:var(--admin-panel)}
+.admin-pricing-grid h3{margin:0;font-size:.76rem}
+.admin-pricing-grid label>span{color:var(--admin-muted);font-size:.49rem;font-weight:500}
+.admin-pricing-grid textarea{min-height:92px;resize:vertical;color:var(--admin-text);background:var(--admin-bg)}
+.admin-pricing-grid input:disabled{cursor:not-allowed;opacity:.58}
+.admin-pricing-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
 @media(max-width:900px){
   .admin-access-layout{grid-template-columns:1fr}
   .admin-user-picker{position:static;max-height:none}
@@ -9636,5 +9853,53 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   .admin-pricing-grid{grid-template-columns:1fr}
 }
 @media(max-width:560px){
-  .admin-restriction-form,.admin-form-row,.admin-color-row{grid-template-columns:1fr}
+  .admin-restriction-form,.admin-form-row,.admin-color-row,.admin-pricing-fields{grid-template-columns:1fr}
+}
+
+/* Composer grows from two through eleven text rows, then becomes internally scrollable. */
+.workspace .chat-surface{
+  grid-template-rows:minmax(0,1fr) auto!important;
+}
+.workspace .chat-thread{
+  min-height:0!important;
+  overflow-y:auto!important;
+  scroll-padding-bottom:24px;
+}
+.workspace .chat-surface.has-chat .thread-content::after{
+  content:"";
+  display:block;
+  flex:0 0 clamp(180px,42vh,520px);
+}
+.workspace .chat-surface.has-chat .composer-zone{
+  position:relative!important;
+  z-index:10;
+  flex:0 0 auto;
+  background:var(--workspace-bg)!important;
+}
+.workspace .composer,
+.workspace .chat-surface.has-chat .composer{
+  min-height:0!important;
+  align-content:end;
+  background:var(--workspace-card)!important;
+}
+.workspace .composer textarea,
+.workspace .chat-surface.has-chat .composer textarea,
+.workspace .empty-chat .composer textarea{
+  box-sizing:border-box;
+  min-height:49px!important;
+  max-height:none!important;
+  resize:none!important;
+  background:transparent!important;
+  color:var(--workspace-text)!important;
+  scrollbar-width:thin;
+}
+.workspace .composer textarea:focus{
+  background:transparent!important;
+}
+
+.hero-prompt-bottom button,
+.modal-composer button,
+.app-recovery-actions button,
+.app-recovery-mark{
+  color:#0b1105!important;
 }

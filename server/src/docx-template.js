@@ -263,9 +263,13 @@ function ensureContentType(contentTypesXml, extension) {
 export function centerImageParagraphs(elements = []) {
   return elements.map((element) => {
     if (!/<w:drawing\b|<w:pict\b/i.test(element)) return element;
+    const centeredElement = element.replace(
+      /<wp:positionH\b[^>]*>[\s\S]*?<\/wp:positionH>/gi,
+      '<wp:positionH relativeFrom="page"><wp:align>center</wp:align></wp:positionH>',
+    );
 
-    if (/<w:pPr\b/i.test(element)) {
-      return element.replace(/<w:pPr\b[^>]*>([\s\S]*?)<\/w:pPr>/i, (match, inner) => {
+    if (/<w:pPr\b/i.test(centeredElement)) {
+      return centeredElement.replace(/<w:pPr\b[^>]*>([\s\S]*?)<\/w:pPr>/i, (match, inner) => {
         if (/<w:jc\b/i.test(inner)) {
           return match.replace(/<w:jc\b[^>]*\/>/i, '<w:jc w:val="center"/>');
         }
@@ -277,7 +281,7 @@ export function centerImageParagraphs(elements = []) {
     }
 
     // Paragraf tanpa w:pPr: sisipkan blok baru tepat setelah tag pembuka.
-    return element.replace(/<w:p\b[^>]*>/i, (match) => `${match}<w:pPr><w:jc w:val="center"/></w:pPr>`);
+    return centeredElement.replace(/<w:p\b[^>]*>/i, (match) => `${match}<w:pPr><w:jc w:val="center"/></w:pPr>`);
   });
 }
 

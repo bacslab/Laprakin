@@ -146,6 +146,24 @@ try {
   assert.deepEqual(new Set(users.users.map((user) => user.id)), new Set([userA.id, userB.id]));
   assert.equal(users.users.some((user) => 'nim' in user || 'documents' in user), false);
 
+  const upgradedPlan = await admin.request(`/admin/users/${userA.id}/plan`, {
+    method: 'PUT',
+    body: JSON.stringify({ planKey: 'pro', durationDays: 45 }),
+  });
+  assert.equal(upgradedPlan.plan, 'Max');
+  assert.equal(upgradedPlan.planKey, 'pro');
+  const usersAfterUpgrade = await admin.request('/admin/users');
+  assert.equal(usersAfterUpgrade.users.find((user) => user.id === userA.id)?.plan, 'Max');
+  await admin.request(`/admin/users/${userA.id}/plan`, {
+    method: 'PUT',
+    body: JSON.stringify({ planKey: 'free', durationDays: 30 }),
+  });
+  const activeAdminPlans = testDb.prepare(`
+    SELECT COUNT(*) AS total FROM subscriptions
+    WHERE user_id = ? AND status = 'active'
+  `).get(userA.id);
+  assert.equal(Number(activeAdminPlans.total), 0);
+
   const personalKey = `personal-${randomUUID()}`;
   const personalGrant = await admin.request('/admin/credits/grant', {
     method: 'POST',
@@ -301,9 +319,10 @@ try {
     method: 'PUT',
     body: JSON.stringify({
       products: [
-        { sku: 'credit', unitPriceIdr: 5000, discountPercent: 10, discountExpiresAt: '' },
-        { sku: 'monthly', unitPriceIdr: 30000, discountPercent: 0, discountExpiresAt: '' },
-        { sku: 'pro', unitPriceIdr: 45000, discountPercent: 0, discountExpiresAt: '' },
+        { sku: 'free', unitPriceIdr: 0, discountPercent: 0, discountExpiresAt: '', credits: 3, durationDays: 45, revisionsPerReport: 4, storageMb: 150, features: ['3 credit awal', '150 MB penyimpanan'] },
+        { sku: 'credit', unitPriceIdr: 5000, discountPercent: 10, discountExpiresAt: '', credits: 2, durationDays: 210, revisionsPerReport: 7, storageMb: 750, features: ['2 credit per pembelian', '750 MB penyimpanan'] },
+        { sku: 'monthly', unitPriceIdr: 30000, discountPercent: 0, discountExpiresAt: '', credits: 14, durationDays: 31, revisionsPerReport: 8, storageMb: 2048, features: ['14 credit', '2 GB penyimpanan'] },
+        { sku: 'pro', unitPriceIdr: 45000, discountPercent: 0, discountExpiresAt: '', credits: 25, durationDays: 31, revisionsPerReport: 20, storageMb: 6144, features: ['25 credit', '6 GB penyimpanan'] },
       ],
     }),
   });
@@ -311,6 +330,21 @@ try {
   assert.equal(pricing.single.originalPrice, 5000);
   assert.equal(pricing.single.unitPrice, 4500);
   assert.equal(pricing.single.discountPercent, 10);
+  assert.equal(pricing.free.credits, 3);
+  assert.equal(pricing.single.credits, 2);
+  assert.equal(pricing.single.durationDays, 210);
+  assert.equal(pricing.single.revisionsPerReport, 7);
+  assert.equal(pricing.single.storageMb, 750);
+  assert.deepEqual(pricing.monthly.features, ['14 credit', '2 GB penyimpanan']);
+  assert.equal(pricing.products.find((item) => item.sku === 'pro').credits, 25);
+  const planQuote = await admin.request('/pricing/quote', {
+    method: 'POST',
+    body: JSON.stringify({ items: [{ sku: 'credit', quantity: 2 }, { sku: 'monthly', quantity: 1 }] }),
+  });
+  assert.equal(planQuote.totalCredits, 18);
+  assert.equal(planQuote.items.find((item) => item.sku === 'credit').durationDays, 210);
+  const paidStorage = await studentB.request('/storage/summary');
+  assert.equal(paidStorage.limitBytes, 750 * 1024 * 1024);
 
   const controller = new AbortController();
   const stream = await fetch(`${base}/api/admin/events`, {

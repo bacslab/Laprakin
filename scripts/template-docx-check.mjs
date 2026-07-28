@@ -53,6 +53,10 @@ const outputXml = outputZip.readAsText('word/document.xml');
 const outputRels = outputZip.readAsText('word/_rels/document.xml.rels');
 const sourceAnchor = templateXml.match(/<wp:anchor\b[\s\S]*?<\/wp:anchor>/)?.[0];
 const outputAnchor = outputXml.match(/<wp:anchor\b[\s\S]*?<\/wp:anchor>/)?.[0];
+const centeredSourceAnchor = sourceAnchor?.replace(
+  /<wp:positionH\b[^>]*>[\s\S]*?<\/wp:positionH>/,
+  '<wp:positionH relativeFrom="page"><wp:align>center</wp:align></wp:positionH>',
+);
 const sourceSection = templateXml.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/)?.[0];
 const outputSection = outputXml.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/)?.[0];
 assert.match(outputXml, /KEAMANAN JARINGAN/);
@@ -62,7 +66,7 @@ assert.match(outputXml, /r:embed="rId6"/);
 assert.match(outputRels, /Id="rId6"[^>]+Target="media\/image1.png"/);
 assert.ok(outputZip.getEntry('word/media/image1.png'));
 assert.equal((outputXml.match(/<wp:anchor\b/g) || []).length, 1);
-assert.equal(outputAnchor, sourceAnchor, 'Posisi dan ukuran logo cover harus tetap persis.');
+assert.equal(outputAnchor, centeredSourceAnchor, 'Ukuran dan posisi vertikal logo harus tetap, dengan posisi horizontal di tengah halaman.');
 assert.equal(outputSection, sourceSection, 'Ukuran halaman, margin, header, dan footer harus tetap persis.');
 for (const entryName of [
   'word/media/image1.png',

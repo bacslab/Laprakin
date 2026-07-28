@@ -34,3 +34,10 @@ test('gambar bergaya w:pict ikut ditengahkan', () => {
   const [out] = centerImageParagraphs(['<w:p><w:r><w:pict><v:shape/></w:pict></w:r></w:p>']);
   assert.match(out, /<w:jc w:val="center"\/>/);
 });
+
+test('gambar anchor memakai posisi tengah halaman, bukan offset tetap', () => {
+  const anchor = '<w:drawing><wp:anchor><wp:positionH relativeFrom="page"><wp:posOffset>2484120</wp:posOffset></wp:positionH></wp:anchor></w:drawing>';
+  const [out] = centerImageParagraphs([`<w:p>${anchor}</w:p>`]);
+  assert.match(out, /<wp:positionH relativeFrom="page"><wp:align>center<\/wp:align><\/wp:positionH>/);
+  assert.doesNotMatch(out, /<wp:posOffset>/);
+});

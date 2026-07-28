@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from './router';
-import { Component, Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArrowDownToLine, ArrowLeft, ArrowRight, Bell, Check, CheckCircle2, ChevronDown, CircleAlert,
   CodeXml, CreditCard, FileText, FolderOpen, FolderKanban, Globe2, GraduationCap, HelpCircle, LayoutTemplate, LoaderCircle, Mail, Mic, Search,
@@ -8,7 +8,7 @@ import {
   PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Save, Send, Settings2,
   ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, UploadCloud, X,
   ChevronRight, Database, Eye, GripVertical, Keyboard, MoreHorizontal, Pencil, Pin, PinOff, UserRound, Volume2, BellRing, Shield, Sliders, Monitor, Palette, Languages, CircleUserRound, LogOut as LogOutIcon, LayoutDashboard, Users, AlertTriangle, ClipboardList, Megaphone, RefreshCw, MessageSquareText, Activity, FileCog,
-  Copy, Upload, Image as ImageIcon,
+  Copy, Upload,
 } from 'lucide-react';
 import { api, clearCsrfToken, download, setCsrfToken } from './api';
 import { departments, programs } from './data';
@@ -485,11 +485,14 @@ class AppErrorBoundary extends Component {
   }
 }
 const pricingFallback = {
-  free: { credits: 2, revisionsPerReport: 3, storageMb: 100 },
-  single: { unitPrice: 3900, minQuantity: 1, maxQuantity: 20, revisionsPerReport: 5, storageMb: 500 },
-  monthly: { price: 29900, credits: 12, durationDays: 30, revisionsPerReport: 5, storageGb: 1 },
-  pro: { price: 45900, credits: 20, durationDays: 30, revisionsPerReport: 15, storageGb: 5 },
+  free: { credits: 2, durationDays: 60, revisionsPerReport: 3, storageMb: 100, features: ['2 credit awal', '3 revisi per laprak', '100 MB penyimpanan'] },
+  single: { unitPrice: 3900, minQuantity: 1, maxQuantity: 20, credits: 1, durationDays: 180, revisionsPerReport: 5, storageMb: 500, features: ['Tanpa subscription', '5 revisi per laprak', 'Aktif hingga 180 hari'] },
+  monthly: { price: 29900, credits: 12, durationDays: 30, revisionsPerReport: 5, storageMb: 1024, storageGb: 1, features: ['12 credit / 30 hari', 'Mode Thinking terbuka', '1 GB penyimpanan'] },
+  pro: { price: 45900, credits: 20, durationDays: 30, revisionsPerReport: 15, storageMb: 5120, storageGb: 5, features: ['20 credit / 30 hari', 'Mode XtraThink terbuka', '5 GB penyimpanan'] },
 };
+function pricingFeatures(plan, fallback) {
+  return Array.isArray(plan?.features) ? plan.features : fallback;
+}
 function getSystemTheme() {
   if (typeof window === 'undefined' || !window.matchMedia) return 'light';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -902,7 +905,7 @@ function AuthPage() {
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
   const verifyDev = async () => { setBusy(true); try { const data = await api('/auth/verify', { method: 'POST', body: { token: devToken }, includeCsrf: false }); setCsrfToken(data.csrfToken); const nextSession = await refreshSession(); navigate(safeNext || (nextSession?.user?.role === 'admin' ? '/admin' : '/app')); } catch (err) { setError(err.message); } finally { setBusy(false); } };
-  const info = { login: ['Masuk', 'Lanjutkan chat dan laprak yang sedang kamu kerjakan.'], register: ['Buat akun', '2 credit aktif setelah email terverifikasi.'], forgot: ['Atur ulang akses', 'Masukkan email untuk meminta link reset.'], reset: ['Kata sandi baru', 'Gunakan kata sandi yang belum pernah dipakai.'] }[mode];
+  const info = { login: ['Masuk', 'Lanjutkan chat dan laprak yang sedang kamu kerjakan.'], register: ['Buat akun', 'Credit gratis aktif setelah email terverifikasi.'], forgot: ['Atur ulang akses', 'Masukkan email untuk meminta link reset.'], reset: ['Kata sandi baru', 'Gunakan kata sandi yang belum pernah dipakai.'] }[mode];
   const changeMode = (nextMode) => { setMode(nextMode); setError(''); setSuccess(''); setDevToken(''); };
   const formModes = !['forgot', 'reset'].includes(mode);
   return <div className={`auth-page auth-page-${mode} theme-${authTheme}`}>
@@ -1032,19 +1035,19 @@ function PublicPricingPage() {
   const cards = [
     {
       key: 'free', label: 'Free', note: 'Mulai tanpa biaya', price: 'Rp0', suffix: '',
-      features: [`${pricing.free?.credits || 2} credit awal`, `${pricing.free?.revisionsPerReport || 3} revisi per laprak`, `${pricing.free?.storageMb || 100} MB penyimpanan`],
+      features: pricingFeatures(pricing.free, pricingFallback.free.features),
     },
     {
       key: 'credit', label: 'Satuan', note: 'Bayar sesuai kebutuhan', price: formatCurrency(pricing.single?.unitPrice || 3900), originalPrice: formatCurrency(pricing.single?.originalPrice || pricing.single?.unitPrice || 3900), discountPercent: pricing.single?.discountPercent || 0, suffix: '/ laprak',
-      features: ['Tanpa subscription', `${pricing.single?.revisionsPerReport || 5} revisi per laprak`, 'Aktif hingga 180 hari'],
+      features: pricingFeatures(pricing.single, pricingFallback.single.features),
     },
     {
       key: 'monthly', label: 'Pro', note: 'Untuk laprak harian', recommended: true, price: formatCurrency(pricing.monthly?.price || 29900), originalPrice: formatCurrency(pricing.monthly?.originalPrice || pricing.monthly?.price || 29900), discountPercent: pricing.monthly?.discountPercent || 0, suffix: '/ 30 hari',
-      features: [`${pricing.monthly?.credits || 12} credit / 30 hari`, 'Mode Thinking terbuka', `${pricing.monthly?.storageGb || 1} GB penyimpanan`],
+      features: pricingFeatures(pricing.monthly, pricingFallback.monthly.features),
     },
     {
       key: 'pro', label: 'Max', note: 'Untuk semester padat', price: formatCurrency(pricing.pro?.price || 45900), originalPrice: formatCurrency(pricing.pro?.originalPrice || pricing.pro?.price || 45900), discountPercent: pricing.pro?.discountPercent || 0, suffix: '/ 30 hari',
-      features: [`${pricing.pro?.credits || 20} credit / 30 hari`, 'Mode XtraThink terbuka', `${pricing.pro?.storageGb || 5} GB penyimpanan`],
+      features: pricingFeatures(pricing.pro, pricingFallback.pro.features),
     },
   ];
 
@@ -1695,9 +1698,11 @@ function Workspace() {
     if (!current) return;
     const content = input.trim() || 'Saya sudah menambahkan bahan untuk laprak ini.';
     const files = [...pendingLandingFiles];
+    // Composer harus langsung kembali kosong setelah submit. Menunggu seluruh
+    // upload dan respons AI selesai membuat pesan terlihat belum terkirim.
+    setInput('');
+    setPendingLandingFiles([]);
     if (!identityComplete) {
-      setInput('');
-      setPendingLandingFiles([]);
       setIdentityIntake({ session: current, content, files, kind: attachmentKind });
       return;
     }
@@ -2236,6 +2241,7 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
   const { setNotice } = useApp();
   const logoInputRef = useRef(null);
   const [logoBusy, setLogoBusy] = useState(false);
+  const [logoPreviewFailed, setLogoPreviewFailed] = useState(false);
   const [form, setForm] = useState({
     fullName: user.fullName || '',
     nim: user.nim || '',
@@ -2247,13 +2253,15 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
     departmentKey: user.departmentKey || '',
     studyProgramKey: user.studyProgramKey || '',
   });
+  useEffect(() => setLogoPreviewFailed(false), [form.institutionLogoUrl]);
+  const hasLogoPreview = Boolean(form.institutionLogoUrl) && !logoPreviewFailed;
   const valid = form.fullName.trim().length >= 2
     && form.nim.trim().length >= 3
     && form.className.trim().length >= 1
     && form.institutionName.trim().length >= 2
     && form.facultyName.trim().length >= 2
     && form.studyProgramName.trim().length >= 2
-    && Boolean(form.institutionLogoUrl);
+    && hasLogoPreview;
   const uploadLogo = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -2271,6 +2279,7 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
     setLogoBusy(true);
     try {
       const result = await api('/profile/institution-logo', { method: 'POST', body, form: true });
+      setLogoPreviewFailed(false);
       setForm((value) => ({ ...value, institutionLogoUrl: result.user?.institutionLogoUrl || '' }));
       setNotice('Logo institusi siap dipakai.');
     } catch (error) {
@@ -2293,10 +2302,10 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
         <div className="identity-logo-field">
           <span>Logo institusi</span>
           <div className="identity-logo-control">
-            <span className="identity-logo-preview">{form.institutionLogoUrl ? <img src={form.institutionLogoUrl} alt="Logo institusi" /> : <ImageIcon size={20} />}</span>
-            <div><b>{form.institutionLogoUrl ? 'Logo PNG terunggah' : 'Unggah logo PNG'}</b><small>Wajib untuk cover, maksimal 5 MB.</small></div>
+            <span className={`identity-logo-preview ${hasLogoPreview ? '' : 'is-empty'}`.trim()}>{hasLogoPreview ? <img src={form.institutionLogoUrl} alt="Logo institusi" onError={() => setLogoPreviewFailed(true)} /> : null}</span>
+            <div><b>{hasLogoPreview ? 'Logo PNG terunggah' : 'Unggah logo PNG'}</b><small>Wajib untuk cover, maksimal 5 MB.</small></div>
             <input ref={logoInputRef} hidden type="file" accept=".png,image/png" onChange={uploadLogo} />
-            <Button type="button" variant="secondary" disabled={busy || logoBusy} onClick={() => logoInputRef.current?.click()}>{logoBusy ? <LoaderCircle className="spin" size={14} /> : <Upload size={14} />}{form.institutionLogoUrl ? 'Ganti' : 'Unggah'}</Button>
+            <Button type="button" variant="secondary" disabled={busy || logoBusy} onClick={() => logoInputRef.current?.click()}>{logoBusy ? <LoaderCircle className="spin" size={14} /> : <Upload size={14} />}{hasLogoPreview ? 'Ganti' : 'Unggah'}</Button>
           </div>
         </div>
       </div>
@@ -2304,6 +2313,35 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
     </form>
   </div>;
 }
+function InlineMessageText({ text }) {
+  return String(text || '').split(/(`[^`\n]+`)/g).map((part, index) => (
+    part.startsWith('`') && part.endsWith('`')
+      ? <code className="message-inline-code" key={`${part}-${index}`}>{part.slice(1, -1)}</code>
+      : <Fragment key={`${part}-${index}`}>{part}</Fragment>
+  ));
+}
+
+function MessageContent({ content }) {
+  const blocks = String(content || '').split(/(```[\s\S]*?```)/g).filter(Boolean);
+  return <div className="message-content">{blocks.map((block, blockIndex) => {
+    if (block.startsWith('```') && block.endsWith('```')) {
+      const raw = block.slice(3, -3).replace(/^\n/, '');
+      const firstBreak = raw.indexOf('\n');
+      const possibleLanguage = firstBreak >= 0 ? raw.slice(0, firstBreak).trim() : '';
+      const hasLanguage = /^[a-z0-9_+#.-]{1,24}$/i.test(possibleLanguage);
+      const language = hasLanguage ? possibleLanguage : 'code';
+      const code = (hasLanguage ? raw.slice(firstBreak + 1) : raw).replace(/\n$/, '');
+      return <div className="message-code-block" key={`code-${blockIndex}`}>
+        <div><CodeXml size={13}/><span>{language}</span></div>
+        <pre><code>{code}</code></pre>
+      </div>;
+    }
+    return block.split(/\n{2,}/).filter((paragraph) => paragraph.trim()).map((paragraph, paragraphIndex) => (
+      <p key={`text-${blockIndex}-${paragraphIndex}`}><InlineMessageText text={paragraph.trim()} /></p>
+    ));
+  })}</div>;
+}
+
 function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz }) {
   const blankChat = !active || (!messages.length && !attachments.length && !active.document_id);
   const [previewFile, setPreviewFile] = useState(null);
@@ -2356,7 +2394,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
   >
     {dragActive && <div className="workspace-drop-hint" aria-hidden="true"><UploadCloud size={22} /><b>Lepas file untuk melampirkan</b><small>File tetap menunggu sampai kamu menekan Enter.</small></div>}
     <div className="chat-thread">
-      {quizMode && documentState ? <div className="quiz-workspace-panel"><header><div><small>Quiz laprak</small><h2>Cek pemahaman</h2><p>5 soal dari draft · lulus 70%</p></div><button type="button" onClick={onCloseQuiz}>Kembali ke chat</button></header><DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} /></div> : blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}>mau <em>laprakin</em> apa hari ini, {greetingName}?</h1></div> : <div className="thread-content">
+      {quizMode && documentState ? <div className="quiz-workspace-panel"><header><div><small>Cek pemahaman</small><h2>Quiz laprak</h2></div><button type="button" onClick={onCloseQuiz}><ArrowLeft size={14}/>Kembali</button></header><DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} /></div> : blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}>mau <em>laprakin</em> apa hari ini, {greetingName}?</h1></div> : <div className="thread-content">
       {visibleMessages.map((message) => <Fragment key={message.id}>
         {message.role === 'user' && attachmentBuckets.get(message.id)?.length ? <SourceBar compact attachments={attachmentBuckets.get(message.id)} onOpen={setPreviewFile} /> : null}
         {message.role === 'assistant' && !message.meta?.isClarification && message.meta?.workPlan?.steps?.length ? <WorkPlanRail
@@ -2366,7 +2404,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
           startedAt={message.meta.thinkingStartedAt}
           finishedAt={message.meta.thinkingFinishedAt || message.created_at}
         /> : null}
-        <article className={`message ${message.role}`}><div><p>{message.content}</p>{message.meta?.links?.length ? <div className="link-row">{message.meta.links.map((link) => <a key={link} href={link} target="_blank" rel="noreferrer"><Globe2 size={12} />{new URL(link).hostname}</a>)}</div> : null}</div></article>
+        <article className={`message ${message.role}`}><div><MessageContent content={message.content}/>{message.meta?.links?.length ? <div className="link-row">{message.meta.links.map((link) => <a key={link} href={link} target="_blank" rel="noreferrer"><Globe2 size={12} />{new URL(link).hostname}</a>)}</div> : null}</div></article>
         {message.meta?.kind === 'document_ready' ? <DocumentCard documentState={documentState} activeJob={jobForMessage(message)} version={message.meta.documentVersion} onOpen={onOpenDocument} /> : null}
       </Fragment>)}
       {active && workflow?.state === 'CLARIFICATION_REQUIRED' && !active.document_id && <ChatBriefPanel config={config} updateConfig={updateConfig} workflow={workflow} busy={busy} onSubmit={(payload) => onWorkflowAction('SUBMIT_CLARIFICATION', payload)} />}
@@ -2579,7 +2617,7 @@ function AttachmentPreviewModal({ file, onClose }) {
 function WorkflowPanel({ workflow, busy, onCreate, onAction, aiMode }) {
   if (!workflow) return null;
   if (workflow.state === 'CLARIFICATION_REQUIRED') return null;
-  if (workflow.state === 'ANALYZING_INPUT') return <section className="work-plan-reading" aria-live="polite"><LoaderCircle className="spin" size={16} /><div><b>Membaca bahan yang kamu kirim</b><small>File sedang diperiksa sebelum alur kerja disusun.</small></div></section>;
+  if (workflow.state === 'ANALYZING_INPUT') return null;
   if (workflow.state !== 'READY_TO_GENERATE') return null;
   return <section className="work-plan-ready" aria-label="Alur kerja Laprak">
     <WorkPlanRail workflow={workflow} />
@@ -2607,7 +2645,7 @@ function ClarificationCard({ workflow, busy, onAction }) {
 }
 
 function ThinkingRail() {
-  return <section className="work-plan-rail work-plan-pending" aria-live="polite"><div className="work-plan-toggle"><b>Sedang berfikir</b><LoaderCircle className="spin" size={14}/></div></section>;
+  return <section className="work-plan-rail work-plan-pending" aria-live="polite"><div className="work-plan-toggle"><b>Sedang berpikir</b><LoaderCircle className="spin" size={14}/></div></section>;
 }
 
 function WorkPlanRail({ workflow, job = null, documentState = null, plan: planOverride = null, completed = false, startedAt: startedAtOverride = '', finishedAt: finishedAtOverride = '' }) {
@@ -2637,7 +2675,7 @@ function WorkPlanRail({ workflow, job = null, documentState = null, plan: planOv
     ? `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}dtk`
     : `${durationSeconds}dtk`;
   return <section className={`work-plan-rail ${expanded ? 'is-expanded' : 'is-collapsed'}`} aria-live="polite">
-    <button type="button" className="work-plan-toggle" onClick={() => setExpanded((value) => !value)}><b>{generated ? `Berfikir selama ${durationLabel}` : 'Sedang berfikir'}</b>{expanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>
+    <button type="button" className="work-plan-toggle" onClick={() => setExpanded((value) => !value)}><b>{generated ? `Berpikir selama ${durationLabel}` : 'Sedang berpikir'}</b>{expanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>
     {expanded && <ol>{visibleSteps.map((step, index) => {
       const done = index < completedCount;
       const current = index === completedCount && completedCount < steps.length;
@@ -2666,7 +2704,23 @@ function AiModeMenu({ value, onChange, access = {}, onUpgrade }) {
   return <div className="ai-mode-menu"><button type="button" className="ai-mode-trigger" onClick={() => setOpen((item) => !item)} aria-haspopup="menu" aria-expanded={open}><span>{current.label}</span><ChevronDown size={13} /></button>{open && <div className="ai-mode-popover" role="menu">{modes.map((mode) => { const available = Boolean(access?.[mode.key]?.available); return <button type="button" key={mode.key} className={`${mode.key === value ? 'selected' : ''} ${available ? '' : 'locked'}`} role="menuitem" onClick={() => choose(mode)}><span className="ai-mode-option-copy"><b>{mode.label}</b><small>{mode.description}</small></span>{available ? (mode.key === value ? <Check size={15} /> : <ChevronRight size={15} />) : <span className="ai-mode-lock"><LockKeyhole size={13} />{mode.unlock}</span>}</button>; })}</div>}</div>;
 }
 
+function resizeComposerTextarea(textarea) {
+  if (!textarea || typeof window === 'undefined') return;
+  const style = window.getComputedStyle(textarea);
+  const fontSize = Number.parseFloat(style.fontSize) || 13;
+  const lineHeight = Number.parseFloat(style.lineHeight) || fontSize * 1.5;
+  const verticalPadding = (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0);
+  const verticalBorder = (Number.parseFloat(style.borderTopWidth) || 0) + (Number.parseFloat(style.borderBottomWidth) || 0);
+  const minContentHeight = lineHeight * 2 + verticalPadding;
+  const maxContentHeight = lineHeight * 11 + verticalPadding;
+  textarea.style.height = '0px';
+  const contentHeight = Math.max(textarea.scrollHeight, minContentHeight);
+  textarea.style.height = `${Math.min(contentHeight, maxContentHeight) + verticalBorder}px`;
+  textarea.style.overflowY = contentHeight > maxContentHeight ? 'auto' : 'hidden';
+}
+
 function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, centered, pendingFiles = [], onPasteImages, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade }) {
+  const textareaRef = useRef(null);
   const shortcutItems = [
     { key: 'laprak', label: 'Laprak', icon: FileText, prompt: 'Buatkan saya laprak untuk mata kuliah [nama mata kuliah], dengan materi [topik praktikum].' },
     { key: 'proposal', label: 'Proposal', icon: LayoutTemplate, prompt: 'Bantu saya menyusun proposal tentang [topik] berdasarkan ketentuan berikut: ' },
@@ -2675,10 +2729,18 @@ function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, up
     { key: 'jurnal', label: 'Jurnal', icon: Pencil, prompt: 'Bantu saya menyusun artikel jurnal dari data dan tujuan penelitian berikut: ' },
   ];
   const placeholder = centered ? 'Ceritakan tugas yang ingin kamu susun...' : (pendingFiles.length ? 'Tambahkan pesan untuk bahan ini...' : 'Tulis tugasmu, tempel link, atau paste gambar...');
+  useLayoutEffect(() => {
+    resizeComposerTextarea(textareaRef.current);
+  }, [input]);
+  useEffect(() => {
+    const resize = () => resizeComposerTextarea(textareaRef.current);
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, []);
   return <div className={`composer-zone ${centered ? 'composer-centered composer-claude' : ''}`}>
     {pendingFiles.length ? <div className="pending-files">{pendingFiles.map((file, index) => <PendingAttachmentChip file={file} index={index} key={`${file.name}-${index}`} onRemove={onRemovePending} />)}</div> : null}
     <form className={`composer ${centered ? 'composer-style-reference' : ''}`} onSubmit={send}>
-      <textarea rows="1" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send(event); } }} placeholder={placeholder} />
+      <textarea ref={textareaRef} rows="2" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send(event); } }} placeholder={placeholder} />
       <div className="composer-bottom-row">
         <div className="composer-left">
           <CustomSelect className="composer-select" value={attachmentKind} onChange={setAttachmentKind} ariaLabel="Jenis bahan" options={[{ value: '', label: 'Deteksi otomatis' }, { value: 'module', label: 'Modul' }, { value: 'instruction', label: 'Instruksi' }, { value: 'practice_evidence', label: 'Bukti praktik' }, { value: 'template', label: 'Template' }, { value: 'supporting_document', label: 'Dokumen pendukung' }]} />
@@ -2699,20 +2761,22 @@ function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, up
 
 function ChatBriefPanel({ config, updateConfig, workflow, busy, onSubmit }) {
   const missing = workflow?.missingCriticalContext || '';
-  const needsCourse = ['course_name', 'course_and_topic'].includes(missing) || !config.configuration.courseName;
-  const needsModule = ['practice_topic', 'course_and_topic', 'document_type_and_topic'].includes(missing) || !config.configuration.moduleTitle;
-  const ready = (!needsCourse || config.configuration.courseName.trim()) && (!needsModule || config.configuration.moduleTitle.trim());
+  const courseName = config.configuration.courseName || workflow?.courseName || '';
+  const moduleTitle = config.configuration.moduleTitle || workflow?.practiceTopic || '';
+  const needsCourse = ['course_name', 'course_and_topic'].includes(missing) || !courseName;
+  const needsModule = ['practice_topic', 'course_and_topic', 'document_type_and_topic'].includes(missing) || !moduleTitle;
+  const ready = (!needsCourse || courseName.trim()) && (!needsModule || moduleTitle.trim());
   return <form className="chat-brief-panel" onSubmit={(event) => {
     event.preventDefault();
     if (!ready) return;
     onSubmit?.({
-      courseName: config.configuration.courseName.trim(),
-      practiceTopic: config.configuration.moduleTitle.trim(),
+      courseName: courseName.trim(),
+      practiceTopic: moduleTitle.trim(),
     });
   }}>
     <div><small>Lengkapi konteks</small><b>{needsCourse && needsModule ? 'Mata kuliah dan materi' : needsCourse ? 'Mata kuliah' : 'Materi praktikum'}</b></div>
-    {needsCourse && <label>Mata kuliah<input autoFocus value={config.configuration.courseName || ''} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Contoh: Administrasi Jaringan Komputer" /></label>}
-    {needsModule && <label>Materi / modul<input autoFocus={!needsCourse} value={config.configuration.moduleTitle || ''} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Contoh: Dynamic Host Configuration Protocol" /></label>}
+    {needsCourse && <label>Mata kuliah<input autoFocus value={courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Contoh: Administrasi Jaringan Komputer" /></label>}
+    {needsModule && <label>Materi / modul<input autoFocus={!needsCourse} value={moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Contoh: Dynamic Host Configuration Protocol" /></label>}
     <Button type="submit" disabled={busy || !ready}>{busy ? <LoaderCircle className="spin" size={14} /> : <ArrowRight size={14} />}Lanjutkan</Button>
   </form>;
 }
@@ -2723,6 +2787,8 @@ function InlineContext({ config, updateConfig, onClose }) {
 
 function ReportPreview({ documentState, user, embedded = false }) {
   const [open, setOpen] = useState(true);
+  const [logoFailed, setLogoFailed] = useState(false);
+  useEffect(() => setLogoFailed(false), [user.institutionLogoUrl]);
   const studyProgram = programs.find((item) => item.key === user.studyProgramKey)?.label || 'Program studi';
   const department = departments.find((item) => item.key === user.departmentKey)?.label || 'Jurusan / fakultas';
   const mappingsBySection = (documentState.mappings || []).reduce((result, mapping, index) => {
@@ -2738,7 +2804,7 @@ function ReportPreview({ documentState, user, embedded = false }) {
         <p className="report-cover-kicker">LAPORAN PRAKTIKUM</p>
         <h2>{documentState.course_name || 'MATA KULIAH'}</h2>
         <h3>{documentState.module_title || documentState.title}</h3>
-        {user.institutionLogoUrl && <img className="report-cover-logo" src={user.institutionLogoUrl} alt={`Logo ${user.institutionName || 'institusi'}`} />}
+        {user.institutionLogoUrl && !logoFailed && <img className="report-cover-logo" src={user.institutionLogoUrl} alt={`Logo ${user.institutionName || 'institusi'}`} onError={() => setLogoFailed(true)} />}
         <div className="report-cover-lecturer"><small>Dosen Pengampu:</small><b>{documentState.lecturer_name || '-'}</b><span>NIP : -</span></div>
         <div className="report-cover-identity"><small>Disusun Oleh:</small><b>{user.fullName || 'Nama mahasiswa'} ({user.nim || 'NPM / NIM'})</b><span>{user.className || 'Kelas'}</span></div>
         <div className="report-cover-institution"><b>PROGRAM STUDI {studyProgram.toUpperCase()}</b><span>{department.toUpperCase()}</span><span>POLITEKNIK NEGERI CILACAP</span><span>TAHUN AKADEMIK {documentState.academic_year || '2025/2026'}</span></div>
@@ -2777,18 +2843,18 @@ function DocumentQuiz({ access, busy, onStart, onSubmit }) {
     if (next) setResult(next);
   };
   if (access?.passed && !attempt) {
-    return <section className="quiz-gate quiz-passed"><span><CheckCircle2 size={18} /></span><div><small>Quiz selesai</small><b>Download sudah terbuka</b><p>Nilai terakhir {access.latestScore ?? 0}% · minimum {access.passScore}%.</p></div></section>;
+    return <section className="quiz-gate quiz-passed"><span><CheckCircle2 size={18} /></span><div><small>Selesai</small><b>Download terbuka</b><p>Nilai {access.latestScore ?? 0}%</p></div></section>;
   }
   if (!attempt) {
     return <section className="quiz-gate">
-      <div><small>{access?.subscriptionBypass ? 'Opsional' : 'Sebelum unduh'}</small><h3>{access?.attemptCount ? `Nilai terakhir ${access.latestScore ?? 0}%` : 'Siap mulai?'}</h3><p>{access?.attemptCount ? 'Coba lagi dengan soal yang diacak.' : 'Jawab 5 soal dari draft ini.'}</p></div>
+      <div><small>Pre-quiz</small><h3>{access?.attemptCount ? `Nilai terakhir ${access.latestScore ?? 0}%` : '5 soal singkat'}</h3>{access?.attemptCount ? <p>Minimal {access.passScore}%</p> : null}</div>
       <Button onClick={begin} disabled={busy}><Sparkles size={14} />{access?.attemptCount ? 'Coba lagi' : 'Mulai quiz'}</Button>
     </section>;
   }
   if (result) {
     return <section className={`quiz-result ${result.passed ? 'passed' : 'failed'}`}>
       <div className="quiz-result-score"><span>{result.score}</span><small>/ 100</small></div>
-      <div><small>{result.passed ? 'Lulus' : 'Belum lulus'}</small><h3>{result.passed ? 'Download sudah terbuka' : `Butuh minimal ${result.passScore}%`}</h3><p>{result.passed ? 'Kamu bisa membuat dan mengunduh file Word dari versi laporan ini.' : 'Coba lagi. Urutan dan pilihan soal akan diacak dari materi yang sama.'}</p></div>
+      <div><small>{result.passed ? 'Lulus' : 'Belum lulus'}</small><h3>{result.passed ? 'Download terbuka' : `Minimal ${result.passScore}%`}</h3></div>
       {!result.passed && <Button onClick={begin} disabled={busy}><RefreshCw size={14} />Soal baru</Button>}
     </section>;
   }
@@ -2796,7 +2862,7 @@ function DocumentQuiz({ access, busy, onStart, onSubmit }) {
   const selected = answers[question.id];
   const isLast = questionIndex === attempt.questions.length - 1;
   return <section className="quiz-player">
-    <header><span>Quiz laprak</span><b>{questionIndex + 1} / {attempt.questions.length}</b><div><i style={{ width: `${((questionIndex + 1) / attempt.questions.length) * 100}%` }} /></div></header>
+    <header><span>Soal</span><b>{questionIndex + 1} / {attempt.questions.length}</b><div><i style={{ width: `${((questionIndex + 1) / attempt.questions.length) * 100}%` }} /></div></header>
     <article className="quiz-question-card"><small>{question.sectionTitle}</small><h3>{question.question}</h3></article>
     {/* Tanpa kelas warna per-opsi: empat warna keras yang berbeda membuat
     pilihan terlihat seperti kuis permainan dan tidak mengikuti tema. */}
@@ -2960,7 +3026,10 @@ const INSTITUTION_LOGO_MAX_BYTES = 5 * 1024 * 1024;
 function InstitutionLogoField({ logoUrl = '', onChanged, setNotice }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
-  const hasLogo = Boolean(logoUrl);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const hasStoredLogo = Boolean(logoUrl);
+  const hasLogo = hasStoredLogo && !previewFailed;
+  useEffect(() => { setPreviewFailed(false); }, [logoUrl]);
 
   const pick = async (event) => {
     const file = event.target.files?.[0];
@@ -2975,6 +3044,7 @@ function InstitutionLogoField({ logoUrl = '', onChanged, setNotice }) {
     setBusy(true);
     try {
       await api('/profile/institution-logo', { method: 'POST', body, form: true });
+      setPreviewFailed(false);
       await onChanged?.();
       setNotice('Logo institusi diperbarui.');
     } catch (error) {
@@ -2988,6 +3058,7 @@ function InstitutionLogoField({ logoUrl = '', onChanged, setNotice }) {
     setBusy(true);
     try {
       await api('/profile/institution-logo', { method: 'DELETE' });
+      setPreviewFailed(false);
       await onChanged?.();
       setNotice('Logo institusi dihapus.');
     } catch (error) {
@@ -3000,15 +3071,15 @@ function InstitutionLogoField({ logoUrl = '', onChanged, setNotice }) {
   return <section className="settings-group institution-logo-field">
     <div className="settings-group-heading"><b>Logo institusi</b><small>Dipakai pada cover dokumen. PNG, maksimal 5 MB.</small></div>
     <div className="institution-logo-row">
-      <div className="institution-logo-preview">
-        {hasLogo && <img src={logoUrl} alt="Logo institusi" />}
+      <div className={`institution-logo-preview ${hasLogo ? '' : 'is-empty'}`}>
+        {hasLogo ? <img src={logoUrl} alt="Logo institusi" onError={() => setPreviewFailed(true)} /> : null}
       </div>
       <div className="institution-logo-actions">
         <input ref={inputRef} type="file" accept=".png,image/png" onChange={pick} hidden />
         <Button variant="secondary" onClick={() => inputRef.current?.click()} disabled={busy}>
           <Upload size={14} />{hasLogo ? 'Ganti logo' : 'Unggah logo'}
         </Button>
-        {hasLogo && <Button variant="secondary" onClick={remove} disabled={busy}><Trash2 size={14} />Hapus</Button>}
+        {hasStoredLogo && <Button variant="secondary" onClick={remove} disabled={busy}><Trash2 size={14} />Hapus</Button>}
       </div>
     </div>
   </section>;
@@ -3209,9 +3280,9 @@ function BillingPage() {
 
   const plan = data?.currentPlan || { key: 'free', label: 'Gratis', status: 'active', credits: 0, endsAt: null, description: 'Paket awal untuk mencoba Laprakin.' };
   const catalogue = {
-    free: { key: 'free', label: 'Gratis', price: 0, description: 'Mulai dan pahami alur kerja Laprakin.', features: [`${pricing.free?.credits || 2} credit awal setelah verifikasi`, `${pricing.free?.revisionsPerReport || 3} revisi per laporan`, `${pricing.free?.storageMb || 100} MB penyimpanan`] },
-    monthly: { key: 'monthly', label: 'Pro', price: pricing.monthly?.price || 29900, description: 'Untuk kebutuhan praktikum yang rutin.', features: [`${pricing.monthly?.credits || 12} credit / 30 hari`, `${pricing.monthly?.revisionsPerReport || 5} revisi per laporan`, `${pricing.monthly?.storageGb || 1} GB penyimpanan`] },
-    pro: { key: 'pro', label: 'Max', price: pricing.pro?.price || 45900, description: 'Untuk semester padat dan revisi intensif.', features: [`${pricing.pro?.credits || 20} credit / 30 hari`, `${pricing.pro?.revisionsPerReport || 15} revisi per laporan`, `${pricing.pro?.storageGb || 5} GB penyimpanan`, 'Prioritas support operasional'] },
+    free: { key: 'free', label: 'Gratis', price: 0, description: 'Mulai dan pahami alur kerja Laprakin.', features: pricingFeatures(pricing.free, pricingFallback.free.features) },
+    monthly: { key: 'monthly', label: 'Pro', price: pricing.monthly?.price || 29900, description: 'Untuk kebutuhan praktikum yang rutin.', features: pricingFeatures(pricing.monthly, pricingFallback.monthly.features) },
+    pro: { key: 'pro', label: 'Max', price: pricing.pro?.price || 45900, description: 'Untuk semester padat dan revisi intensif.', features: pricingFeatures(pricing.pro, pricingFallback.pro.features) },
   };
   const paymentStatusCopy = {
     created: 'Menyiapkan checkout QRIS.',
@@ -3467,13 +3538,16 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
           </section>
         </div>}
         {tab === 'storage' && <div className="settings-pane">{storage ? <><div className="storage-overview"><div><span>Terpakai</span><b>{formatBytes(storage.usedBytes)}</b><small>dari {formatBytes(storage.limitBytes)}</small></div><strong>{storagePercentage}%</strong></div><div className="storage-meter"><i><em style={{ width: `${storagePercentage}%` }} /></i></div><div className="storage-cards"><span><FolderOpen size={17}/><b>{storage.tier === 'pro' ? 'Pro' : storage.tier === 'subscription' ? 'Subscription' : storage.tier === 'paid' ? 'Satuan' : 'Gratis'}</b><small>{storage.retentionHint}</small></span><span><FileText size={17}/><b>Yang dihitung</b><small>Modul, bukti, template, data, dan export DOCX.</small></span></div><section className="settings-group storage-file-manager"><div className="settings-group-heading"><b>File tersimpan</b><small>{storage.files?.length || 0} file bisa dikelola</small></div>{storage.files?.length ? <div className="storage-file-list">{storage.files.map((file) => <article key={`${file.kind}-${file.id}`}><FileText size={15}/><div><b>{file.name}</b><small>{file.sourceLabel} · {formatBytes(file.sizeBytes)} · {formatDate(file.createdAt)}</small></div><Button variant="secondary" onClick={() => deleteStorageFile(file)} disabled={Boolean(storageBusy)}>{storageBusy === file.id ? <LoaderCircle className="spin" size={14}/> : <Trash2 size={14}/>}Hapus</Button></article>)}</div> : <div className="settings-empty-state"><FolderOpen size={18}/><div><b>Belum ada file tersimpan</b><p>File modul, bukti, data, dan export akan muncul di sini.</p></div></div>}</section></> : <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat ringkasan penyimpanan...</div>}<p className="settings-footnote">Chat teks dan preferensi tidak dihitung sebagai penyimpanan file.</p></div>}
-        {tab === 'safety' && <div className="settings-pane"><section className={`safety-account-status ${safetyStatus?.hasAlert ? 'has-alert' : ''}`}>{safetyStatus ? safetyStatus.hasAlert ? <><CircleAlert size={20}/><div><b>Akun sedang mendapat alert</b><p>Berikut alasan yang perlu kamu periksa:</p><ul className="safety-reason-list">{(safetyStatus.reasons || []).map((item, index) => <li key={`${item.createdAt || ''}-${index}`}>{item.reason}</li>)}</ul><small>{safetyStatus.openAlerts} alert terbuka</small></div></> : <><ShieldCheck size={20}/><div><b>Tidak ada alert pada akun</b><p>Penggunaan akunmu tidak sedang memiliki sinyal safety terbuka.</p><small>Status terakhir diperbarui otomatis.</small></div></> : <><LoaderCircle className="spin" size={18}/><div><b>Memuat status akun</b><p>Safety status sedang diperiksa.</p></div></>}</section></div>}
+        {tab === 'safety' && <div className="settings-pane safety-settings-pane">
+          <section className={`safety-account-status ${safetyStatus?.hasAlert ? 'has-alert' : ''}`}>{safetyStatus ? safetyStatus.hasAlert ? <><CircleAlert size={20}/><div><b>Akun sedang mendapat alert</b><p>Ada aktivitas akun yang perlu kamu periksa.</p><small>{safetyStatus.openAlerts} alert terbuka</small></div></> : <><ShieldCheck size={20}/><div><b>Tidak ada alert pada akun</b><p>Penggunaan akunmu tidak sedang memiliki sinyal safety terbuka.</p><small>Status terakhir diperbarui otomatis.</small></div></> : <><LoaderCircle className="spin" size={18}/><div><b>Memuat status akun</b><p>Safety status sedang diperiksa.</p></div></>}</section>
+          {safetyStatus?.hasAlert && Boolean(safetyStatus.reasons?.length) && <section className="safety-reasons-panel"><b>Alasan alert</b><ul className="safety-reason-list">{safetyStatus.reasons.map((item, index) => <li key={`${item.createdAt || ''}-${index}`}>{item.reason}</li>)}</ul></section>}
+        </div>}
         {tab === 'security' && <div className="settings-pane">
           {String(user.authProvider || 'password').includes('google') && <section className="settings-group"><Row title="Google terhubung" description="Akun Google ini dapat dipakai untuk masuk tanpa kata sandi."><span className="settings-connected-status"><CheckCircle2 size={14}/>Aktif</span></Row></section>}
           <section className="settings-group"><div className="settings-group-heading"><b>{user.authProvider === 'google' ? 'Buat kata sandi Laprakin' : 'Ubah kata sandi'}</b><small>Untuk keamanan, verifikasi dilakukan melalui link yang dikirim ke {user.email}.</small></div><Button type="button" variant="secondary" onClick={requestPasswordChange} disabled={busy}><Mail size={14}/>Kirim link verifikasi</Button></section>
           <section className="settings-group"><Row title="Keluar dari semua perangkat" description="Gunakan setelah login dari perangkat umum."><Button variant="secondary" onClick={logoutAll} disabled={busy}>Akhiri semua sesi</Button></Row></section>
         </div>}
-        {tab === 'archived' && <div className="settings-pane"><section className="settings-group archived-chat-settings"><div className="settings-group-heading"><b>Percakapan arsip</b><small>Chat yang dipulihkan akan kembali muncul di sidebar.</small></div>{archivedLoading ? <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat chat arsip...</div> : archivedChats.length ? <div className="archived-chat-list">{archivedChats.map((session) => <article key={session.id}><div><b>{session.title || 'Chat baru'}</b><small>{session.course_group || 'Belum dikelompokkan'} · {formatDate(session.archived_at || session.updated_at)}</small></div><Button type="button" variant="secondary" disabled={busy} onClick={() => restoreArchivedChat(session.id)}>Pulihkan</Button></article>)}</div> : <div className="settings-empty-state"><Archive size={18}/><div><b>Belum ada chat diarsipkan</b><p>Chat yang kamu arsipkan dari sidebar akan muncul di sini.</p></div></div>}</section></div>}
+        {tab === 'archived' && <div className="settings-pane"><section className="archived-chat-settings">{archivedLoading ? <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat chat arsip...</div> : archivedChats.length ? <div className="archived-chat-list">{archivedChats.map((session) => <article key={session.id}><span className="archived-chat-icon"><Archive size={16}/></span><div><b>{session.title || 'Chat baru'}</b><small>{session.course_group || 'Belum dikelompokkan'}</small><time>{formatDate(session.archived_at || session.updated_at)}</time></div><Button type="button" variant="secondary" disabled={busy} onClick={() => restoreArchivedChat(session.id)}>Pulihkan</Button></article>)}</div> : <div className="settings-empty-state"><Archive size={18}/><div><b>Belum ada chat diarsipkan</b><p>Chat yang kamu arsipkan dari sidebar akan muncul di sini.</p></div></div>}</section></div>}
         {tab === 'academic' && <div className="settings-pane">
           <section className="settings-group academic-settings-form academic-settings-wide">
             <label><span>Nama lengkap</span><input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Nama pada cover" /></label>
@@ -3552,6 +3626,7 @@ function AdminAccessPanel({ users, setNotice, onRefresh }) {
   const [rooms, setRooms] = useState([]);
   const [restrictions, setRestrictions] = useState([]);
   const [form, setForm] = useState({ targetType: 'account', durationDays: '7', permanent: false, reason: '' });
+  const [planForm, setPlanForm] = useState({ planKey: 'free', durationDays: '30' });
   const [busy, setBusy] = useState(false);
   const selected = users.find((item) => item.id === selectedId);
   const loadDetails = useCallback(async (userId) => {
@@ -3566,6 +3641,27 @@ function AdminAccessPanel({ users, setNotice, onRefresh }) {
     } catch (error) { setNotice(error.message); }
   }, [setNotice]);
   useEffect(() => { loadDetails(selectedId); }, [selectedId, loadDetails]);
+  useEffect(() => {
+    setPlanForm({
+      planKey: ['monthly', 'pro'].includes(selected?.planKey) ? selected.planKey : 'free',
+      durationDays: '30',
+    });
+  }, [selectedId, selected?.planKey]);
+  const changePlan = async () => {
+    if (!selectedId) return;
+    setBusy(true);
+    try {
+      await api(`/admin/users/${selectedId}/plan`, {
+        method: 'PUT',
+        body: {
+          planKey: planForm.planKey,
+          durationDays: Number(planForm.durationDays || 30),
+        },
+      });
+      await onRefresh();
+      setNotice(`Plan ${selected?.email || 'user'} berhasil diperbarui.`);
+    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  };
   const createRestriction = async () => {
     if (!selectedId || form.reason.trim().length < 8) return;
     setBusy(true);
@@ -3594,7 +3690,7 @@ function AdminAccessPanel({ users, setNotice, onRefresh }) {
   return <section className="admin-content admin-access-layout">
     <section className="admin-panel admin-user-picker"><div className="admin-panel-head"><h2>User</h2><small>{users.length} akun</small></div><div className="admin-list">{users.map((item) => <button type="button" key={item.id} className={selectedId === item.id ? 'active' : ''} onClick={() => setSelectedId(item.id)}><div><b>{item.fullName || item.email}</b><small>{item.email} · {item.plan}</small></div><span>{item.restrictionCount ? `${item.restrictionCount} batasan` : `${item.roomCount} room`}</span></button>)}</div></section>
     <div className="admin-access-detail">
-      <section className="admin-panel"><div className="admin-panel-head"><div><h2>{selected?.fullName || selected?.email || 'Pilih user'}</h2><small>{selected ? `${selected.messageCount} pesan · ${Number(selected.totalTokens || 0).toLocaleString('id-ID')} token` : ''}</small></div></div>{selected && <div className="admin-restriction-form"><label>Jenis pembatasan<CustomSelect value={form.targetType} onChange={(targetType) => setForm((value) => ({ ...value, targetType }))} options={[{value:'account',label:'Suspend akun'},{value:'device',label:'Blokir perangkat terkait'},{value:'ip',label:'Blokir jaringan terkait'}]} /></label><label className="admin-permanent-check"><input type="checkbox" checked={form.permanent} onChange={(event) => setForm((value) => ({ ...value, permanent: event.target.checked }))}/><span>Permanen</span></label>{!form.permanent && <label>Durasi hari<input type="number" min="1" max="3650" value={form.durationDays} onChange={(event) => setForm((value) => ({ ...value, durationDays: event.target.value }))}/></label>}<label className="admin-form-wide">Alasan untuk user<textarea maxLength="280" value={form.reason} onChange={(event) => setForm((value) => ({ ...value, reason: event.target.value }))} placeholder="Jelaskan alasan tanpa istilah teknis."/></label><Button onClick={createRestriction} disabled={busy || form.reason.trim().length < 8}><Shield size={14}/>Terapkan pembatasan</Button></div>}</section>
+      <section className="admin-panel"><div className="admin-panel-head"><div><h2>{selected?.fullName || selected?.email || 'Pilih user'}</h2><small>{selected ? `${selected.messageCount} pesan · ${Number(selected.totalTokens || 0).toLocaleString('id-ID')} token` : ''}</small></div></div>{selected && <><div className="admin-plan-control"><label>Plan akun<CustomSelect value={planForm.planKey} onChange={(planKey) => setPlanForm((value) => ({ ...value, planKey }))} options={[{value:'free',label:'Gratis'},{value:'monthly',label:'Pro'},{value:'pro',label:'Max'}]} /></label>{planForm.planKey !== 'free' && <label>Masa aktif<input type="number" min="1" max="3650" value={planForm.durationDays} onChange={(event) => setPlanForm((value) => ({ ...value, durationDays: event.target.value }))}/><small>hari</small></label>}<Button onClick={changePlan} disabled={busy}><CreditCard size={14}/>Ubah plan</Button><span>Plan saat ini: <b>{selected.plan}</b></span></div><div className="admin-restriction-form"><label>Jenis pembatasan<CustomSelect value={form.targetType} onChange={(targetType) => setForm((value) => ({ ...value, targetType }))} options={[{value:'account',label:'Suspend akun'},{value:'device',label:'Blokir perangkat terkait'},{value:'ip',label:'Blokir jaringan terkait'}]} /></label><label className="admin-permanent-check"><input type="checkbox" checked={form.permanent} onChange={(event) => setForm((value) => ({ ...value, permanent: event.target.checked }))}/><span>Permanen</span></label>{!form.permanent && <label>Durasi hari<input type="number" min="1" max="3650" value={form.durationDays} onChange={(event) => setForm((value) => ({ ...value, durationDays: event.target.value }))}/></label>}<label className="admin-form-wide">Alasan untuk user<textarea maxLength="280" value={form.reason} onChange={(event) => setForm((value) => ({ ...value, reason: event.target.value }))} placeholder="Jelaskan alasan tanpa istilah teknis."/></label><Button onClick={createRestriction} disabled={busy || form.reason.trim().length < 8}><Shield size={14}/>Terapkan pembatasan</Button></div></>}</section>
       <section className="admin-panel"><div className="admin-panel-head"><h2>Pembatasan</h2><small>Target disimpan secara pseudonim</small></div><div className="admin-list">{restrictions.length ? restrictions.map((item) => <article key={item.id}><div><b>{item.targetType === 'account' ? 'Akun' : item.targetType === 'device' ? 'Perangkat' : 'Jaringan'}</b><small>{item.reason} · {item.permanent ? 'Permanen' : `hingga ${formatDate(item.expiresAt)}`}</small></div><div className="admin-actions"><span className={`status-${item.status === 'active' ? 'failed' : 'completed'}`}>{item.status}</span>{item.status === 'active' && <button type="button" onClick={() => revokeRestriction(item.id)}>Cabut</button>}</div></article>) : <p className="empty-admin">Tidak ada pembatasan.</p>}</div></section>
       <section className="admin-panel"><div className="admin-panel-head"><h2>Roomchat</h2><small>Hanya metadata pemakaian</small></div><div className="admin-list">{rooms.length ? rooms.map((room) => <article key={room.id}><div><b>{room.title}</b><small>Diperbarui {formatDate(room.updatedAt)}</small></div><span>{room.messageCount} pesan · {Number(room.totalTokens || 0).toLocaleString('id-ID')} token</span></article>) : <p className="empty-admin">Belum ada roomchat.</p>}</div></section>
     </div>
@@ -3655,21 +3751,71 @@ function AdminBroadcastPanel({ users, setNotice }) {
 function AdminPricingPanel({ setNotice }) {
   const [products, setProducts] = useState([]);
   const [busy, setBusy] = useState(false);
-  const loadPricing = useCallback(() => api('/admin/pricing').then((data) => setProducts([
-    { sku: 'credit', label: 'Satuan', unitPriceIdr: data.single?.originalPrice || data.single?.unitPrice || 3900, discountPercent: data.single?.discountPercent || 0, discountExpiresAt: data.single?.discountExpiresAt || '' },
-    { sku: 'monthly', label: 'Pro', unitPriceIdr: data.monthly?.originalPrice || data.monthly?.price || 29900, discountPercent: data.monthly?.discountPercent || 0, discountExpiresAt: data.monthly?.discountExpiresAt || '' },
-    { sku: 'pro', label: 'Max', unitPriceIdr: data.pro?.originalPrice || data.pro?.price || 45900, discountPercent: data.pro?.discountPercent || 0, discountExpiresAt: data.pro?.discountExpiresAt || '' },
-  ])).catch((error) => setNotice(error.message)), [setNotice]);
+  const loadPricing = useCallback(() => api('/admin/pricing').then((data) => {
+    const createProduct = (sku, label, plan, fallback, price) => ({
+      sku,
+      label,
+      unitPriceIdr: price,
+      discountPercent: plan?.discountPercent || 0,
+      discountExpiresAt: plan?.discountExpiresAt || '',
+      credits: plan?.credits ?? fallback.credits,
+      durationDays: plan?.durationDays ?? fallback.durationDays,
+      revisionsPerReport: plan?.revisionsPerReport ?? fallback.revisionsPerReport,
+      storageMb: plan?.storageMb ?? fallback.storageMb,
+      featuresText: pricingFeatures(plan, fallback.features).join('\n'),
+    });
+    setProducts([
+      createProduct('free', 'Free', data.free, pricingFallback.free, 0),
+      createProduct('credit', 'Satuan', data.single, pricingFallback.single, data.single?.originalPrice || data.single?.unitPrice || 3900),
+      createProduct('monthly', 'Pro', data.monthly, pricingFallback.monthly, data.monthly?.originalPrice || data.monthly?.price || 29900),
+      createProduct('pro', 'Max', data.pro, pricingFallback.pro, data.pro?.originalPrice || data.pro?.price || 45900),
+    ]);
+  }).catch((error) => setNotice(error.message)), [setNotice]);
   useEffect(() => { loadPricing(); }, [loadPricing]);
   const update = (sku, patch) => setProducts((items) => items.map((item) => item.sku === sku ? { ...item, ...patch } : item));
   const save = async () => {
     setBusy(true);
     try {
-      await api('/admin/pricing', { method: 'PUT', body: { products: products.map(({ sku, unitPriceIdr, discountPercent, discountExpiresAt }) => ({ sku, unitPriceIdr: Number(unitPriceIdr), discountPercent: Number(discountPercent), discountExpiresAt })) } });
-      await loadPricing(); setNotice('Harga dan diskon berhasil diperbarui.');
+      await api('/admin/pricing', {
+        method: 'PUT',
+        body: {
+          products: products.map((product) => ({
+            sku: product.sku,
+            unitPriceIdr: Number(product.unitPriceIdr),
+            discountPercent: product.sku === 'free' ? 0 : Number(product.discountPercent),
+            discountExpiresAt: product.sku === 'free' ? '' : product.discountExpiresAt,
+            credits: Number(product.credits),
+            durationDays: Number(product.durationDays),
+            revisionsPerReport: Number(product.revisionsPerReport),
+            storageMb: Number(product.storageMb),
+            features: product.featuresText.split('\n').map((item) => item.trim()).filter(Boolean),
+          })),
+        },
+      });
+      await loadPricing(); setNotice('Benefit, harga, dan diskon berhasil diperbarui.');
     } catch (error) { setNotice(error.message); } finally { setBusy(false); }
   };
-  return <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Harga dan diskon</h2><small>Harga checkout selalu mengikuti pengaturan server</small></div><div className="admin-pricing-grid">{products.map((product) => <article key={product.sku}><h3>{product.label}</h3><label>Harga rupiah<input type="number" min="1000" max="10000000" value={product.unitPriceIdr} onChange={(event) => update(product.sku, { unitPriceIdr: event.target.value })}/></label><label>Diskon persen<input type="number" min="0" max="90" value={product.discountPercent} onChange={(event) => update(product.sku, { discountPercent: event.target.value })}/></label><label>Berakhir<input type="datetime-local" value={product.discountExpiresAt ? product.discountExpiresAt.slice(0,16) : ''} onChange={(event) => update(product.sku, { discountExpiresAt: event.target.value })}/></label></article>)}</div><Button onClick={save} disabled={busy || products.length !== 3}><Save size={14}/>Simpan harga</Button></div></section>;
+  return <section className="admin-content">
+    <div className="admin-panel admin-wide">
+      <div className="admin-panel-head"><h2>Plan dan benefit</h2><small>Nilai ini dipakai langsung oleh pricing, checkout, credit, revisi, dan penyimpanan.</small></div>
+      <div className="admin-pricing-grid">
+        {products.map((product) => <article key={product.sku}>
+          <h3>{product.label}</h3>
+          <div className="admin-pricing-fields">
+            <label>Harga rupiah<input type="number" min={product.sku === 'free' ? 0 : 1000} max="10000000" disabled={product.sku === 'free'} value={product.unitPriceIdr} onChange={(event) => update(product.sku, { unitPriceIdr: event.target.value })}/></label>
+            <label>Jumlah credit<input type="number" min="1" max="1000" value={product.credits} onChange={(event) => update(product.sku, { credits: event.target.value })}/></label>
+            <label>Masa aktif (hari)<input type="number" min="1" max="3650" value={product.durationDays} onChange={(event) => update(product.sku, { durationDays: event.target.value })}/></label>
+            <label>Revisi per laprak<input type="number" min="0" max="100" value={product.revisionsPerReport} onChange={(event) => update(product.sku, { revisionsPerReport: event.target.value })}/></label>
+            <label>Penyimpanan (MB)<input type="number" min="1" max="102400" value={product.storageMb} onChange={(event) => update(product.sku, { storageMb: event.target.value })}/></label>
+            {product.sku !== 'free' && <label>Diskon persen<input type="number" min="0" max="90" value={product.discountPercent} onChange={(event) => update(product.sku, { discountPercent: event.target.value })}/></label>}
+            {product.sku !== 'free' && <label>Diskon berakhir<input type="datetime-local" value={product.discountExpiresAt ? product.discountExpiresAt.slice(0,16) : ''} onChange={(event) => update(product.sku, { discountExpiresAt: event.target.value })}/></label>}
+          </div>
+          <label>Daftar fitur <span>Satu fitur per baris</span><textarea rows="4" maxLength="1200" value={product.featuresText} onChange={(event) => update(product.sku, { featuresText: event.target.value })}/></label>
+        </article>)}
+      </div>
+      <Button onClick={save} disabled={busy || products.length !== 4}><Save size={14}/>Simpan plan</Button>
+    </div>
+  </section>;
 }
 
 function AdminWorkspace() {
