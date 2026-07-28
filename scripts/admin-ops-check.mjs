@@ -288,6 +288,14 @@ try {
   }, 201);
   assert.equal(broadcast.recipientCount, 2);
   assert.equal(broadcast.deliveredCount, 2);
+  const broadcastOutbox = testDb.prepare(`
+    SELECT text_body, html_body FROM email_outbox
+    WHERE kind = 'admin_broadcast' ORDER BY created_at DESC LIMIT 1
+  `).get();
+  assert.match(broadcastOutbox.html_body, /laprakin-email-logo\.png\?v=1/);
+  assert.match(broadcastOutbox.html_body, /Plus Jakarta Sans/);
+  assert.match(broadcastOutbox.html_body, /Pembaruan layanan/);
+  assert.match(broadcastOutbox.text_body, /^Pembaruan layanan/);
 
   await admin.request('/admin/pricing', {
     method: 'PUT',

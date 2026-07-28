@@ -33,6 +33,8 @@ const rendered = await Promise.all([
 for (const html of rendered) {
   assert.match(html, /max-width:\s*600px/i);
   assert.match(html, /@media only screen and \(max-width:\s*620px\)/i);
+  assert.match(html, /https:\/\/laprakin\.app\/brand\/laprakin-email-logo\.png\?v=1/);
+  assert.match(html, /Plus Jakarta Sans/);
   assert.doesNotMatch(html, /\\n/);
   assert.doesNotMatch(html, /href="(?:#|\/|javascript:)/i);
   assert.doesNotMatch(html, /example\.(?:com|test)|dummy/i);
@@ -70,6 +72,7 @@ const opsPayload = await renderOpsEmailPayload({
 assert.equal(opsPayload.subject, 'Deploy berhasil \u00b7 production');
 assert.equal(opsPayload.from, 'Laprakin <noreply@mail.laprakin.app>');
 assert.match(opsPayload.html, /production berhasil diperbarui/i);
+assert.match(opsPayload.html, /Production berhasil diperbarui/);
 assert.doesNotMatch(opsPayload.text, /\\n/);
 
 console.info(`Email render check passed: ${rendered.length + 1} template dirender.`);

@@ -12,6 +12,12 @@ export function normalizePlainText(value) {
     .trim();
 }
 
+/** @param {unknown} value */
+export function capitalizeInitial(value) {
+  const text = normalizePlainText(value);
+  return text ? `${text.charAt(0).toLocaleUpperCase('id-ID')}${text.slice(1)}` : '';
+}
+
 /** @param {unknown} value @param {number} [length] */
 export function shortRevision(value, length = 7) {
   const revision = String(value ?? '').trim();

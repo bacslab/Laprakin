@@ -20,6 +20,7 @@ import {
   verificationText,
 } from '../src/emails/templates.js';
 import {
+  capitalizeInitial,
   normalizePlainText,
   safeAbsoluteUrl,
   sanitizeOperationalSummary,
@@ -38,6 +39,7 @@ const deploySample = {
 
 test('email text utilities normalize newlines and sanitize operational details', () => {
   assert.equal(normalizePlainText('Baris satu\\n\\nBaris dua'), 'Baris satu\n\nBaris dua');
+  assert.equal(capitalizeInitial('production berhasil diperbarui'), 'Production berhasil diperbarui');
   assert.equal(shortRevision('d139d6dabcdef'), 'd139d6d');
   assert.equal(safeAbsoluteUrl('/relative'), '');
   assert.equal(safeAbsoluteUrl('javascript:alert(1)'), '');
@@ -132,6 +134,8 @@ test('all transactional templates render responsive production HTML', async () =
     const html = await render(email.component);
     assert.match(html, /max-width:\s*600px/i);
     assert.match(html, /@media only screen and \(max-width:\s*620px\)/i);
+    assert.match(html, /https:\/\/laprakin\.app\/brand\/laprakin-email-logo\.png\?v=1/);
+    assert.match(html, /Plus Jakarta Sans/);
     assert.match(html, /Email otomatis dari Laprakin/);
     assert.doesNotMatch(html, /\\n|gradient|glassmorphism|javascript:/i);
     assert.doesNotMatch(email.text, /\\n/);
@@ -154,6 +158,7 @@ test('deploy renderer creates Resend payload without dummy links or exposed secr
   assert.equal(success.subject, 'Deploy berhasil \u00b7 production');
   assert.equal(success.from, 'Laprakin <noreply@mail.laprakin.app>');
   assert.match(success.html, /Buka deployment/);
+  assert.match(success.html, /Production berhasil diperbarui/);
   assert.doesNotMatch(success.text, /\\n/);
 
   const failed = await renderOpsEmailPayload({

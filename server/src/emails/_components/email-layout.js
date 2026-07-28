@@ -3,16 +3,18 @@ import {
   Body,
   Button,
   Container,
+  Font,
   Head,
   Heading,
   Hr,
   Html,
+  Img,
   Link,
   Preview,
   Section,
   Text,
 } from 'react-email';
-import { safeAbsoluteUrl } from '../text.js';
+import { capitalizeInitial, safeAbsoluteUrl } from '../text.js';
 
 const h = React.createElement;
 
@@ -31,6 +33,8 @@ export const EMAIL_COLORS = {
 };
 
 const fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif';
+const headingFontFamily = '"Plus Jakarta Sans", Arial, sans-serif';
+export const EMAIL_LOGO_URL = 'https://laprakin.app/brand/laprakin-email-logo.png?v=1';
 
 /** @type {Record<string, React.CSSProperties>} */
 const styles = {
@@ -53,10 +57,11 @@ const styles = {
   },
   wordmark: {
     color: EMAIL_COLORS.text,
+    fontFamily: headingFontFamily,
     fontSize: '18px',
     fontWeight: 700,
     lineHeight: '24px',
-    margin: '0 0 28px',
+    margin: 0,
   },
   status: {
     color: EMAIL_COLORS.muted,
@@ -68,6 +73,7 @@ const styles = {
   },
   heading: {
     color: EMAIL_COLORS.text,
+    fontFamily: headingFontFamily,
     fontSize: '23px',
     fontWeight: 700,
     lineHeight: '30px',
@@ -131,6 +137,16 @@ export function EmailLayout({
       Head,
       null,
       h('meta', { name: 'viewport', content: 'width=device-width, initial-scale=1.0' }),
+      h(Font, {
+        fontFamily: 'Plus Jakarta Sans',
+        fallbackFontFamily: 'Arial',
+        fontStyle: 'normal',
+        fontWeight: 700,
+        webFont: {
+          format: 'woff2',
+          url: 'https://fonts.gstatic.com/s/plusjakartasans/v12/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yw.woff2',
+        },
+      }),
       h(
         'style',
         null,
@@ -147,7 +163,39 @@ export function EmailLayout({
         h(
           'div',
           { className: 'laprakin-email-content', style: { padding: '32px' } },
-          h(Text, { style: styles.wordmark }, 'Laprakin'),
+          h(
+            'table',
+            {
+              cellPadding: '0',
+              cellSpacing: '0',
+              role: 'presentation',
+              style: { margin: '0 0 28px', width: 'auto' },
+            },
+            h(
+              'tbody',
+              null,
+              h(
+                'tr',
+                null,
+                h(
+                  'td',
+                  { style: { padding: '0 10px 0 0', verticalAlign: 'middle' } },
+                  h(Img, {
+                    alt: 'Logo Laprakin',
+                    height: '36',
+                    src: EMAIL_LOGO_URL,
+                    style: { display: 'block', height: '36px', width: '36px' },
+                    width: '36',
+                  }),
+                ),
+                h(
+                  'td',
+                  { style: { verticalAlign: 'middle' } },
+                  h(Text, { style: styles.wordmark }, 'Laprakin'),
+                ),
+              ),
+            ),
+          ),
           h(
             Text,
             { style: styles.status },
@@ -165,7 +213,7 @@ export function EmailLayout({
             }),
             statusLabel,
           ),
-          h(Heading, { as: 'h1', style: styles.heading }, heading),
+          h(Heading, { as: 'h1', style: styles.heading }, capitalizeInitial(heading)),
           supportingText ? h(Text, { style: styles.supporting }, supportingText) : null,
           h(Section, { style: styles.content }, children),
           ctaUrl && cta?.label

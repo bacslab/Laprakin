@@ -19,6 +19,8 @@ import {
   adminSecurityAlertText,
   appealResultText,
 } from './emails/templates.js';
+import { EMAIL_LOGO_URL } from './emails/_components/email-layout.js';
+import { capitalizeInitial } from './emails/text.js';
 import { verifyProductionIntegrations } from './integrations.js';
 import {
   analyzeChatRequest,
@@ -4363,6 +4365,7 @@ function escapeEmailHtml(value = '') {
 }
 
 function renderBroadcastEmail(input) {
+  const heading = capitalizeInitial(input.heading);
   const paragraphs = String(input.body || '')
     .split(/\n{2,}/)
     .map((paragraph) => `<p style="margin:0 0 16px;line-height:1.65">${escapeEmailHtml(paragraph).replace(/\n/g, '<br>')}</p>`)
@@ -4376,7 +4379,8 @@ function renderBroadcastEmail(input) {
   const cta = input.ctaLabel && input.ctaUrl
     ? `<p style="margin:24px 0 0"><a href="${escapeEmailHtml(input.ctaUrl)}" style="display:inline-block;padding:12px 18px;border-radius:6px;background:${input.accentColor};color:${input.textColor};font-weight:700;text-decoration:none">${escapeEmailHtml(input.ctaLabel)}</a></p>`
     : '';
-  return `<!doctype html><html><body style="margin:0;background:${input.backgroundColor};color:${input.textColor};font-family:Arial,sans-serif"><div style="max-width:640px;margin:0 auto;padding:32px 20px">${image}<h1 style="margin:0 0 18px;font-size:28px;line-height:1.2">${escapeEmailHtml(input.heading)}</h1>${paragraphs}${cta}<p style="margin:32px 0 0;padding-top:16px;border-top:1px solid rgba(127,127,127,.35);font-size:12px;opacity:.72">Laprakin</p></div></body></html>`;
+  const brand = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 28px"><tr><td style="padding-right:10px;vertical-align:middle"><img src="${EMAIL_LOGO_URL}" width="36" height="36" alt="Logo Laprakin" style="display:block;width:36px;height:36px"></td><td style="vertical-align:middle;color:${input.textColor};font-family:'Plus Jakarta Sans',Arial,sans-serif;font-size:18px;font-weight:700">Laprakin</td></tr></table>`;
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>@font-face{font-family:'Plus Jakarta Sans';font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/plusjakartasans/v12/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yw.woff2) format('woff2')}</style></head><body style="margin:0;background:${input.backgroundColor};color:${input.textColor};font-family:Arial,sans-serif"><div style="max-width:640px;margin:0 auto;padding:32px 20px">${brand}${image}<h1 style="margin:0 0 18px;font-family:'Plus Jakarta Sans',Arial,sans-serif;font-size:28px;line-height:1.2">${escapeEmailHtml(heading)}</h1>${paragraphs}${cta}<p style="margin:32px 0 0;padding-top:16px;border-top:1px solid rgba(127,127,127,.35);font-size:12px;opacity:.72">Laprakin</p></div></body></html>`;
 }
 
 function broadcastRecipients(input) {
@@ -4734,7 +4738,7 @@ app.post('/api/admin/broadcasts', requireAuth, requireCsrf, requireAdmin, adminM
   const recipients = broadcastRecipients(input);
   if (!recipients.length) throw new HttpError(404, 'Tidak ada user yang cocok dengan target email.', 'BROADCAST_TARGET_EMPTY');
   const html = renderBroadcastEmail(input);
-  const text = `${input.heading}\n\n${input.body}${input.ctaLabel && input.ctaUrl ? `\n\n${input.ctaLabel}: ${input.ctaUrl}` : ''}`;
+  const text = `${capitalizeInitial(input.heading)}\n\n${input.body}${input.ctaLabel && input.ctaUrl ? `\n\n${input.ctaLabel}: ${input.ctaUrl}` : ''}`;
   const id = nanoid();
   db.prepare(`
     INSERT INTO admin_broadcasts (
