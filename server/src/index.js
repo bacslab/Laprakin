@@ -1631,8 +1631,7 @@ const institutionLogoUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, callback) => {
-    const allowed = new Set(['image/png', 'image/jpeg']);
-    if (!allowed.has(file.mimetype)) return callback(new HttpError(400, 'Logo institusi hanya mendukung PNG atau JPG.', 'INSTITUTION_LOGO_TYPE'));
+    if (file.mimetype !== 'image/png') return callback(new HttpError(400, 'Logo institusi wajib berformat PNG.', 'INSTITUTION_LOGO_TYPE'));
     return callback(null, true);
   },
 });
@@ -2068,8 +2067,8 @@ app.post('/api/profile/institution-logo', requireAuth, requireCsrf, uploadLimite
   if (detectedMime !== req.file.mimetype) {
     throw new HttpError(400, 'Isi berkas tidak cocok dengan format yang dipilih.', 'INSTITUTION_LOGO_SIGNATURE');
   }
-  const extension = { 'image/png': '.png', 'image/jpeg': '.jpg' }[detectedMime];
-  if (!extension) throw new HttpError(400, 'Logo institusi hanya mendukung PNG atau JPG.', 'INSTITUTION_LOGO_TYPE');
+  const extension = detectedMime === 'image/png' ? '.png' : '';
+  if (!extension) throw new HttpError(400, 'Logo institusi wajib berformat PNG.', 'INSTITUTION_LOGO_TYPE');
 
   const logoDir = path.join(config.uploadDir, 'institution-logos');
   fs.mkdirSync(logoDir, { recursive: true });
@@ -2506,7 +2505,14 @@ const chatUpload = multer({
 app.get('/api/chat/sessions', requireAuth, (req, res) => {
   const sessions = db.prepare(`
     SELECT id, title, department_key, study_program_key, structure_mode, course_group, sort_position, is_pinned, configuration_json, document_id, created_at, updated_at
-    FROM chat_sessions WHERE owner_user_id = ? AND archived_at IS NULL ORDER BY is_pinned DESC, course_group COLLATE NOCASE ASC, sort_position ASC, updated_at DESC LIMIT 60
+    FROM chat_sessions session
+    WHERE owner_user_id = ? AND archived_at IS NULL
+      AND (
+        document_id IS NOT NULL
+        OR EXISTS (SELECT 1 FROM chat_messages message WHERE message.session_id = session.id AND message.owner_user_id = session.owner_user_id)
+        OR EXISTS (SELECT 1 FROM chat_attachments attachment WHERE attachment.session_id = session.id AND attachment.owner_user_id = session.owner_user_id AND attachment.deleted_at IS NULL)
+      )
+    ORDER BY is_pinned DESC, course_group COLLATE NOCASE ASC, sort_position ASC, updated_at DESC LIMIT 60
   `).all(req.user.id).map(exposeChatSession);
   res.json({ sessions });
 });
@@ -2923,6 +2929,9 @@ app.post('/api/chat/sessions/:id/actions', requireAuth, requireCsrf, asyncHandle
       if (missing === 'practice_topic' && !practiceTopic && input.payload.answer) practiceTopic = String(input.payload.answer).trim();
       if (!courseName) courseName = session.course_name || configuration.courseName || '';
       if (!practiceTopic) practiceTopic = session.practice_topic || configuration.moduleTitle || '';
+      if (!courseName || !practiceTopic) {
+        throw new HttpError(422, 'Mata kuliah dan materi praktikum wajib diisi sebelum melanjutkan.', 'CHAT_CONTEXT_INCOMPLETE');
+      }
       const documentType = input.payload.documentType || session.document_type || 'lab_report';
       db.prepare(`
         UPDATE chat_sessions SET configuration_json = ?, document_type = ?, course_name = ?,
@@ -3361,6 +3370,25 @@ app.get('/api/documents/:id/preview.docx', requireAuth, requireDocumentOwner, as
   res.type('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   res.setHeader('Content-Disposition', `inline; filename="${sanitizeFilename(req.document.title || 'laprak')}.docx"`);
   res.setHeader('Cache-Control', 'private, no-store');
+  res.send(buffer);
+}));
+
+app.get('/api/documents/:id/download.docx', requireAuth, requireDocumentOwner, asyncHandler(async (req, res) => {
+  if (!req.document.generated_at) {
+    throw new HttpError(409, 'Dokumen belum selesai dibuat.', 'DOCUMENT_NOT_READY');
+  }
+  const quizAccess = quizAccessForDocument(req.document.id, req.user.id);
+  if (!quizAccess.canDownload) {
+    throw new HttpError(403, `Nilai quiz minimal ${quizAccess.passScore}% diperlukan sebelum mengunduh dokumen.`, 'QUIZ_PASS_REQUIRED');
+  }
+  const { buffer } = await buildDocumentDocxBuffer(req.document.id, req.user.id, { enforceExportQuality: false });
+  const fileName = `${sanitizeFilename(req.document.title || 'laprak')}.docx`;
+  res.type('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  audit(req.user.id, 'document.downloaded', 'document', req.document.id, {
+    contentSignature: quizAccess.contentSignature,
+  });
   res.send(buffer);
 }));
 

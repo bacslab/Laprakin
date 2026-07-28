@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
   AI_SLOP_PATTERNS,
+  analyzeChatRequest,
   generateChatTitle,
   inferDocumentType,
   isPlausibleAcademicContext,
@@ -14,7 +15,7 @@ import {
   reportSectionIssues,
 } from '../src/report-quality.js';
 
-const paragraph = (seed) => `${seed} `.repeat(12).trim();
+const paragraph = (seed) => `${seed} `.repeat(24).trim();
 
 function validSections() {
   return [
@@ -49,6 +50,14 @@ test('generateChatTitle hanya memakai konteks akademik yang spesifik', () => {
   assert.equal(generateChatTitle({}), '');
 });
 
+test('analyzeChatRequest meminta hanya konteks laprak yang belum disebutkan', () => {
+  const base = { configuration_json: '{}' };
+  assert.equal(analyzeChatRequest({ session: base, messages: [{ role: 'user', content: 'Tolong buatkan laprak.' }] }).missingCriticalContext, 'course_and_topic');
+  assert.equal(analyzeChatRequest({ session: base, messages: [{ role: 'user', content: 'Buat laprak mata kuliah Jaringan Komputer.' }] }).missingCriticalContext, 'practice_topic');
+  assert.equal(analyzeChatRequest({ session: { configuration_json: '{"moduleTitle":"Routing Statis"}' }, messages: [{ role: 'user', content: 'Tolong susunkan laprak.' }] }).missingCriticalContext, 'course_name');
+  assert.equal(analyzeChatRequest({ session: { configuration_json: '{"courseName":"Jaringan Komputer","moduleTitle":"Routing Statis"}' }, messages: [] }).missingCriticalContext, '');
+});
+
 test('isPlausibleAcademicContext menolak sapaan dan pertanyaan sebagai konteks', () => {
   assert.equal(isPlausibleAcademicContext('Jaringan Komputer'), true);
   assert.equal(isPlausibleAcademicContext('Pemrograman Mobile Lanjut'), true);
@@ -67,6 +76,11 @@ test('reportSectionIssues menuntut struktur minimum', () => {
   assert.ok(issues.some((issue) => issue.includes('tiga bagian substantif')));
   assert.ok(issues.some((issue) => issue.includes('bagian implementasi')));
   assert.ok(issues.some((issue) => issue.includes('analisis output')));
+});
+
+test('reportSectionIssues menolak draft lengkap secara struktur tetapi terlalu singkat', () => {
+  const sections = validSections().map((section) => ({ ...section, content: section.content.slice(0, 500) }));
+  assert.ok(reportSectionIssues(sections).some((issue) => issue.includes('terlalu singkat')));
 });
 
 test('reportSectionIssues menangkap marker data yang belum diisi', () => {

@@ -23,12 +23,16 @@ server/public-media/feature-updates/*
 
 # Generated test and build artifacts
 output/
+bench-results/
 .tmp/
 .playwright-cli/
 .vercel/
 .wrangler/
 *.log
 *.tgz
+
+# Local operator notes
+docs/PUSH_DEPLOY_LOCAL.md
 
 .DS_Store
 Thumbs.db

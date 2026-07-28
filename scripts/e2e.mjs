@@ -63,8 +63,23 @@ await request('/wallet/claim-welcome', { method: 'POST' });
 await request('/profile', {
   method: 'PUT',
   headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ fullName: 'User E2E', nim: '2400000000', className: 'TI-2A', departmentKey: 'jkb', studyProgramKey: 'ti' }),
+  body: JSON.stringify({
+    fullName: 'User E2E',
+    nim: '2400000000',
+    className: 'TI-2A',
+    institutionName: 'Politeknik E2E',
+    facultyName: 'Jurusan Komputer',
+    studyProgramName: 'Teknik Informatika',
+    departmentKey: 'jkb',
+    studyProgramKey: 'ti',
+  }),
 });
+const logoForm = new FormData();
+logoForm.append('file', new Blob([
+  await readFile(new URL('./fixtures/routing-evidence.png', import.meta.url)),
+], { type: 'image/png' }), 'logo-institusi.png');
+const logoProfile = await request('/profile/institution-logo', { method: 'POST', body: logoForm });
+assert.match(logoProfile.user.institutionLogoUrl, /\.png$/, 'Logo institusi PNG harus tersimpan.');
 
 const document = await request('/documents', {
   method: 'POST',
@@ -179,8 +194,9 @@ assert.equal(exportDone.status, 'completed', exportDone.error_message || exportD
 const exportId = exportDone.result?.exportId || exportDone.result?.id;
 assert.ok(exportId, 'Export harus menghasilkan ID export.');
 
-const download = await fetch(`${base}/api/exports/${exportId}/download`, { headers: headers() });
-assert.equal(download.ok, true, 'DOCX hasil export harus dapat diunduh.');
+const download = await fetch(`${base}/api/documents/${document.id}/download.docx`, { headers: headers() });
+assert.equal(download.ok, true, 'DOCX harus dapat diunduh langsung dari preview.');
+assert.match(download.headers.get('content-disposition') || '', /^attachment;/, 'Download harus dikirim sebagai attachment.');
 const docx = new Uint8Array(await download.arrayBuffer());
 assert.ok(docx.length > 1000, 'DOCX hasil export terlalu kecil.');
 assert.equal(String.fromCharCode(...docx.slice(0, 2)), 'PK', 'DOCX harus berformat ZIP/Office Open XML.');

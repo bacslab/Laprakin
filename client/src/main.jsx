@@ -1346,13 +1346,13 @@ function Workspace() {
   }, [prefs.productUpdates, productUpdate]);
   const projectParam = new URLSearchParams(location.search).get('project') || '';
   useEffect(() => { if (location.pathname === '/app/billing') navigate('/pricing', { replace: true }); }, [location.pathname, navigate]);
-  const identityComplete = Boolean(user.fullName && user.nim && user.className && user.institutionName && (user.facultyName || user.departmentKey) && (user.studyProgramName || user.studyProgramKey));
+  const identityComplete = Boolean(user.fullName && user.nim && user.className && user.institutionName && user.institutionLogoUrl && (user.facultyName || user.departmentKey) && (user.studyProgramName || user.studyProgramKey));
   useEffect(() => {
-    if (!identityComplete || user.onboardingDismissed || tutorialAutoOpenedRef.current) return;
+    if (user.onboardingDismissed || tutorialAutoOpenedRef.current) return;
     tutorialAutoOpenedRef.current = true;
     setTutorialFirstUse(true);
     setTutorialOpen(true);
-  }, [identityComplete, user.onboardingDismissed]);
+  }, [user.onboardingDismissed]);
   const updateConfig = (patch) => setConfig((value) => ({ ...value, ...patch, configuration: { ...value.configuration, ...(patch.configuration || {}) } }));
   const setRoute = (next) => navigate(next === 'chat' ? '/app' : `/app/${next}`);
   const writingPrefsConfig = (base = {}) => {
@@ -1581,8 +1581,6 @@ function Workspace() {
           institutionLogoUrl: identity.institutionLogoUrl.trim(),
           facultyName: identity.facultyName.trim(),
           studyProgramName: identity.studyProgramName.trim(),
-          lecturerName: identity.lecturerName.trim(),
-          lecturerNip: identity.lecturerNip.trim(),
           departmentKey: identity.departmentKey,
           studyProgramKey: identity.studyProgramKey,
         },
@@ -1888,26 +1886,13 @@ function Workspace() {
   // sekarang, sedangkan fungsi ini mengambil export ready mana saja, sehingga
   // saat keduanya tidak cocok fungsi berhenti diam-diam tanpa efek apa pun.
   const downloadBusyRef = useRef(false);
-  const readyExportFor = (doc) => {
-    const signature = doc?.quizAccess?.contentSignature;
-    return doc?.exports?.find((item) => item.status === 'ready'
-      && (!signature || item.content_signature === signature));
-  };
   const downloadExport = async () => {
-    // Klik berulang selama proses berjalan dihitung sebagai satu unduhan.
     if (downloadBusyRef.current) return;
     downloadBusyRef.current = true;
     try {
-      let current = documentState;
-      let ready = readyExportFor(current);
-      if (!ready && active?.document_id) {
-        await documentAction('export');
-        current = await api(`/documents/${active.document_id}`);
-        setDocumentState(current);
-        ready = readyExportFor(current);
-      }
-      if (!ready) throw new Error('File Word belum siap. Coba lagi sebentar.');
-      await download(`/exports/${ready.id}/download`, ready.file_name);
+      if (!active?.document_id) throw new Error('Dokumen belum tersedia.');
+      const fileName = `${String(documentState?.title || 'laprak').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'laprak'}.docx`;
+      await download(`/documents/${active.document_id}/download.docx`, fileName);
     } catch (err) {
       setNotice(err.message);
     } finally {
@@ -2194,6 +2179,9 @@ function PendingAttachmentChip({ file, index, onRemove }) {
   return <span className="pending-file-chip">{pdf ? <PdfThumbnail file={file} size={34} /> : preview ? <img src={preview} alt="" /> : excerpt ? <i>{excerpt}</i> : <FileText size={12} />}<b>{file.name}</b><button type="button" onClick={() => onRemove(index)} aria-label={`Hapus ${file.name}`}><X size={11} /></button></span>;
 }
 function IdentityIntakeModal({ user, onSave, onBack, busy }) {
+  const { setNotice } = useApp();
+  const logoInputRef = useRef(null);
+  const [logoBusy, setLogoBusy] = useState(false);
   const [form, setForm] = useState({
     fullName: user.fullName || '',
     nim: user.nim || '',
@@ -2202,8 +2190,6 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
     institutionLogoUrl: user.institutionLogoUrl || '',
     facultyName: user.facultyName || '',
     studyProgramName: user.studyProgramName || '',
-    lecturerName: user.lecturerName || '',
-    lecturerNip: user.lecturerNip || '',
     departmentKey: user.departmentKey || '',
     studyProgramKey: user.studyProgramKey || '',
   });
@@ -2212,7 +2198,33 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
     && form.className.trim().length >= 1
     && form.institutionName.trim().length >= 2
     && form.facultyName.trim().length >= 2
-    && form.studyProgramName.trim().length >= 2;
+    && form.studyProgramName.trim().length >= 2
+    && Boolean(form.institutionLogoUrl);
+  const uploadLogo = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.type !== 'image/png' || !/\.png$/i.test(file.name)) {
+      setNotice('Logo institusi wajib berformat PNG.');
+      return;
+    }
+    if (file.size > INSTITUTION_LOGO_MAX_BYTES) {
+      setNotice('Ukuran logo maksimal 5 MB.');
+      return;
+    }
+    const body = new FormData();
+    body.append('file', file);
+    setLogoBusy(true);
+    try {
+      const result = await api('/profile/institution-logo', { method: 'POST', body, form: true });
+      setForm((value) => ({ ...value, institutionLogoUrl: result.user?.institutionLogoUrl || '' }));
+      setNotice('Logo institusi siap dipakai.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setLogoBusy(false);
+    }
+  };
   const submit = async (event) => { event.preventDefault(); if (valid) await onSave(form); };
   return <div className="identity-intake-overlay" role="dialog" aria-modal="true" aria-labelledby="identity-intake-title">
     <form className="identity-intake-modal" onSubmit={submit}>
@@ -2222,13 +2234,19 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
         <label>NPM / NIM<input inputMode="numeric" autoComplete="off" value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder="Nomor mahasiswa" /></label>
         <label>Kelas<input autoComplete="off" value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Kelas anda" /></label>
         <label>Univ / institusi<input value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder="Contoh: Universitas Republik Indonesia" /></label>
-        <label>Logo institusi <small>opsional</small><input value={form.institutionLogoUrl} onChange={(event) => setForm({ ...form, institutionLogoUrl: event.target.value })} placeholder="URL logo kampus" /></label>
         <label>Fakultas / Jurusan<input value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder="Contoh: Fakultas Hukum" /></label>
         <label>Program studi<input value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder="Contoh: S1 Rekayasa Hukum" /></label>
-        <label>Dosen pengampu <small>opsional</small><input value={form.lecturerName} onChange={(event) => setForm({ ...form, lecturerName: event.target.value })} placeholder="Nama dosen (Jika ada)" /></label>
-        <label>NIP dosen <small>opsional</small><input value={form.lecturerNip} onChange={(event) => setForm({ ...form, lecturerNip: event.target.value })} placeholder="NIP (jika ada)" /></label>
+        <div className="identity-logo-field">
+          <span>Logo institusi</span>
+          <div className="identity-logo-control">
+            <span className="identity-logo-preview">{form.institutionLogoUrl ? <img src={form.institutionLogoUrl} alt="Logo institusi" /> : <ImageIcon size={20} />}</span>
+            <div><b>{form.institutionLogoUrl ? 'Logo PNG terunggah' : 'Unggah logo PNG'}</b><small>Wajib untuk cover, maksimal 5 MB.</small></div>
+            <input ref={logoInputRef} hidden type="file" accept=".png,image/png" onChange={uploadLogo} />
+            <Button type="button" variant="secondary" disabled={busy || logoBusy} onClick={() => logoInputRef.current?.click()}>{logoBusy ? <LoaderCircle className="spin" size={14} /> : <Upload size={14} />}{form.institutionLogoUrl ? 'Ganti' : 'Unggah'}</Button>
+          </div>
+        </div>
       </div>
-      <footer><button type="button" onClick={onBack} disabled={busy}>Kembali edit pesan</button><Button type="submit" disabled={busy || !valid}>{busy ? <LoaderCircle className="spin" size={14} /> : <ArrowRight size={14} />}Simpan & lanjutkan</Button></footer>
+      <footer><button type="button" onClick={onBack} disabled={busy || logoBusy}>Kembali edit pesan</button><Button type="submit" disabled={busy || logoBusy || !valid}>{busy ? <LoaderCircle className="spin" size={14} /> : <ArrowRight size={14} />}Simpan & lanjutkan</Button></footer>
     </form>
   </div>;
 }
@@ -2284,7 +2302,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
   >
     {dragActive && <div className="workspace-drop-hint" aria-hidden="true"><UploadCloud size={22} /><b>Lepas file untuk melampirkan</b><small>File tetap menunggu sampai kamu menekan Enter.</small></div>}
     <div className="chat-thread">
-      {quizMode && documentState ? <div className="quiz-workspace-panel"><header><div><small>Cek pemahaman</small><h2>Jawab quiz singkat sebelum download</h2><p>Soal diambil dari laprak yang sedang kamu preview. Minimal benar 70%.</p></div><button type="button" onClick={onCloseQuiz}>Kembali ke chat</button></header><DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} /></div> : blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}>mau <em>laprakin</em> apa hari ini, {greetingName}?</h1></div> : <div className="thread-content">
+      {quizMode && documentState ? <div className="quiz-workspace-panel"><header><div><small>Quiz laprak</small><h2>Cek pemahaman</h2><p>5 soal dari draft · lulus 70%</p></div><button type="button" onClick={onCloseQuiz}>Kembali ke chat</button></header><DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} /></div> : blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}>mau <em>laprakin</em> apa hari ini, {greetingName}?</h1></div> : <div className="thread-content">
       {visibleMessages.map((message) => <Fragment key={message.id}>
         {message.role === 'user' && attachmentBuckets.get(message.id)?.length ? <SourceBar compact attachments={attachmentBuckets.get(message.id)} onOpen={setPreviewFile} /> : null}
         {message.role === 'assistant' && !message.meta?.isClarification && message.meta?.workPlan?.steps?.length ? <WorkPlanRail
@@ -2297,7 +2315,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
         <article className={`message ${message.role}`}><div><p>{message.content}</p>{message.meta?.links?.length ? <div className="link-row">{message.meta.links.map((link) => <a key={link} href={link} target="_blank" rel="noreferrer"><Globe2 size={12} />{new URL(link).hostname}</a>)}</div> : null}</div></article>
         {message.meta?.kind === 'document_ready' ? <DocumentCard documentState={documentState} activeJob={jobForMessage(message)} version={message.meta.documentVersion} onOpen={onOpenDocument} /> : null}
       </Fragment>)}
-      {active && visibleMessages.length > 0 && !active.document_id && <ChatBriefPanel config={config} updateConfig={updateConfig} />}
+      {active && workflow?.state === 'CLARIFICATION_REQUIRED' && !active.document_id && <ChatBriefPanel config={config} updateConfig={updateConfig} workflow={workflow} busy={busy} onSubmit={(payload) => onWorkflowAction('SUBMIT_CLARIFICATION', payload)} />}
       {contextOpen && <InlineContext config={config} updateConfig={updateConfig} onClose={() => setContextOpen(false)} />}
       {orphanAttachments.length > 0 && <SourceBar compact attachments={orphanAttachments} onOpen={setPreviewFile} />}
       {active?.document_id
@@ -2625,13 +2643,23 @@ function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, up
   </div>;
 }
 
-function ChatBriefPanel({ config, updateConfig }) {
-  return <form className="chat-brief-panel" onSubmit={(event) => event.preventDefault()}>
-    <div><small>Brief laprak</small><b>Lengkapi jika ada yang belum ketangkap</b></div>
-    <label>Mata kuliah<input value={config.configuration.courseName || ''} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Contoh: Administrasi Jaringan Komputer" /></label>
-    <label>Judul modul<input value={config.configuration.moduleTitle || ''} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Contoh: Dynamic Host Configuration Protocol" /></label>
-    <label>Dosen (opsional)<input value={config.configuration.lecturerName || ''} onChange={(event) => updateConfig({ configuration: { lecturerName: event.target.value } })} placeholder="Nama dosen" /></label>
-    <label>NIP (opsional)<input value={config.configuration.lecturerNip || ''} onChange={(event) => updateConfig({ configuration: { lecturerNip: event.target.value } })} placeholder="NIP dosen" /></label>
+function ChatBriefPanel({ config, updateConfig, workflow, busy, onSubmit }) {
+  const missing = workflow?.missingCriticalContext || '';
+  const needsCourse = ['course_name', 'course_and_topic'].includes(missing) || !config.configuration.courseName;
+  const needsModule = ['practice_topic', 'course_and_topic', 'document_type_and_topic'].includes(missing) || !config.configuration.moduleTitle;
+  const ready = (!needsCourse || config.configuration.courseName.trim()) && (!needsModule || config.configuration.moduleTitle.trim());
+  return <form className="chat-brief-panel" onSubmit={(event) => {
+    event.preventDefault();
+    if (!ready) return;
+    onSubmit?.({
+      courseName: config.configuration.courseName.trim(),
+      practiceTopic: config.configuration.moduleTitle.trim(),
+    });
+  }}>
+    <div><small>Lengkapi konteks</small><b>{needsCourse && needsModule ? 'Mata kuliah dan materi' : needsCourse ? 'Mata kuliah' : 'Materi praktikum'}</b></div>
+    {needsCourse && <label>Mata kuliah<input autoFocus value={config.configuration.courseName || ''} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Contoh: Administrasi Jaringan Komputer" /></label>}
+    {needsModule && <label>Materi / modul<input autoFocus={!needsCourse} value={config.configuration.moduleTitle || ''} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Contoh: Dynamic Host Configuration Protocol" /></label>}
+    <Button type="submit" disabled={busy || !ready}>{busy ? <LoaderCircle className="spin" size={14} /> : <ArrowRight size={14} />}Lanjutkan</Button>
   </form>;
 }
 
@@ -2656,7 +2684,7 @@ function ReportPreview({ documentState, user, embedded = false }) {
         <p className="report-cover-kicker">LAPORAN PRAKTIKUM</p>
         <h2>{documentState.course_name || 'MATA KULIAH'}</h2>
         <h3>{documentState.module_title || documentState.title}</h3>
-        <img className="report-cover-logo" src="/pnc-logo.png" alt="Politeknik Negeri Cilacap" />
+        <img className="report-cover-logo" src={user.institutionLogoUrl || '/pnc-logo.png'} alt={`Logo ${user.institutionName || 'institusi'}`} />
         <div className="report-cover-lecturer"><small>Dosen Pengampu:</small><b>{documentState.lecturer_name || '-'}</b><span>NIP : -</span></div>
         <div className="report-cover-identity"><small>Disusun Oleh:</small><b>{user.fullName || 'Nama mahasiswa'} ({user.nim || 'NPM / NIM'})</b><span>{user.className || 'Kelas'}</span></div>
         <div className="report-cover-institution"><b>PROGRAM STUDI {studyProgram.toUpperCase()}</b><span>{department.toUpperCase()}</span><span>POLITEKNIK NEGERI CILACAP</span><span>TAHUN AKADEMIK {documentState.academic_year || '2025/2026'}</span></div>
@@ -2699,7 +2727,7 @@ function DocumentQuiz({ access, busy, onStart, onSubmit }) {
   }
   if (!attempt) {
     return <section className="quiz-gate">
-      <div><small>{access?.subscriptionBypass ? 'Opsional untuk paket berlangganan' : 'Sebelum download'}</small><h3>Quiz singkat dari laprakmu</h3><p>{access?.attemptCount ? `Nilai terakhir ${access.latestScore ?? 0}%. Soal berikutnya akan diacak ulang.` : 'Pertanyaan mudah dengan jawaban singkat dari isi laporan.'}</p></div>
+      <div><small>{access?.subscriptionBypass ? 'Opsional' : 'Sebelum unduh'}</small><h3>{access?.attemptCount ? `Nilai terakhir ${access.latestScore ?? 0}%` : 'Siap mulai?'}</h3><p>{access?.attemptCount ? 'Coba lagi dengan soal yang diacak.' : 'Jawab 5 soal dari draft ini.'}</p></div>
       <Button onClick={begin} disabled={busy}><Sparkles size={14} />{access?.attemptCount ? 'Coba lagi' : 'Mulai quiz'}</Button>
     </section>;
   }
@@ -2887,7 +2915,7 @@ function InstitutionLogoField({ logoUrl = '', onChanged, setNotice }) {
     // Diperiksa juga di server; cek di sini hanya agar user tidak menunggu
     // unggahan yang pasti ditolak.
     if (file.size > INSTITUTION_LOGO_MAX_BYTES) return setNotice('Ukuran logo maksimal 5 MB.');
-    if (!['image/png', 'image/jpeg'].includes(file.type)) return setNotice('Logo harus berformat PNG atau JPG.');
+    if (file.type !== 'image/png' || !/\.png$/i.test(file.name)) return setNotice('Logo harus berformat PNG.');
     const body = new FormData();
     body.append('file', file);
     setBusy(true);
@@ -2916,13 +2944,13 @@ function InstitutionLogoField({ logoUrl = '', onChanged, setNotice }) {
   };
 
   return <section className="settings-group institution-logo-field">
-    <div className="settings-group-heading"><b>Logo institusi</b><small>Dipakai pada cover dokumen. PNG atau JPG, maksimal 5 MB.</small></div>
+    <div className="settings-group-heading"><b>Logo institusi</b><small>Dipakai pada cover dokumen. PNG, maksimal 5 MB.</small></div>
     <div className="institution-logo-row">
       <div className="institution-logo-preview">
         {hasLogo ? <img src={logoUrl} alt="Logo institusi" /> : <ImageIcon size={20} aria-hidden="true" />}
       </div>
       <div className="institution-logo-actions">
-        <input ref={inputRef} type="file" accept="image/png,image/jpeg" onChange={pick} hidden />
+        <input ref={inputRef} type="file" accept=".png,image/png" onChange={pick} hidden />
         <Button variant="secondary" onClick={() => inputRef.current?.click()} disabled={busy}>
           <Upload size={14} />{hasLogo ? 'Ganti logo' : 'Unggah logo'}
         </Button>

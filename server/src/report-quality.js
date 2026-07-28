@@ -112,9 +112,13 @@ export function analyzeChatRequest({ session = {}, messages = [], attachments = 
   }
 
   const lastUserMessage = userMessages.at(-1) || '';
-  // Mata kuliah adalah konteks minimum. Judul materi membantu personalisasi,
-  // tetapi tidak boleh menghambat pembacaan bahan atau penyusunan laprak.
-  const missingCriticalContext = courseName ? '' : 'course_name';
+  const missingCriticalContext = !courseName && !practiceTopic
+    ? 'course_and_topic'
+    : !courseName
+      ? 'course_name'
+      : !practiceTopic
+        ? 'practice_topic'
+        : '';
 
   const knownParts = [
     courseName ? `mata kuliah ${courseName}` : '',
@@ -378,7 +382,7 @@ export function reportSectionIssues(sections = []) {
     issues.push('Draft belum memiliki bagian analisis output.');
   }
   const totalCharacters = normalizedSections.reduce((sum, section) => sum + section.content.length, 0);
-  if (totalCharacters < 900) issues.push('Pembahasan keseluruhan masih terlalu singkat untuk laporan praktikum utuh.');
+  if (totalCharacters < 5000) issues.push('Pembahasan keseluruhan masih terlalu singkat untuk laporan praktikum utuh.');
   for (const [index, section] of normalizedSections.entries()) {
     const { content } = section;
     if (section.title.length < 5) issues.push(`Judul bagian ${index + 1} belum spesifik.`);
@@ -386,7 +390,7 @@ export function reportSectionIssues(sections = []) {
       || /\b(?:nama|npm|nim|kelas|program studi|jurusan\/fakultas)\s*:/i.test(content)) {
       issues.push(`Bagian ${index + 1} mengulang identitas yang seharusnya hanya ada pada cover.`);
     }
-    if (content.length < 180) issues.push(`Bagian ${index + 1} terlalu pendek untuk menjelaskan praktik secara konkret.`);
+    if (content.length < 450) issues.push(`Bagian ${index + 1} terlalu pendek untuk menjelaskan praktik secara konkret.`);
     if (content.includes('[PERLU DIISI USER]')) issues.push(`Bagian ${index + 1} masih memiliki data yang belum diisi.`);
     const matched = AI_SLOP_PATTERNS.find((pattern) => pattern.test(content));
     if (matched) issues.push(`Bagian ${index + 1} masih memakai kalimat generik.`);
@@ -422,8 +426,10 @@ export function assessDocumentGenerationReadiness({ document, user, files = [], 
     (user?.full_name || user?.fullName)
     && user?.nim
     && (user?.class_name || user?.className)
-    && (user?.department_key || user?.departmentKey)
-    && (user?.study_program_key || user?.studyProgramKey),
+    && (user?.institution_name || user?.institutionName)
+    && (user?.institution_logo_url || user?.institutionLogoUrl)
+    && (user?.faculty_name || user?.facultyName || user?.department_key || user?.departmentKey)
+    && (user?.study_program_name || user?.studyProgramName || user?.study_program_key || user?.studyProgramKey),
   );
   const sectionIssues = [...reportSectionIssues(sections), ...reportParameterIssues(sections, parameters)];
   const checks = [

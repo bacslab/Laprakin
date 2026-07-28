@@ -1027,9 +1027,11 @@ export function createVersion(documentId, userId, label) {
 
 export function listVersions(documentId, userId) {
   return db.prepare(`
-    SELECT id, label, created_at FROM document_versions
+    SELECT id, label, snapshot_json, created_at FROM document_versions
     WHERE document_id = ? AND owner_user_id = ? ORDER BY created_at DESC
-  `).all(documentId, userId);
+  `).all(documentId, userId)
+    .filter((version) => parseJson(version.snapshot_json, {}).sections?.length)
+    .map(({ snapshot_json: _snapshot, ...version }) => version);
 }
 
 export function restoreVersion(documentId, versionId, userId) {
@@ -2472,6 +2474,8 @@ Aturan keras:
 - Gunakan sudut pandang ${recipe.perspective || 'saya'} secara konsisten sesuai preferensi user.
 - Identitas mahasiswa hanya untuk cover. Dilarang membuat bagian "Identitas Praktikum", biodata, nama, NPM/NIM, kelas, program studi, atau jurusan di isi laporan.
 - Sebarkan penjelasan konkret di setiap langkah, bukan hanya pada bagian awal. Hubungkan tindakan, bukti visual, dan hasil yang terlihat.
+- Susun pembahasan utuh dengan sedikitnya 5.000 karakter total. Setiap bagian substantif harus memiliki beberapa paragraf yang menjelaskan tujuan, langkah, alasan teknis, dan interpretasi hasil yang tersedia.
+- Panjang tidak boleh berasal dari pengulangan atau kalimat pengisi. Perluas hanya dengan penjelasan teknis yang dapat diturunkan dari bahan user atau pengetahuan umum yang diizinkan oleh sourceMode.
 - Jangan menulis daftar "Gambar 1", placeholder gambar, atau deskripsi generik di dalam content; sistem menempatkan setiap gambar dan caption tepat satu kali.
 - Hindari mengulang penjelasan yang sama untuk bukti berbeda. Setiap paragraf harus menambah konteks teknis yang dapat diverifikasi.
 - Ikuti struktur bagian template jika relevan dengan bahan. Jangan menyalin isi contoh pada template sebagai fakta praktikum baru.
@@ -2517,7 +2521,7 @@ ${parameters.filter((parameter) => parameter.includeInDraft).map((parameter) => 
           properties: {
             type: { type: 'string', enum: ['implementation', 'output', 'conclusion', 'appendix'] },
             title: { type: 'string', description: 'Judul bagian laporan yang ringkas dan bernomor.' },
-            content: { type: 'string', description: 'Narasi konkret berbasis bahan user tanpa kalimat pengisi.' },
+            content: { type: 'string', description: 'Narasi konkret beberapa paragraf, minimal 450 karakter per bagian, berbasis bahan user tanpa kalimat pengisi.' },
           },
           required: ['type', 'title', 'content'],
           additionalProperties: false,
@@ -2648,7 +2652,6 @@ export async function generateDocument(documentId, userId, progress, options = {
   if (!config.geminiKeyValid) throw new HttpError(503, 'GEMINI_API_KEY harus berupa API key Google AI Studio berawalan AIza. Draft tidak dibuat agar kualitas tidak turun.', 'AI_CREDENTIAL_INVALID');
 
   progress(20, 'Menyiapkan sumber dan bukti');
-  createVersion(documentId, userId, revisionInstruction ? `Sebelum revisi: ${revisionInstruction.slice(0, 80)}` : 'Sebelum generate draft');
   mappings = await analyzeEvidenceImages({ document, user, images, mappings, progress });
   const sections = await callGemini({
     document,
@@ -2665,6 +2668,9 @@ export async function generateDocument(documentId, userId, progress, options = {
   progress(88, 'Menata struktur laporan');
   db.exec('BEGIN');
   try {
+    if (document.generated_at && currentSections.length) {
+      createVersion(documentId, userId, `Sebelum revisi: ${revisionInstruction.slice(0, 80) || 'perubahan dokumen'}`);
+    }
     db.prepare('DELETE FROM report_sections WHERE document_id = ?').run(documentId);
     sections.forEach((section, index) => {
       db.prepare(`
@@ -3301,9 +3307,6 @@ export async function buildDocumentDocxBuffer(documentId, userId, { enforceExpor
 
   if (!sections.length) throw new HttpError(400, 'Buat draft terlebih dahulu sebelum export.', 'NO_DRAFT');
   if (enforceExportQuality) {
-    if (!mappings.some((mapping) => String(mapping.mime_type || '').startsWith('image/'))) {
-      throw new HttpError(422, 'Tambahkan minimal satu screenshot atau bukti visual agar isi laprak memiliki gambar.', 'DOCUMENT_IMAGE_REQUIRED');
-    }
     if (mappings.some((mapping) => String(mapping.mime_type || '').startsWith('image/') && String(mapping.description || '').trim().length < 40)) {
       throw new HttpError(422, 'Setiap gambar relevan harus memiliki penjelasan faktual setelah gambar.', 'DOCUMENT_IMAGE_EXPLANATION_REQUIRED');
     }
