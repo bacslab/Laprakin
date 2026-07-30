@@ -9915,3 +9915,157 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 .app-recovery-mark{
   color:#0b1105!important;
 }
+
+/* Mobile workspace shell: preserve desktop density while making phone workflows usable. */
+@media(max-width:760px){
+  .workspace .header-actions .header-config-button{
+    width:40px!important;
+    height:40px!important;
+    display:grid!important;
+    place-items:center!important;
+    padding:0!important;
+  }
+  .workspace .header-actions .header-config-button span,
+  .workspace .header-actions .tutorial-button{
+    display:none!important;
+  }
+  .workspace .workspace-header .header-actions>button{
+    width:40px!important;
+    height:40px!important;
+    min-width:40px!important;
+    display:grid!important;
+    place-items:center!important;
+    padding:0!important;
+  }
+  .workspace .workspace-header .header-actions>.tutorial-button{
+    display:none!important;
+  }
+  .workspace .workspace-header{
+    min-height:56px!important;
+    height:56px!important;
+    gap:6px!important;
+    padding-block:0!important;
+    padding-right:10px!important;
+  }
+  .workspace .workspace-header .header-title{
+    overflow:hidden!important;
+  }
+  .workspace .workspace-header .header-title b,
+  .workspace .workspace-header .header-title small{
+    display:block;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .workspace .chat-surface.empty-chat .chat-thread{
+    min-height:0!important;
+    overflow:hidden!important;
+    scrollbar-width:none!important;
+  }
+  .workspace .chat-surface.empty-chat .chat-thread::-webkit-scrollbar{
+    display:none!important;
+  }
+  .workspace .chat-surface.has-chat .composer-zone{
+    padding-bottom:max(10px,env(safe-area-inset-bottom))!important;
+  }
+  .workspace .chat-surface.has-chat .composer-zone>small{
+    display:none!important;
+  }
+  .workspace .attach-button,
+  .workspace .composer-utility-button,
+  .workspace .send-button{
+    width:40px!important;
+    min-width:40px!important;
+    height:40px!important;
+  }
+  .workspace .ai-mode-trigger{
+    min-height:40px!important;
+  }
+  .workspace .chat-thread,
+  .workspace .right-body,
+  .workspace .document-side-scroll{
+    overscroll-behavior:contain;
+  }
+}
+
+@media(max-width:700px){
+  .workspace .workspace-header{
+    padding-left:56px!important;
+  }
+  .workspace .left-sidebar{
+    z-index:90!important;
+    width:min(320px,86vw)!important;
+  }
+  .workspace .mobile-scrim{
+    position:fixed!important;
+    inset:0!important;
+    z-index:80!important;
+    display:block!important;
+    width:100vw!important;
+    height:100dvh!important;
+    border:0!important;
+    background:rgba(12,12,12,.48)!important;
+    backdrop-filter:blur(2px);
+  }
+  .workspace:not(.left-collapsed) .mobile-nav-toggle{
+    display:none!important;
+  }
+  .workspace .left-sidebar .sidebar-top{
+    min-height:56px!important;
+    height:56px!important;
+  }
+  .workspace .left-sidebar .new-chat{
+    min-height:44px!important;
+    height:44px!important;
+  }
+  .workspace .left-sidebar .workspace-nav button,
+  .workspace .left-sidebar .sidebar-support-actions>button,
+  .workspace .left-sidebar .session-row{
+    min-height:44px!important;
+  }
+  .workspace .left-sidebar .account-row>button{
+    min-height:48px!important;
+  }
+  .workspace .sidebar-session-scroll{
+    overscroll-behavior:contain;
+  }
+  .workspace .right-config{
+    position:fixed!important;
+    inset:0!important;
+    width:100vw!important;
+    max-width:none!important;
+    height:100dvh!important;
+    transform:translateX(100%)!important;
+    border-left:0!important;
+    box-shadow:none!important;
+  }
+  .workspace.right-open .right-config{
+    transform:translateX(0)!important;
+  }
+  .workspace .config-inner,
+  .workspace .document-side-shell{
+    width:100%!important;
+    max-width:none!important;
+    height:100dvh!important;
+  }
+  .workspace .right-head,
+  .workspace .document-side-head{
+    min-height:56px!important;
+    height:56px!important;
+    padding:0 12px 0 16px!important;
+  }
+  .workspace .right-body{
+    padding:14px 16px calc(18px + env(safe-area-inset-bottom))!important;
+  }
+  .workspace .right-foot{
+    padding:12px 16px max(12px,env(safe-area-inset-bottom))!important;
+  }
+  .workspace .right-config.right-document{
+    inset:0!important;
+    width:100vw!important;
+    max-width:none!important;
+  }
+  .workspace .document-side-scroll{
+    padding:8px!important;
+  }
+}

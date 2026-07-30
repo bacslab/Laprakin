@@ -4,7 +4,7 @@ import { gsap, ScrollTrigger } from 'gsap/all';
 import Lenis from 'lenis';
 import 'lenis/dist/lenis.css';
 import { api } from './api';
-import './figma-landing.css';
+import './landing.css';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -14,6 +14,7 @@ const STATEMENT_WORDS = STATEMENT_COPY.split(' ');
 const STEPS = [
   ['Masuk ke workspace', 'Buka satu ruang kerja untuk menyimpan bahan, percakapan, draft, dan revisi dalam satu alur.'],
   ['Masukkan semua bahan', 'Tambahkan modul, screenshot, PDF, DOCX, tabel, data, atau tautan yang benar-benar kamu miliki.'],
+  ['Lengkapi identitas', 'Isi data akademik dan identitas laporan agar draft mengikuti format yang dibutuhkan.'],
   ['Tinjau dan revisi', 'Periksa draft, minta perubahan pada bagian tertentu, lalu lengkapi bahan yang masih kurang.'],
   ['Kerjakan Quiz', 'Jawab quiz singkat untuk memastikan isi laporan sudah kamu pahami sebelum export.'],
   ['Export saat siap', 'Unduh draft ke Word dan lakukan pengecekan akhir sebelum dokumen dikumpulkan.'],
@@ -47,7 +48,7 @@ const FAQS = [
 
 function LogoLockup({ footer = false }) {
   return <div className={`fg-logo-lockup ${footer ? 'is-footer' : ''}`}>
-    <img src={footer ? '/figma-landing/footer-logo-mark.svg' : '/figma-landing/logo-mark.png'} alt="" />
+    <img src={footer ? '/landing/footer-logo-mark.svg' : '/landing/logo-mark.png'} alt="" />
     <b>laprakin</b>
     <small>BETA</small>
   </div>;
@@ -82,7 +83,7 @@ function StepCard({ index, active }) {
   </article>;
 }
 
-export default function FigmaLanding({ navigate }) {
+export default function LandingPage({ navigate }) {
   const [content, setContent] = useState({ media: {}, copy: {} });
   const [step, setStep] = useState(0);
   const [stepDragging, setStepDragging] = useState(false);
@@ -463,7 +464,7 @@ export default function FigmaLanding({ navigate }) {
 
     <main>
       <section className="fg-hero">
-        <div className="fg-hero-hill" data-node-id="110:228" aria-hidden="true"><img src="/figma-landing/hills-110-228.png" alt="" /></div>
+        <div className="fg-hero-hill" data-node-id="110:228" aria-hidden="true"><img src="/landing/hills-110-228.png" alt="" /></div>
         <div className="fg-hero-content">
           <div className="fg-hero-copy">
             <h1>Fokus praktikum.<br />Urusan laporan, <span>laprakin.</span></h1>
@@ -486,7 +487,7 @@ export default function FigmaLanding({ navigate }) {
 
       <section id="cara-pakai" className="fg-how fg-section">
         <SectionTitle eyebrow="How to use" title="Cara Pakai">
-          <p>Lima langkah sederhana dari mengunggah bahan sampai mengunduh draft.</p>
+          <p>Enam langkah sederhana dari mengunggah bahan sampai mengunduh draft.</p>
         </SectionTitle>
         <div
           ref={howViewportRef}
@@ -577,7 +578,7 @@ export default function FigmaLanding({ navigate }) {
       </section>
 
       <section className="fg-final-cta" data-node-id="92:344">
-        <img className="fg-final-glossy-mark" src="/figma-landing/logo-mark-glossy.png" alt="" data-node-id="92:350" data-aos="zoom-in" />
+        <img className="fg-final-glossy-mark" src="/landing/logo-mark-glossy.png" alt="" data-node-id="92:350" data-aos="zoom-in" />
         <div className="fg-final-copy" data-node-id="92:345" data-aos="fade-up">
           <p>Gunakan waktumu untuk praktikum dan belajar, untuk laporan tinggal <strong>laprakin</strong> aja</p>
           <GradientButton onClick={() => navigate('/auth')}>Coba sekarang</GradientButton>
@@ -587,7 +588,7 @@ export default function FigmaLanding({ navigate }) {
     </main>
 
     <footer className="fg-footer" data-node-id="109:227">
-      <div className="fg-footer-landscape" data-node-id="110:228" aria-hidden="true"><img src="/figma-landing/hills-110-228.png" alt="" /></div>
+      <div className="fg-footer-landscape" data-node-id="110:228" aria-hidden="true"><img src="/landing/hills-110-228.png" alt="" /></div>
       <div className="fg-footer-card" data-node-id="92:334" />
       <div className="fg-footer-content-layer">
         <div className="fg-footer-intro" data-aos="fade-right">
