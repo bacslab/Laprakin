@@ -243,10 +243,12 @@ export default function LandingPage({ navigate }) {
 
       const featureRows = gsap.utils.toArray('[data-feature-row]');
       featureRows.forEach((row, index) => {
-        gsap.fromTo(row, { opacity: 0, y: 72 }, {
+        const cards = gsap.utils.toArray('article', row);
+        gsap.fromTo(cards, { opacity: 0, y: 72 }, {
           opacity: 1,
           y: 0,
           duration: 0.9,
+          stagger: 0.06,
           ease: 'power3.out',
           scrollTrigger: {
             trigger: row,
@@ -260,21 +262,29 @@ export default function LandingPage({ navigate }) {
         ScrollTrigger.create({
           trigger: row,
           start: 'top 96px',
-          endTrigger: featureRows[featureRows.length - 1],
-          end: () => `bottom top+=${96 + row.offsetHeight}`,
+          endTrigger: nextRow,
+          end: 'top 96px',
           pin: true,
           pinSpacing: false,
           anticipatePin: 1,
           invalidateOnRefresh: true,
         });
-        gsap.to(row, {
-          scale: 0.965,
+        gsap.fromTo(cards, {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+        }, {
+          opacity: 0,
+          y: -18,
+          scale: 0.985,
           ease: 'none',
+          immediateRender: false,
           scrollTrigger: {
             trigger: nextRow,
-            start: 'top 82%',
-            end: 'top 22%',
-            scrub: true,
+            start: () => `top ${96 + row.offsetHeight}px`,
+            end: 'top 96px',
+            scrub: 0.65,
+            invalidateOnRefresh: true,
           },
         });
       });
