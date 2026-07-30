@@ -241,53 +241,6 @@ export default function LandingPage({ navigate }) {
         });
       });
 
-      const featureRows = gsap.utils.toArray('[data-feature-row]');
-      featureRows.forEach((row, index) => {
-        const cards = gsap.utils.toArray('article', row);
-        gsap.fromTo(cards, { opacity: 0, y: 72 }, {
-          opacity: 1,
-          y: 0,
-          duration: 0.9,
-          stagger: 0.06,
-          ease: 'power3.out',
-          scrollTrigger: {
-            trigger: row,
-            start: 'top 88%',
-            toggleActions: 'play none none reverse',
-          },
-        });
-
-        const nextRow = featureRows[index + 1];
-        if (!nextRow || !window.matchMedia('(min-width: 701px)').matches) return;
-        ScrollTrigger.create({
-          trigger: row,
-          start: 'top 96px',
-          endTrigger: nextRow,
-          end: 'top 96px',
-          pin: true,
-          pinSpacing: false,
-          anticipatePin: 1,
-          invalidateOnRefresh: true,
-        });
-        gsap.fromTo(cards, {
-          opacity: 1,
-          y: 0,
-          scale: 1,
-        }, {
-          opacity: 0,
-          y: -18,
-          scale: 0.985,
-          ease: 'none',
-          immediateRender: false,
-          scrollTrigger: {
-            trigger: nextRow,
-            start: () => `top ${96 + row.offsetHeight}px`,
-            end: 'top 96px',
-            scrub: 0.65,
-            invalidateOnRefresh: true,
-          },
-        });
-      });
     }, root);
 
     return () => context.revert();
@@ -564,7 +517,7 @@ export default function LandingPage({ navigate }) {
           <p>Empat kemampuan utama yang membantu dari bahan sampai dokumen siap ditinjau.</p>
         </SectionTitle>
         <div className="fg-features-stack">
-          {FEATURE_ROWS.map((row, rowIndex) => <div className="fg-feature-row" data-feature-row key={row[0][0]} style={{ '--feature-row': rowIndex }}>
+          {FEATURE_ROWS.map((row, rowIndex) => <div className="fg-feature-row" key={row[0][0]}>
             {row.map(([title, text], index) => <article key={title}>
               <div className="fg-feature-copy"><span>0{(rowIndex * 2) + index + 1}</span><h3>{title}</h3><p>{text}</p></div>
               <MediaPlaceholder label="Feature preview" />
@@ -598,8 +551,10 @@ export default function LandingPage({ navigate }) {
     </main>
 
     <footer className="fg-footer" data-node-id="109:227">
-      <div className="fg-footer-landscape" data-node-id="110:228" aria-hidden="true"><img src="/landing/hills-110-228.png" alt="" /></div>
       <div className="fg-footer-card" data-node-id="92:334" />
+      <div className="fg-footer-hills" data-node-id="110:228" aria-hidden="true">
+        <img src="/landing/hills-110-228.png" alt="" />
+      </div>
       <div className="fg-footer-content-layer">
         <div className="fg-footer-intro" data-aos="fade-right">
           <LogoLockup footer />
