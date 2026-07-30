@@ -9889,9 +9889,21 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   min-height:49px!important;
   max-height:none!important;
   resize:none!important;
+  overflow-y:hidden!important;
   background:transparent!important;
   color:var(--workspace-text)!important;
+  scrollbar-width:none;
+}
+.workspace .composer textarea::-webkit-scrollbar{
+  width:0;
+  height:0;
+}
+.workspace .composer textarea.is-overflowing{
+  overflow-y:auto!important;
   scrollbar-width:thin;
+}
+.workspace .composer textarea.is-overflowing::-webkit-scrollbar{
+  width:6px;
 }
 .workspace .composer textarea:focus{
   background:transparent!important;

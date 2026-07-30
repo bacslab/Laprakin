@@ -14,8 +14,8 @@ const STATEMENT_WORDS = STATEMENT_COPY.split(' ');
 const STEPS = [
   ['Masuk ke workspace', 'Buka satu ruang kerja untuk menyimpan bahan, percakapan, draft, dan revisi dalam satu alur.'],
   ['Masukkan semua bahan', 'Tambahkan modul, screenshot, PDF, DOCX, tabel, data, atau tautan yang benar-benar kamu miliki.'],
-  ['Pilih cara berpikir', 'Gunakan Basic untuk kebutuhan harian, Thinking untuk analisis, atau XtraThink untuk tugas kompleks.'],
-  ['Tinjau dan revisi', 'Periksa isi, minta perubahan pada bagian tertentu, lalu lengkapi bukti yang masih kurang.'],
+  ['Tinjau dan revisi', 'Periksa draft, minta perubahan pada bagian tertentu, lalu lengkapi bahan yang masih kurang.'],
+  ['Kerjakan Quiz', 'Jawab quiz singkat untuk memastikan isi laporan sudah kamu pahami sebelum export.'],
   ['Export saat siap', 'Unduh draft ke Word dan lakukan pengecekan akhir sebelum dokumen dikumpulkan.'],
 ];
 
@@ -29,11 +29,12 @@ const SOURCES = [
 ];
 
 const FEATURES = [
-  ['Bahan tetap terhubung', 'Setiap modul, screenshot, tautan, dan data tetap berada di konteks tugas yang sama.'],
-  ['Mode sesuai kebutuhan', 'Pilih tingkat penalaran yang sepadan dengan kompleksitas tugas tanpa membuat alurnya rumit.'],
-  ['Revisi tanpa mengulang', 'Perbaiki satu bagian, tambahkan bukti, atau ubah struktur tanpa memulai lagi dari awal.'],
-  ['Lebih dari laporan', 'Gunakan alur yang sama untuk proposal, makalah, paper, jurnal, dan dokumen akademik lain.'],
+  ['Semua bahan dalam satu tugas', 'Upload modul, screenshot, tabel, dan tautan sekali. Laprakin memakainya sebagai konteks saat menyusun draft.'],
+  ['AI sesuai tingkat kesulitan', 'Gunakan Basic untuk tugas harian, Thinking untuk analisis, dan XtraThink untuk pembahasan yang lebih kompleks.'],
+  ['Revisi bagian tertentu', 'Minta perbaikan pada bab atau paragraf yang dipilih tanpa membuat ulang seluruh dokumen.'],
+  ['Berbagai dokumen akademik', 'Susun laprak, proposal, makalah, paper, jurnal, dan dokumen akademik lain dari workspace yang sama.'],
 ];
+const FEATURE_ROWS = Array.from({ length: Math.ceil(FEATURES.length / 2) }, (_, index) => FEATURES.slice(index * 2, index * 2 + 2));
 
 const FAQS = [
   ['Apa itu Laprakin?', 'Laprakin adalah workspace AI untuk menyusun dan merapikan dokumen akademik berdasarkan bahan yang kamu berikan.'],
@@ -73,7 +74,6 @@ function MediaPlaceholder({ label }) {
 function StepCard({ index, active }) {
   const [title, text] = STEPS[index];
   return <article className={`fg-step-card ${active ? 'is-active' : ''}`} data-step-card={index} aria-hidden={!active}>
-    <strong className="fg-step-number">{String(index + 1).padStart(2, '0')}</strong>
     <MediaPlaceholder label="Product preview" />
     <div className="fg-step-copy">
       <h3>{title}</h3>
@@ -236,6 +236,44 @@ export default function FigmaLanding({ navigate }) {
             trigger: element,
             start: 'top 88%',
             toggleActions: 'play none none reverse',
+          },
+        });
+      });
+
+      const featureRows = gsap.utils.toArray('[data-feature-row]');
+      featureRows.forEach((row, index) => {
+        gsap.fromTo(row, { opacity: 0, y: 72 }, {
+          opacity: 1,
+          y: 0,
+          duration: 0.9,
+          ease: 'power3.out',
+          scrollTrigger: {
+            trigger: row,
+            start: 'top 88%',
+            toggleActions: 'play none none reverse',
+          },
+        });
+
+        const nextRow = featureRows[index + 1];
+        if (!nextRow || !window.matchMedia('(min-width: 701px)').matches) return;
+        ScrollTrigger.create({
+          trigger: row,
+          start: 'top 96px',
+          endTrigger: featureRows[featureRows.length - 1],
+          end: () => `bottom top+=${96 + row.offsetHeight}`,
+          pin: true,
+          pinSpacing: false,
+          anticipatePin: 1,
+          invalidateOnRefresh: true,
+        });
+        gsap.to(row, {
+          scale: 0.965,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: nextRow,
+            start: 'top 82%',
+            end: 'top 22%',
+            scrub: true,
           },
         });
       });
@@ -447,8 +485,8 @@ export default function FigmaLanding({ navigate }) {
       </section>
 
       <section id="cara-pakai" className="fg-how fg-section">
-        <SectionTitle eyebrow="How to use" title="Dari bahan ke draft">
-          <p>Lima langkah sederhana tanpa memisahkan bahan, percakapan, dan hasil kerja.</p>
+        <SectionTitle eyebrow="How to use" title="Cara Pakai">
+          <p>Lima langkah sederhana dari mengunggah bahan sampai mengunduh draft.</p>
         </SectionTitle>
         <div
           ref={howViewportRef}
@@ -511,14 +549,16 @@ export default function FigmaLanding({ navigate }) {
       </section>
 
       <section id="fitur" className="fg-features fg-section fg-container">
-        <SectionTitle eyebrow="The features" title="Satu workspace, alur yang utuh">
-          <p>Fitur yang membantu pekerjaan akademik tanpa mengambil alih proses belajarmu.</p>
+        <SectionTitle eyebrow="The features" title="Fitur Laprakin">
+          <p>Empat kemampuan utama yang membantu dari bahan sampai dokumen siap ditinjau.</p>
         </SectionTitle>
-        <div className="fg-features-grid">
-          {FEATURES.map(([title, text], index) => <article key={title} data-aos="fade-up" data-aos-delay={(index % 2) * 90}>
-            <div className="fg-feature-copy"><span>0{index + 1}</span><h3>{title}</h3><p>{text}</p></div>
-            <MediaPlaceholder label="Feature preview" />
-          </article>)}
+        <div className="fg-features-stack">
+          {FEATURE_ROWS.map((row, rowIndex) => <div className="fg-feature-row" data-feature-row key={row[0][0]} style={{ '--feature-row': rowIndex }}>
+            {row.map(([title, text], index) => <article key={title}>
+              <div className="fg-feature-copy"><span>0{(rowIndex * 2) + index + 1}</span><h3>{title}</h3><p>{text}</p></div>
+              <MediaPlaceholder label="Feature preview" />
+            </article>)}
+          </div>)}
         </div>
       </section>
 
@@ -559,7 +599,6 @@ export default function FigmaLanding({ navigate }) {
           <div><b>Akses</b><button type="button" onClick={() => navigate('/auth')}>Workspace</button><button type="button" onClick={() => navigate('/auth')}>Masuk</button><button type="button" onClick={() => goTo('faq')}>FAQ</button></div>
           <div><b>Laprakin</b><button type="button" onClick={() => navigate('/privacy')}>Privasi</button><button type="button" onClick={() => navigate('/terms')}>Ketentuan</button><span>Versi beta</span></div>
         </nav>
-        <div className="fg-footer-meta" data-aos="fade-up"><span>© 2026 Laprakin</span><span>Belajar tetap utama. Laporan tinggal dirapikan.</span></div>
       </div>
     </footer>
   </div>;

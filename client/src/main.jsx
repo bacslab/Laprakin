@@ -2713,10 +2713,20 @@ function resizeComposerTextarea(textarea) {
   const verticalBorder = (Number.parseFloat(style.borderTopWidth) || 0) + (Number.parseFloat(style.borderBottomWidth) || 0);
   const minContentHeight = lineHeight * 2 + verticalPadding;
   const maxContentHeight = lineHeight * 11 + verticalPadding;
-  textarea.style.height = '0px';
-  const contentHeight = Math.max(textarea.scrollHeight, minContentHeight);
-  textarea.style.height = `${Math.min(contentHeight, maxContentHeight) + verticalBorder}px`;
-  textarea.style.overflowY = contentHeight > maxContentHeight ? 'auto' : 'hidden';
+  const minBoxHeight = Math.ceil(minContentHeight + verticalBorder);
+
+  // Reset to the minimum before reading scrollHeight. This makes deletion
+  // shrink the composer immediately instead of measuring its previous height.
+  textarea.classList.remove('is-overflowing');
+  textarea.style.overflowY = 'hidden';
+  textarea.style.height = `${minBoxHeight}px`;
+
+  const requiredContentHeight = Math.max(textarea.scrollHeight, minContentHeight);
+  const overflowing = requiredContentHeight > maxContentHeight + 2;
+  const targetContentHeight = Math.min(requiredContentHeight, maxContentHeight);
+  textarea.style.height = `${Math.ceil(targetContentHeight + verticalBorder)}px`;
+  textarea.classList.toggle('is-overflowing', overflowing);
+  textarea.style.overflowY = overflowing ? 'auto' : 'hidden';
 }
 
 function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, centered, pendingFiles = [], onPasteImages, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade }) {
@@ -2734,8 +2744,19 @@ function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, up
   }, [input]);
   useEffect(() => {
     const resize = () => resizeComposerTextarea(textareaRef.current);
+    let measuredWidth = textareaRef.current?.getBoundingClientRect().width || 0;
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entries) => {
+      const nextWidth = entries[0]?.contentRect.width || 0;
+      if (Math.abs(nextWidth - measuredWidth) < 1) return;
+      measuredWidth = nextWidth;
+      resize();
+    });
+    if (textareaRef.current) observer?.observe(textareaRef.current);
     window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', resize);
+    };
   }, []);
   return <div className={`composer-zone ${centered ? 'composer-centered composer-claude' : ''}`}>
     {pendingFiles.length ? <div className="pending-files">{pendingFiles.map((file, index) => <PendingAttachmentChip file={file} index={index} key={`${file.name}-${index}`} onRemove={onRemovePending} />)}</div> : null}
