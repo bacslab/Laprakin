@@ -13,7 +13,22 @@
 # Urutan tiap deploy: backup -> build image kandidat -> uji boot di container
 # canary terisolasi -> baru promosikan. Bila canary gagal, produksi tidak
 # tersentuh sama sekali dan operator menerima notifikasi.
+[ -n "${BASH_VERSION:-}" ] || exec /bin/bash "$0" "$@"
 set -uo pipefail
+
+if [[ "${1:-}" == "install-self" ]]; then
+  if (( EUID != 0 )); then
+    echo "deploy: instalasi harus dijalankan sebagai root" >&2
+    exit 1
+  fi
+  INSTALL_TARGET="${2:-/usr/local/bin/laprakin-deploy.sh}"
+  if [[ -f "$INSTALL_TARGET" ]]; then
+    cp -a "$INSTALL_TARGET" "${INSTALL_TARGET}.pre-disk-guard-20260730"
+  fi
+  install -o root -g root -m 750 "$0" "$INSTALL_TARGET"
+  echo "deploy: guard disk terpasang di $INSTALL_TARGET"
+  exit 0
+fi
 
 APP_DIR="${LAPRAKIN_APP_DIR:-/opt/laprakin}"
 STATE_DIR="${LAPRAKIN_DEPLOY_STATE_DIR:-/var/lib/laprakin-deploy}"
@@ -24,6 +39,8 @@ SSH_KEY="${LAPRAKIN_DEPLOY_KEY:-$STATE_DIR/deploy-key}"
 NOTIFY="${LAPRAKIN_NOTIFY_BIN:-/usr/local/bin/laprakin-notify.sh}"
 CANARY_PORT="${LAPRAKIN_CANARY_PORT:-4555}"
 LOCK_FILE="$STATE_DIR/deploy.lock"
+DISK_CLEANUP_THRESHOLD_KB="${LAPRAKIN_DISK_CLEANUP_THRESHOLD_KB:-8388608}"
+MIN_BUILD_SPACE_KB="${LAPRAKIN_MIN_BUILD_SPACE_KB:-6291456}"
 
 export GIT_SSH_COMMAND="ssh -i $SSH_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
@@ -51,6 +68,29 @@ cleanup_canary() {
   docker rm -f laprakin-canary >/dev/null 2>&1 || true
 }
 trap cleanup_canary EXIT
+
+available_root_kb() {
+  df -Pk / | awk 'NR == 2 { print $4 }'
+}
+
+cleanup_reclaimable_docker_data() {
+  echo "deploy: ruang disk menipis; membersihkan cache Docker yang tidak digunakan"
+  docker container prune -f --filter "until=24h" >/dev/null 2>&1 || true
+  docker builder prune -af --filter "until=24h" >/dev/null 2>&1 || true
+  docker image prune -f >/dev/null 2>&1 || true
+}
+
+ensure_build_space() {
+  local available
+  available="$(available_root_kb)"
+  if (( available < DISK_CLEANUP_THRESHOLD_KB )); then
+    cleanup_reclaimable_docker_data
+    available="$(available_root_kb)"
+  fi
+  if (( available < MIN_BUILD_SPACE_KB )); then
+    fail "ruang disk tidak cukup untuk backup dan build; tersedia $((available / 1024)) MB"
+  fi
+}
 
 # ── Pastikan akses repository sudah dikonfigurasi ───────────────────────────
 # Selama deploy key belum didaftarkan di GitHub, kondisi ini tidak dianggap
@@ -97,6 +137,8 @@ SUBJECT="$(git -C "$REPO_DIR" log -1 --format=%s "$TARGET")"
 FROM_LABEL="${CURRENT:0:7}"
 [[ -z "$FROM_LABEL" ]] && FROM_LABEL="belum ada"
 echo "deploy: $FROM_LABEL -> ${TARGET:0:7} ($SUBJECT)"
+
+ensure_build_space
 
 # ── Backup sebelum menyentuh apa pun ────────────────────────────────────────
 systemctl start laprakin-backup.service >/dev/null 2>&1 || echo "deploy: backup pra-deploy gagal, dilanjutkan" >&2
@@ -165,7 +207,9 @@ if [[ -z "$PROD_OK" ]]; then
 fi
 
 printf '%s' "$TARGET" > "$STATE_DIR/deployed-revision"
-docker image prune -f --filter "until=168h" >/dev/null 2>&1 || true
+docker container prune -f >/dev/null 2>&1 || true
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune -af --filter "until=24h" >/dev/null 2>&1 || true
 
 echo "deploy: berhasil pada ${TARGET:0:7}"
 notify "Deploy berhasil" "$SUBJECT" "production" "$TARGET" "$SUBJECT"
