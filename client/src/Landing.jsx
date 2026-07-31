@@ -30,10 +30,10 @@ const SOURCES = [
 ];
 
 const FEATURES = [
-  ['Semua bahan dalam satu tugas', 'Upload modul, screenshot, tabel, dan tautan sekali. Laprakin memakainya sebagai konteks saat menyusun draft.'],
-  ['AI sesuai tingkat kesulitan', 'Gunakan Basic untuk tugas harian, Thinking untuk analisis, dan XtraThink untuk pembahasan yang lebih kompleks.'],
-  ['Revisi bagian tertentu', 'Minta perbaikan pada bab atau paragraf yang dipilih tanpa membuat ulang seluruh dokumen.'],
-  ['Berbagai dokumen akademik', 'Susun laprak, proposal, makalah, paper, jurnal, dan dokumen akademik lain dari workspace yang sama.'],
+  ['Upload berbagai sumber', 'Masukkan PDF, DOCX, screenshot, gambar, spreadsheet, teks, dan tautan dalam satu workspace.'],
+  ['Mode AI sesuai kebutuhan', 'Gunakan Basic untuk tugas harian, Thinking untuk analisis, dan XtraThink untuk pembahasan yang lebih kompleks.'],
+  ['Quiz pemahaman', 'Jawab quiz singkat dari isi laporan untuk memastikan kamu memahami dokumen sebelum export.'],
+  ['Personalisasi penulisan', 'Atur gaya bahasa, sudut pandang, struktur awal, dan instruksi tambahan sebagai acuan AI.'],
 ];
 const FEATURE_ROWS = Array.from({ length: Math.ceil(FEATURES.length / 2) }, (_, index) => FEATURES.slice(index * 2, index * 2 + 2));
 
