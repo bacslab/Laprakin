@@ -3,7 +3,7 @@ import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate 
 import { Component, Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArrowDownToLine, ArrowLeft, ArrowRight, Bell, Check, CheckCircle2, ChevronDown, CircleAlert,
-  CodeXml, CreditCard, FileText, FolderOpen, FolderKanban, Globe2, GraduationCap, HelpCircle, LayoutTemplate, LoaderCircle, Mail, Mic, Search,
+  CodeXml, CreditCard, FileText, FolderOpen, FolderKanban, Globe2, GraduationCap, HelpCircle, LayoutTemplate, LoaderCircle, Mail, Search,
   LockKeyhole, LogOut, Menu, MessageCircle, Moon, Paperclip, PanelLeftClose,
   PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Save, Send, Settings2,
   ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, UploadCloud, X,
@@ -522,18 +522,18 @@ const defaultPrefs = {
   tone: 'formal', perspective: 'saya', profile: 'langkah', customInstructions: '', accent: 'lime', productUpdates: true, allowExternalAi: true,
 };
 const workspaceAccents = [
-  { key: 'lime', label: 'Lime', color: '#c2ff33', contrast: '#101506' },
-  { key: 'blue', label: 'Biru', color: '#78a9ff', contrast: '#07111f' },
-  { key: 'violet', label: 'Ungu', color: '#b69cff', contrast: '#130d22' },
-  { key: 'coral', label: 'Koral', color: '#ff9b7b', contrast: '#24100a' },
-  { key: 'amber', label: 'Amber', color: '#f3c969', contrast: '#211704' },
-  { key: 'gray', label: 'Abu-abu', color: '#b9bab6', contrast: '#111210' },
+  { key: 'lime', label: 'Lime', color: '#c2ff33', contrast: '#101506', lightInk: '#4d7000' },
+  { key: 'orange', label: 'Oranye', color: '#ff8a4c', contrast: '#211006', lightInk: '#a33c00' },
+  { key: 'blue', label: 'Biru', color: '#78a9ff', contrast: '#07111f', lightInk: '#2455a4' },
+  { key: 'violet', label: 'Ungu', color: '#b69cff', contrast: '#130d22', lightInk: '#6243a7' },
+  { key: 'coral', label: 'Koral', color: '#ff9b7b', contrast: '#24100a', lightInk: '#9b3c24' },
+  { key: 'amber', label: 'Amber', color: '#f3c969', contrast: '#211704', lightInk: '#765500' },
+  { key: 'gray', label: 'Abu-abu', color: '#b9bab6', contrast: '#111210', lightInk: '#50514d' },
 ];
 
-// Lime (#c2ff33) dan Amber (#f3c969) hanya mencapai rasio kontras sekitar 1,4:1
-// dan 1,7:1 terhadap permukaan terang, jauh di bawah 3:1 yang disyaratkan WCAG
-// untuk komponen antarmuka. Keduanya tetap dipakai pada tema gelap dan hanya
-// diganti abu-abu saat tampilan terang aktif.
+// Aksen terang tetap boleh dipakai sebagai latar tombol pada tema terang.
+// Untuk ikon, teks, dan focus ring, `lightInk` menyediakan pasangan yang lebih
+// gelap agar kontrasnya tetap terbaca. Amber masih dibatasi ke tema gelap.
 // Nama modal -> tab Settings yang dibuka. Sebelumnya berupa rantai ternary
 // sepanjang delapan cabang, sehingga menambah satu tab mudah terlewat.
 const SETTINGS_MODAL_TABS = {
@@ -548,7 +548,7 @@ const SETTINGS_MODAL_TABS = {
   'settings-referral': 'referral',
 };
 
-const DARK_ONLY_ACCENTS = new Set(['lime', 'amber']);
+const DARK_ONLY_ACCENTS = new Set(['amber']);
 const LIGHT_FALLBACK_ACCENT = 'gray';
 
 /**
@@ -2050,7 +2050,7 @@ function Workspace() {
   const pinnedProjectKeys = new Set(pinnedProjects.map((project) => normalizedCourseKey(project.name)));
   const pinnedSessions = visibleRecentSessions.filter((item) => item.isPinned && !pinnedProjectKeys.has(normalizedCourseKey(groupLabel(item))));
   const recentGroups = Object.entries(groupsFromSessions(visibleRecentSessions.filter((item) => !item.isPinned && !pinnedProjectKeys.has(normalizedCourseKey(groupLabel(item))))));
-  return <div className={`workspace ${leftCollapsed ? 'left-collapsed' : ''} ${rightOpen && page === 'chat' ? 'right-open' : ''} ${documentOpen && page === 'chat' ? 'document-open' : ''} ${resolvedTheme === 'dark' ? 'theme-dark' : ''} ${prefs.compact ? 'compact' : ''}`} data-motion={prefs.reducedMotion ? 'reduce' : 'full'} data-accent={workspaceAccent.key} data-contrast={prefs.contrast || 'default'} data-language={prefs.language || 'id'} style={{ '--workspace-orange': workspaceAccent.color, '--workspace-accent': workspaceAccent.color, '--workspace-accent-contrast': workspaceAccent.contrast }}>
+  return <div className={`workspace ${leftCollapsed ? 'left-collapsed' : ''} ${rightOpen && page === 'chat' ? 'right-open' : ''} ${documentOpen && page === 'chat' ? 'document-open' : ''} ${resolvedTheme === 'dark' ? 'theme-dark' : ''} ${prefs.compact ? 'compact' : ''}`} data-motion={prefs.reducedMotion ? 'reduce' : 'full'} data-accent={workspaceAccent.key} data-contrast={prefs.contrast || 'default'} data-language={prefs.language || 'id'} style={{ '--workspace-orange': workspaceAccent.color, '--workspace-accent': workspaceAccent.color, '--workspace-accent-contrast': workspaceAccent.contrast, '--workspace-accent-ink': resolvedTheme === 'light' ? workspaceAccent.lightInk : workspaceAccent.color }}>
     <aside className="left-sidebar">
       <div className="sidebar-top">
         <Link to="/app" className="workspace-brand"><BrandMark /><b>Laprakin</b></Link>
@@ -2830,7 +2830,6 @@ function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, up
         </div>
         <div className="composer-actions">
           <AiModeMenu value={aiMode} onChange={setAiMode} access={aiModeAccess} onUpgrade={onUpgrade} />
-          <button type="button" className="composer-utility-button" aria-label="Voice input"><Mic size={16} /></button>
           <button className="send-button" type="submit" disabled={busy || (!input.trim() && !pendingFiles.length)} aria-label="Kirim pesan"><Send size={17} /></button>
         </div>
       </div>

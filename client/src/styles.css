@@ -10174,3 +10174,250 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
     padding:8px!important;
   }
 }
+
+/* V52 - source-accurate mobile workspace polish. */
+.workspace .workspace-main,
+.workspace .chat-surface,
+.workspace .chat-thread{
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+.workspace .workspace-main::-webkit-scrollbar,
+.workspace .chat-surface::-webkit-scrollbar,
+.workspace .chat-thread::-webkit-scrollbar{
+  width:0;
+  height:0;
+  display:none;
+}
+
+/* One field system: standalone controls share one surface, radius, and inset. */
+.workspace input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+.workspace textarea,
+.workspace .select-trigger{
+  box-sizing:border-box;
+  border:1px solid var(--workspace-line)!important;
+  border-radius:10px!important;
+  background:var(--workspace-card)!important;
+  color:var(--workspace-text)!important;
+}
+.workspace input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]){
+  min-height:40px;
+  padding:0 12px!important;
+}
+.workspace textarea{padding:10px 12px!important}
+.workspace :is(.project-search,.search-field,.settings-sidebar-search,.recent-search-field){
+  box-sizing:border-box;
+  min-height:40px;
+  border:1px solid var(--workspace-line)!important;
+  border-radius:10px!important;
+  padding:0 11px!important;
+  background:var(--workspace-card)!important;
+  color:var(--workspace-muted)!important;
+}
+.workspace :is(.project-search,.search-field,.settings-sidebar-search,.recent-search-field) input{
+  width:100%;
+  height:100%!important;
+  min-height:0!important;
+  border:0!important;
+  border-radius:0!important;
+  padding:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+.workspace .composer textarea{
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+
+/* Bright accents use a darker companion wherever the accent is rendered as ink. */
+.workspace:not(.theme-dark) .settings-v2 .settings-nav-list>button.active svg,
+.workspace:not(.theme-dark) .settings-v2 .settings-pane-header>span,
+.workspace:not(.theme-dark) .settings-v2 .settings-trust-card>svg,
+.workspace:not(.theme-dark) .settings-v2 .storage-overview strong,
+.workspace:not(.theme-dark) .settings-v2 .billing-overview-icon,
+.workspace:not(.theme-dark) .settings-v2 .transaction-mark{
+  color:var(--workspace-accent-ink)!important;
+}
+.workspace:not(.theme-dark) .settings-v2 :is(input,textarea,.select-trigger):focus{
+  border-color:var(--workspace-accent-ink)!important;
+  box-shadow:0 0 0 1px var(--workspace-accent-ink)!important;
+}
+
+@keyframes workspace-mobile-scrim-in{from{opacity:0}to{opacity:1}}
+@keyframes workspace-mobile-pop-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes workspace-mobile-modal-in{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+@media(max-width:700px){
+  /* Reserve a real top lane for the hamburger on pages without a workspace header. */
+  .workspace .projects-page,
+  .workspace .library-page{
+    padding-top:64px!important;
+  }
+  .workspace .mobile-nav-toggle{
+    top:10px!important;
+    left:10px!important;
+    z-index:95!important;
+    transition:opacity .18s ease,transform .18s ease,background-color .18s ease!important;
+  }
+  .workspace:has(.modal-backdrop) .mobile-nav-toggle{opacity:0!important;pointer-events:none!important}
+  .workspace .left-sidebar{
+    transform:translateX(-104%)!important;
+    transition:transform .26s cubic-bezier(.22,.78,.24,1)!important;
+    will-change:transform;
+  }
+  .workspace:not(.left-collapsed) .left-sidebar{transform:translateX(0)!important}
+  .workspace .mobile-scrim{animation:workspace-mobile-scrim-in .22s ease both}
+
+  /* Chat titles and their overflow action share one vertical center. */
+  .workspace .session-row{
+    min-height:40px!important;
+    grid-template-columns:minmax(0,1fr) 28px!important;
+    align-items:center!important;
+    gap:4px!important;
+    padding:0 4px 0 10px!important;
+  }
+  .workspace .session-open{
+    min-height:40px!important;
+    height:40px!important;
+    display:flex!important;
+    align-items:center!important;
+    padding:0!important;
+  }
+  .workspace .session-open>span{line-height:1.3!important}
+  .workspace .session-row-actions{
+    width:28px!important;
+    height:40px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    align-self:center!important;
+  }
+  .workspace .session-menu-trigger{
+    width:28px!important;
+    height:28px!important;
+    display:grid!important;
+    place-items:center!important;
+    opacity:1!important;
+  }
+
+  /* AI mode stays one compact control; its menu no longer becomes a bottom sheet. */
+  .workspace .ai-mode-trigger{
+    width:auto!important;
+    min-width:0!important;
+    height:30px!important;
+    min-height:30px!important;
+    gap:3px!important;
+    padding:0 5px!important;
+    border-radius:7px!important;
+    font-size:10px!important;
+  }
+  .workspace .ai-mode-trigger svg{width:11px!important;height:11px!important}
+  .workspace .ai-mode-popover{
+    position:fixed!important;
+    right:10px!important;
+    left:auto!important;
+    bottom:calc(68px + env(safe-area-inset-bottom))!important;
+    width:min(252px,calc(100vw - 20px))!important;
+    border-radius:10px!important;
+    animation:workspace-mobile-pop-in .18s ease both;
+  }
+  .workspace .ai-mode-popover>button{
+    min-height:44px!important;
+    gap:7px!important;
+    padding:7px 9px!important;
+  }
+  .workspace .ai-mode-option-copy{gap:1px!important}
+  .workspace .ai-mode-option-copy b{font-size:10px!important}
+  .workspace .ai-mode-option-copy small{font-size:8.5px!important}
+  .workspace .ai-mode-lock{max-width:92px!important;font-size:7.5px!important}
+
+  /* Settings navigation occupies its own visible row and remains horizontally reachable. */
+  .workspace .modal-backdrop .settings-modal.settings-reference.settings-v2{
+    width:calc(100vw - 12px)!important;
+    height:calc(100dvh - 12px)!important;
+    max-height:calc(100dvh - 12px)!important;
+    border-radius:14px!important;
+    animation:workspace-mobile-modal-in .22s cubic-bezier(.22,.78,.24,1) both;
+  }
+  .workspace .settings-v2 .settings-layout{
+    min-height:0!important;
+    grid-template-rows:auto minmax(0,1fr)!important;
+  }
+  .workspace .settings-v2 .settings-side{
+    min-height:94px!important;
+    max-height:none!important;
+    height:auto!important;
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    grid-template-rows:40px 40px!important;
+    align-content:start!important;
+    overflow:visible!important;
+    padding:8px 10px 6px!important;
+  }
+  .workspace .settings-v2 .settings-side-head{
+    grid-column:1/-1!important;
+    min-height:40px!important;
+    height:40px!important;
+    padding:0!important;
+  }
+  .workspace .settings-v2 .settings-close{margin-left:auto!important}
+  .workspace .settings-v2 .settings-sidebar-search{display:none!important}
+  .workspace .settings-v2 .settings-nav-list{
+    grid-column:1/-1!important;
+    min-width:0!important;
+    min-height:40px!important;
+    height:40px!important;
+    display:flex!important;
+    align-items:center!important;
+    gap:4px!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    padding:2px 0 4px!important;
+    scrollbar-width:none!important;
+  }
+  .workspace .settings-v2 .settings-nav-list::-webkit-scrollbar{display:none!important}
+  .workspace .settings-v2 .settings-nav-list>button{
+    flex:0 0 auto!important;
+    width:auto!important;
+    min-height:32px!important;
+    height:32px!important;
+    padding:0 9px!important;
+    white-space:nowrap!important;
+  }
+  .workspace .settings-v2 .settings-nav-list>button.active{
+    box-shadow:inset 0 -2px 0 var(--workspace-accent-ink)!important;
+  }
+  .workspace .settings-v2 .settings-content{
+    min-height:0!important;
+    overflow-y:auto!important;
+    padding:0 14px 22px!important;
+  }
+  .workspace .settings-v2 .settings-pane-header{padding-top:20px!important}
+  .workspace .settings-v2 .settings-row{
+    grid-template-columns:1fr!important;
+    align-items:start!important;
+    gap:9px!important;
+  }
+  .workspace .settings-v2 .settings-row .select-menu{width:100%!important}
+
+  .workspace .right-config{
+    transition:transform .27s cubic-bezier(.22,.78,.24,1)!important;
+    will-change:transform;
+  }
+  .workspace .session-menu{animation:workspace-mobile-pop-in .16s ease both}
+}
+
+@media(max-width:700px) and (prefers-reduced-motion:reduce){
+  .workspace .left-sidebar,
+  .workspace .right-config,
+  .workspace .mobile-nav-toggle{transition:none!important}
+  .workspace .mobile-scrim,
+  .workspace .ai-mode-popover,
+  .workspace .session-menu,
+  .workspace .settings-modal{animation:none!important}
+}
+.workspace[data-motion="reduce"] .left-sidebar,
+.workspace[data-motion="reduce"] .right-config,
+.workspace[data-motion="reduce"] .mobile-nav-toggle{transition:none!important}
