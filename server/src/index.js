@@ -969,7 +969,7 @@ function storageSummaryForUser(userId) {
     SELECT COALESCE(SUM(size_bytes), 0) AS used FROM (
       SELECT sha256, MAX(size_bytes) AS size_bytes FROM (
         SELECT COALESCE(NULLIF(sha256, ''), id) AS sha256, size_bytes
-        FROM document_files WHERE owner_user_id = ? AND deleted_at IS NULL
+        FROM document_files WHERE owner_user_id = ? AND deleted_at IS NULL AND COALESCE(is_extracted, 0) = 0
         UNION ALL
         SELECT COALESCE(NULLIF(sha256, ''), id) AS sha256, size_bytes
         FROM chat_attachments WHERE owner_user_id = ? AND deleted_at IS NULL
@@ -1000,9 +1000,9 @@ function storageSummaryForUser(userId) {
     createdAt: file.created_at,
   }));
   const documentFiles = db.prepare(`
-    SELECT id, original_name AS name, category AS type, size_bytes, sha256, created_at
+    SELECT id, original_name AS name, category AS type, size_bytes, sha256, is_extracted, created_at
     FROM document_files
-    WHERE owner_user_id = ? AND deleted_at IS NULL
+    WHERE owner_user_id = ? AND deleted_at IS NULL AND COALESCE(is_extracted, 0) = 0
     ORDER BY created_at DESC
     LIMIT 80
   `).all(userId).map((file) => ({

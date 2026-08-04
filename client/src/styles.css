@@ -9415,6 +9415,87 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   .chat-brief-panel{grid-template-columns:1fr!important}
 }
 
+.workspace .library-list .doc-file,
+.workspace .library-list .doc-file svg {
+  color:var(--workspace-muted)!important;
+}
+.workspace .library-list .doc-file {
+  background:var(--workspace-hover)!important;
+}
+
+/* Quiet controls: fields keep the same neutral surface and line in every state. */
+.workspace input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+.workspace textarea,
+.workspace .select-trigger,
+.workspace .select-options {
+  background:var(--workspace-card)!important;
+  border-color:var(--workspace-line)!important;
+  color:var(--workspace-text)!important;
+}
+.workspace input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):focus,
+.workspace textarea:focus,
+.workspace .select-trigger:focus,
+.workspace .select-trigger:hover {
+  background:var(--workspace-card)!important;
+  border-color:var(--workspace-line)!important;
+  box-shadow:0 0 0 1px var(--workspace-line)!important;
+}
+
+/* Room/chat rows stay vertically centered and the overflow menu remains neutral. */
+.workspace .session-row,
+.workspace .session-open,
+.workspace .session-row-actions { align-items:center!important; }
+.workspace .session-menu-trigger,
+.workspace .session-menu-trigger:hover,
+.workspace .session-menu-trigger:focus-visible { color:var(--workspace-muted)!important; }
+.workspace .session-menu-trigger:hover { background:var(--workspace-hover)!important; }
+.workspace .session-menu-trigger svg { color:currentColor!important; }
+
+/* AI response toolbar mirrors the compact copy / rating / share row from the reference. */
+.workspace .message-actions { display:flex; align-items:center; gap:5px; min-height:27px; margin:3px 0 15px 32px; color:var(--workspace-muted); }
+.workspace .message-actions button { width:25px; height:25px; display:grid; place-items:center; border:0; border-radius:6px; padding:0; background:transparent; color:inherit; }
+.workspace .message-actions button:hover,
+.workspace .message-actions button.selected { background:var(--workspace-hover); color:var(--workspace-text); }
+.workspace .message-actions time { margin-left:6px; color:var(--workspace-muted); font-size:.56rem; }
+
+.identity-intake-follow-up { margin-top:5px!important; }
+
+/* Natural document actions: lime is reserved for primary status, not navigation. */
+.workspace .library-list article>button,
+.workspace .library-list article>button svg { color:var(--workspace-text)!important; }
+.workspace .library-list article>button:hover { background:var(--workspace-hover)!important; color:var(--workspace-text)!important; }
+
+@media(max-width:700px){
+  .workspace .message-actions { margin-left:0; margin-bottom:12px; }
+  .workspace .message-actions time { font-size:.52rem; }
+  .workspace .session-row { min-height:40px!important; }
+  .workspace .session-open { min-height:40px!important; padding-block:7px!important; }
+  .workspace .session-row-actions { align-self:center!important; }
+
+  /* Mobile settings keeps the complete menu strip, drops search, and pins close right. */
+  .workspace .settings-v2 .settings-side {
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto;
+    grid-template-rows:auto auto;
+    align-content:start;
+    gap:0;
+    overflow:hidden!important;
+    padding:10px 12px 8px!important;
+  }
+  .workspace .settings-v2 .settings-side-head { grid-column:1/-1; min-height:38px; padding:0 0 8px!important; }
+  .workspace .settings-v2 .settings-close { margin:0 0 0 auto!important; }
+  .workspace .settings-v2 .settings-sidebar-search { display:none!important; }
+  .workspace .settings-v2 .settings-nav-list { grid-column:1/-1; display:flex; gap:4px; overflow-x:auto; overflow-y:hidden; padding-bottom:1px; }
+  .workspace .settings-v2 .settings-nav-list>button { flex:0 0 auto; width:auto; min-height:34px; padding-inline:10px; }
+  .workspace .settings-v2 .settings-content { padding:0 16px 24px!important; }
+  .workspace .settings-v2 .settings-pane-header { padding-top:24px; }
+
+  .workspace .settings-v2 .storage-cards { grid-template-columns:1fr!important; }
+  .workspace .settings-v2 .storage-file-list article { grid-template-columns:24px minmax(0,1fr)!important; }
+  .workspace .settings-v2 .storage-file-list article>.button { grid-column:1/-1; justify-self:stretch; }
+  .workspace .settings-v2 .settings-danger-zone { grid-template-columns:1fr!important; }
+}
+
 /* Production intake, clarification, and quiz refinements. */
 .workspace .empty-chat .chat-welcome.chat-welcome-minimal h1{
   max-width:100%!important;
@@ -9455,6 +9536,30 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 }
 .pricing-compact-card>button:hover svg{transform:translateX(2px)}
 .pricing-compact-card>button svg{transition:transform .16s ease}
+
+@media(max-width:700px){
+  .workspace .workspace-main,
+  .workspace .chat-surface,
+  .workspace .chat-thread,
+  .workspace .thread-content { min-width:0!important; max-width:100vw!important; }
+  .workspace .library-page,
+  .workspace .projects-page { width:100%!important; max-width:100%!important; padding-inline:14px!important; }
+  .workspace .library-page>header,
+  .workspace .projects-header { align-items:flex-start!important; flex-direction:column!important; gap:12px!important; }
+  .workspace .library-page>header>button { align-self:flex-start; }
+  .workspace .search-field,
+  .workspace .projects-head-actions,
+  .workspace .project-search { width:100%!important; }
+  .workspace .projects-head-actions { display:grid!important; grid-template-columns:1fr!important; }
+  .workspace .projects-head-actions>.button { width:100%; }
+  .workspace .library-list article { grid-template-columns:1fr!important; gap:12px!important; }
+  .workspace .library-list article>button { justify-self:start; }
+  .workspace .projects-filter { overflow-x:auto!important; white-space:nowrap; }
+  .workspace .projects-table-head { display:none!important; }
+  .workspace .project-row-open { grid-template-columns:34px minmax(0,1fr)!important; }
+  .workspace .project-row-date { display:none!important; }
+  .workspace .project-pin-button { align-self:center; }
+}
 .pricing-compact-card>button.is-quiet:hover{
   background:var(--pricing-hover);
   border-color:var(--pricing-text);

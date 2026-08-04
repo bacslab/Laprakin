@@ -8,7 +8,7 @@ import {
   PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Save, Send, Settings2,
   ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, UploadCloud, X,
   ChevronRight, Database, Eye, GripVertical, Keyboard, MoreHorizontal, Pencil, Pin, PinOff, UserRound, Volume2, BellRing, Shield, Sliders, Monitor, Palette, Languages, CircleUserRound, LogOut as LogOutIcon, LayoutDashboard, Users, AlertTriangle, ClipboardList, Megaphone, RefreshCw, MessageSquareText, Activity, FileCog,
-  Copy, Upload,
+  Copy, Share2, ThumbsDown, ThumbsUp, Upload,
 } from 'lucide-react';
 import { api, clearCsrfToken, download, setCsrfToken } from './api';
 import { departments, programs } from './data';
@@ -1343,7 +1343,7 @@ function Workspace() {
   const resolvedTheme = useResolvedTheme(prefs.theme || 'system');
   const location = useLocation(); const navigate = useNavigate(); const uploadRef = useRef(null);
   const [sessions, setSessions] = useState([]); const [active, setActive] = useState(null); const [messages, setMessages] = useState([]); const [attachments, setAttachments] = useState([]); const [documentState, setDocumentState] = useState(null); const [workflow, setWorkflow] = useState(null); const [activeJob, setActiveJob] = useState(null);
-  const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
+  const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [pendingConfigRequest, setPendingConfigRequest] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
   const actionInFlightRef = useRef(false);
   const tutorialAutoOpenedRef = useRef(false);
   const [productUpdate, setProductUpdate] = useState(null);
@@ -1555,14 +1555,33 @@ function Workspace() {
     setInput('');
     setPendingLandingFiles([]);
     setIdentityIntake(null);
+    setPendingConfigRequest(null);
     setContextOpen(false);
     setRightOpen(false);
     setDocumentOpen(false);
     if (window.innerWidth <= 700) setLeftCollapsed(true);
     setRoute('chat');
   };
-  const openSession = async (id) => { try { const data = await api(`/chat/sessions/${id}`); hydrate(data); setRoute('chat'); setRightOpen(false); setDocumentOpen(false); setContextOpen(false); if (window.innerWidth <= 700) setLeftCollapsed(true); } catch (err) { setNotice(err.message); } };
-  const saveConfig = async () => { if (!active) return; setBusy(true); try { const data = await api(`/chat/sessions/${active.id}`, { method: 'PUT', body: sessionPayload({ ...config, courseGroup: config.configuration.courseName || 'Belum dikelompokkan' }) }); setActive(data.session); setSessions((old) => old.map((item) => item.id === data.session.id ? data.session : item)); setRightOpen(false); setNotice('Konfigurasi chat disimpan.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
+  const openSession = async (id) => { try { const data = await api(`/chat/sessions/${id}`); hydrate(data); setPendingConfigRequest(null); setRoute('chat'); setRightOpen(false); setDocumentOpen(false); setContextOpen(false); if (window.innerWidth <= 700) setLeftCollapsed(true); } catch (err) { setNotice(err.message); } };
+  const saveConfig = async () => {
+    if (!active) return;
+    setBusy(true);
+    try {
+      const data = await api(`/chat/sessions/${active.id}`, { method: 'PUT', body: sessionPayload({ ...config, courseGroup: config.configuration.courseName || 'Belum dikelompokkan' }) });
+      setActive(data.session);
+      setSessions((old) => old.map((item) => item.id === data.session.id ? data.session : item));
+      const queued = pendingConfigRequest;
+      setPendingConfigRequest(null);
+      setRightOpen(false);
+      setNotice('Konfigurasi chat disimpan.');
+      if (queued?.session?.id === data.session.id) {
+        const next = { ...queued, session: data.session };
+        if (!identityComplete) setIdentityIntake(next);
+        else await dispatchChatMessage(next);
+      }
+    } catch (err) { setNotice(err.message); }
+    finally { setBusy(false); }
+  };
   const dispatchChatMessage = async ({ session, content, files = [], kind = '' }) => {
     let current = session;
     setBusy(true);
@@ -1641,6 +1660,11 @@ function Workspace() {
     event?.preventDefault();
     if (!input.trim() && !pendingLandingFiles.length) return;
     let current = active;
+    const requiresConfiguration = !current;
+    if (pendingConfigRequest?.session?.id === current?.id) {
+      setRightOpen(true);
+      return;
+    }
     if (current?.document_id && documentState?.status === 'generated') {
       const content = input.trim() || 'Gunakan bahan tambahan ini untuk memperbarui laprak.';
       setInput('');
@@ -1694,7 +1718,7 @@ function Workspace() {
         return;
       }
     }
-    if (!current) current = await createSession(false);
+    if (!current) current = await createSession(true);
     if (!current) return;
     const content = input.trim() || 'Saya sudah menambahkan bahan untuk laprak ini.';
     const files = [...pendingLandingFiles];
@@ -1702,8 +1726,9 @@ function Workspace() {
     // upload dan respons AI selesai membuat pesan terlihat belum terkirim.
     setInput('');
     setPendingLandingFiles([]);
-    if (!identityComplete) {
-      setIdentityIntake({ session: current, content, files, kind: attachmentKind });
+    if (requiresConfiguration) {
+      setPendingConfigRequest({ session: current, content, files, kind: attachmentKind });
+      setRightOpen(true);
       return;
     }
     await dispatchChatMessage({ session: current, content, files, kind: attachmentKind });
@@ -2291,7 +2316,7 @@ function IdentityIntakeModal({ user, onSave, onBack, busy }) {
   const submit = async (event) => { event.preventDefault(); if (valid) await onSave(form); };
   return <div className="identity-intake-overlay" role="dialog" aria-modal="true" aria-labelledby="identity-intake-title">
     <form className="identity-intake-modal" onSubmit={submit}>
-      <header><span><UserRound size={17} /></span><div><small>Sekali saja</small><h2 id="identity-intake-title">Lengkapi identitas laprakmu</h2><p>Data ini dipakai untuk cover. Setelah disimpan, pesan yang tadi kamu kirim langsung diproses.</p></div></header>
+      <header><span><UserRound size={17} /></span><div><small>Sekali saja</small><h2 id="identity-intake-title">Lengkapi identitas laprakmu</h2><p>Identitas diperlukan hanya untuk pembuatan dokumen. Kami tidak dapat melihat dan mengakses data pengguna untuk keperluan apa pun.</p><p className="identity-intake-follow-up">Setelah disimpan, pesan yang tadi kamu kirim baru diproses.</p></div></header>
       <div className="identity-intake-grid">
         <label>Nama lengkap<input autoFocus autoComplete="name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Nama sesuai data kampus" /></label>
         <label>NPM / NIM<input inputMode="numeric" autoComplete="off" value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder="Nomor mahasiswa" /></label>
@@ -2340,6 +2365,40 @@ function MessageContent({ content }) {
       <p key={`text-${blockIndex}-${paragraphIndex}`}><InlineMessageText text={paragraph.trim()} /></p>
     ));
   })}</div>;
+}
+
+function AssistantMessageActions({ message }) {
+  const { setNotice } = useApp();
+  const [reaction, setReaction] = useState('');
+  const [copied, setCopied] = useState(false);
+  const text = String(message.content || '');
+  const timestamp = new Date(message.created_at || message.createdAt || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setNotice('Jawaban AI disalin.');
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch { setNotice('Jawaban AI belum dapat disalin.'); }
+  };
+  const share = async () => {
+    try {
+      if (navigator.share) await navigator.share({ title: 'Jawaban Laprakin', text });
+      else await navigator.clipboard.writeText(text);
+      setNotice(navigator.share ? 'Jawaban siap dibagikan.' : 'Jawaban disalin untuk dibagikan.');
+    } catch { /* Dialog share dibatalkan pengguna. */ }
+  };
+  const rate = (value) => {
+    setReaction((current) => current === value ? '' : value);
+    setNotice(value === 'up' ? 'Masukan positif tersimpan.' : 'Masukan perbaikan tersimpan.');
+  };
+  return <footer className="message-actions" aria-label="Aksi jawaban AI">
+    <button type="button" onClick={copy} aria-label="Salin jawaban" title="Salin jawaban">{copied ? <Check size={14} /> : <Copy size={14} />}</button>
+    <button type="button" className={reaction === 'up' ? 'selected' : ''} onClick={() => rate('up')} aria-label="Jawaban membantu" title="Membantu"><ThumbsUp size={14} /></button>
+    <button type="button" className={reaction === 'down' ? 'selected' : ''} onClick={() => rate('down')} aria-label="Jawaban perlu diperbaiki" title="Perlu diperbaiki"><ThumbsDown size={14} /></button>
+    <button type="button" onClick={share} aria-label="Bagikan jawaban" title="Bagikan jawaban"><Share2 size={14} /></button>
+    <time dateTime={message.created_at || message.createdAt}>{timestamp}</time>
+  </footer>;
 }
 
 function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz }) {
@@ -2405,6 +2464,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
           finishedAt={message.meta.thinkingFinishedAt || message.created_at}
         /> : null}
         <article className={`message ${message.role}`}><div><MessageContent content={message.content}/>{message.meta?.links?.length ? <div className="link-row">{message.meta.links.map((link) => <a key={link} href={link} target="_blank" rel="noreferrer"><Globe2 size={12} />{new URL(link).hostname}</a>)}</div> : null}</div></article>
+        {message.role === 'assistant' && <AssistantMessageActions message={message} />}
         {message.meta?.kind === 'document_ready' ? <DocumentCard documentState={documentState} activeJob={jobForMessage(message)} version={message.meta.documentVersion} onOpen={onOpenDocument} /> : null}
       </Fragment>)}
       {active && workflow?.state === 'CLARIFICATION_REQUIRED' && !active.document_id && <ChatBriefPanel config={config} updateConfig={updateConfig} workflow={workflow} busy={busy} onSubmit={(payload) => onWorkflowAction('SUBMIT_CLARIFICATION', payload)} />}

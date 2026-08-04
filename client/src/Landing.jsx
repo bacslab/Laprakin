@@ -19,6 +19,7 @@ const STEPS = [
   ['Kerjakan Quiz', 'Jawab quiz singkat untuk memastikan isi laporan sudah kamu pahami sebelum export.'],
   ['Export saat siap', 'Unduh draft ke Word dan lakukan pengecekan akhir sebelum dokumen dikumpulkan.'],
 ];
+const HOW_TO_IMAGES = STEPS.map((_, index) => `/landing/how-to/Slide ${index + 1}.png`);
 
 // Tiap bahan disebut apa adanya beserta bagian laporan yang memakainya. Tidak
 // memakai nama berkas contoh agar tidak terbaca sebagai tangkapan layar produk.
@@ -75,7 +76,9 @@ function MediaPlaceholder({ label }) {
 function StepCard({ index, active }) {
   const [title, text] = STEPS[index];
   return <article className={`fg-step-card ${active ? 'is-active' : ''}`} data-step-card={index} aria-hidden={!active}>
-    <MediaPlaceholder label="Product preview" />
+    <div className="fg-step-media">
+      <img src={HOW_TO_IMAGES[index]} alt={`Cara pakai Laprakin: ${title}`} />
+    </div>
     <div className="fg-step-copy">
       <h3>{title}</h3>
       <p>{text}</p>
@@ -143,9 +146,9 @@ export default function LandingPage({ navigate }) {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
 
     const lenis = new Lenis({
-      duration: 1.05,
+      duration: 0.62,
       smoothWheel: true,
-      wheelMultiplier: 0.9,
+      wheelMultiplier: 1.08,
       touchMultiplier: 1.05,
     });
     const updateLenis = (time) => lenis.raf(time * 1000);
@@ -250,7 +253,7 @@ export default function LandingPage({ navigate }) {
   const goTo = (id) => {
     const target = document.getElementById(id);
     if (!target) return;
-    if (lenisRef.current) lenisRef.current.scrollTo(target, { offset: -72, duration: 1.1 });
+    if (lenisRef.current) lenisRef.current.scrollTo(target, { offset: -72, duration: 0.68 });
     else target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   const updateStepOffset = (offset) => {
