@@ -24,13 +24,13 @@ def check(page, viewport):
     media_box = media.bounding_box()
     assert media_box and abs(media_box["width"] / media_box["height"] - 1.5) < 0.01
     if viewport["width"] > 700:
-        assert 459 <= feature.bounding_box()["height"] <= 461
+        assert feature.bounding_box()["height"] >= 460
     else:
         assert feature.bounding_box()["height"] < 460
     assert feature.locator(".fg-feature-copy span").count() == 0
-    assert float(feature.locator(".fg-feature-copy").evaluate("node => parseFloat(getComputedStyle(node).paddingLeft)")) >= 24
+    assert float(feature.locator(".fg-feature-copy").evaluate("node => parseFloat(getComputedStyle(node).paddingLeft)")) >= 28
     if viewport["width"] <= 700:
-        assert float(feature.locator(".fg-feature-copy").evaluate("node => parseFloat(getComputedStyle(node).paddingBottom)")) >= 18
+        assert float(feature.locator(".fg-feature-copy").evaluate("node => parseFloat(getComputedStyle(node).paddingBottom)")) >= 26
     assert page.locator(".fg-hero-video").evaluate("node => getComputedStyle(node).transform") != "none"
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     if viewport["width"] <= 700:
