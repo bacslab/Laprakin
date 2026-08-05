@@ -23,7 +23,8 @@ def check(page, viewport):
     rows = feature.evaluate("node => getComputedStyle(node).gridTemplateRows.split(' ').map(parseFloat)")
     assert 3.95 <= rows[1] / rows[0] <= 4.05
     assert 459 <= feature.bounding_box()["height"] <= 461
-    assert float(feature.locator(".fg-feature-copy").evaluate("node => parseFloat(getComputedStyle(node).paddingLeft)")) >= 22
+    assert feature.locator(".fg-feature-copy span").count() == 0
+    assert float(feature.locator(".fg-feature-copy").evaluate("node => parseFloat(getComputedStyle(node).paddingLeft)")) >= 26
     assert page.locator(".fg-hero-video").evaluate("node => getComputedStyle(node).transform") != "none"
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     if viewport["width"] <= 700:

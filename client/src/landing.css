@@ -143,10 +143,9 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
 .fg-features-stack{display:grid;gap:18px;margin-top:58px}
 .fg-feature-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
 .fg-feature-row article{height:600px;min-height:600px;display:grid;grid-template-rows:minmax(0,1fr) minmax(0,4fr);gap:0;overflow:hidden;border:1px solid var(--fg-border);border-radius:22px;background:#101010;box-shadow:0 28px 62px rgba(0,0,0,.32)}
-.fg-feature-copy{display:grid;grid-template-columns:auto minmax(0,1fr);align-content:center;align-items:center;gap:6px 10px;padding:14px 22px}
-.fg-feature-copy span{color:#707070;font:700 11px 'DM Mono',monospace;letter-spacing:.08em}
+.fg-feature-copy{display:block;padding:14px 30px 12px}
 .fg-feature-copy h3{margin:0;font-size:21px;line-height:1.2;letter-spacing:-.035em}
-.fg-feature-copy p{grid-column:1/-1;max-width:500px;margin:0;color:#a9a9a9;font-size:12px;line-height:1.45}
+.fg-feature-copy p{max-width:500px;margin:7px 0 0;color:#a9a9a9;font-size:12px;line-height:1.45}
 .fg-feature-row .fg-media-placeholder{position:relative;border-radius:0;background:#414141;transition:none}
 .fg-feature-row article:hover .fg-media-placeholder{transform:none}
 
@@ -254,7 +253,7 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
 
 /* Keep the 1:4 feature balance while making the media placeholder less dominant. */
 .fg-feature-row article{height:460px;min-height:460px}
-.fg-feature-copy{padding:20px 28px}
+.fg-feature-copy{padding:14px 30px 12px}
 
 @media(max-width:860px){
   .fg-source-grid{grid-template-columns:1fr;margin-top:38px}
@@ -286,7 +285,7 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
   .fg-step-controls{margin-top:12px;gap:16px}
   .fg-step-card{padding:20px;gap:18px}
   .fg-feature-row article{height:460px;min-height:460px}
-  .fg-feature-copy{padding:18px 22px}
+  .fg-feature-copy{padding:14px 26px 12px}
   .fg-footer{height:600px;margin-top:10px}
   .fg-footer-hills{z-index:3;display:block;opacity:1}
   .fg-footer-hills img{bottom:70px;width:1100px;opacity:1;filter:brightness(1.35) saturate(1.15)}

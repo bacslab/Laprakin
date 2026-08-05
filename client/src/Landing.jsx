@@ -532,9 +532,9 @@ export default function LandingPage({ navigate }) {
           <p>Empat kemampuan utama yang membantu dari bahan sampai dokumen siap ditinjau.</p>
         </SectionTitle>
         <div className="fg-features-stack">
-          {FEATURE_ROWS.map((row, rowIndex) => <div className="fg-feature-row" key={row[0][0]}>
-            {row.map(([title, text], index) => <article key={title}>
-              <div className="fg-feature-copy"><span>0{(rowIndex * 2) + index + 1}</span><h3>{title}</h3><p>{text}</p></div>
+          {FEATURE_ROWS.map((row) => <div className="fg-feature-row" key={row[0][0]}>
+            {row.map(([title, text]) => <article key={title}>
+              <div className="fg-feature-copy"><h3>{title}</h3><p>{text}</p></div>
               <MediaPlaceholder label="Feature preview" />
             </article>)}
           </div>)}
