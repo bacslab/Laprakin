@@ -140,8 +140,6 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
 .fg-compare{display:flex;flex-direction:column;align-items:center}
 .fg-compare-video{width:min(960px,100%);aspect-ratio:16/9;margin-top:58px;border-radius:24px;background:#3c3c3c;box-shadow:0 28px 70px rgba(0,0,0,.28)}
 .fg-play-placeholder{position:absolute;z-index:2;left:50%;top:50%;width:64px;height:64px;transform:translate(-50%,-50%);display:grid;place-items:center;border:1px solid #777;border-radius:999px;background:#e6e6e6;color:#222}
-.fg-compare-note{max-width:690px;margin:20px auto 0;color:#858585;font-size:12px;line-height:1.6;text-align:center}
-
 .fg-features-stack{display:grid;gap:18px;margin-top:58px}
 .fg-feature-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
 .fg-feature-row article{height:600px;min-height:600px;display:grid;grid-template-rows:minmax(0,1fr) minmax(0,4fr);gap:0;overflow:hidden;border:1px solid var(--fg-border);border-radius:22px;background:#101010;box-shadow:0 28px 62px rgba(0,0,0,.32)}
@@ -255,7 +253,8 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
 .fg-statement-line{display:contents}
 
 /* Keep the 1:4 feature balance while making the media placeholder less dominant. */
-.fg-feature-row article{height:500px;min-height:500px}
+.fg-feature-row article{height:460px;min-height:460px}
+.fg-feature-copy{padding:20px 28px}
 
 @media(max-width:860px){
   .fg-source-grid{grid-template-columns:1fr;margin-top:38px}
@@ -285,10 +284,11 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
     padding:14px;
   }
   .fg-step-controls{margin-top:12px;gap:16px}
-  .fg-feature-row article{height:500px;min-height:500px}
+  .fg-step-card{padding:20px;gap:18px}
+  .fg-feature-row article{height:460px;min-height:460px}
+  .fg-feature-copy{padding:18px 22px}
   .fg-footer{height:600px;margin-top:10px}
   .fg-footer-hills{z-index:3;display:block;opacity:1}
-  .fg-footer-hills img{bottom:-30px;width:1100px;opacity:1}
-  .fg-footer-hills:before{box-shadow:inset 0 800px rgba(15,15,15,.12),inset 0 -100px 30px rgba(15,15,15,.18)}
-  .fg-footer-hills:after{top:52%;height:48%;background:linear-gradient(180deg,rgba(15,15,15,0) 12%,var(--fg-bg) 72%)}
+  .fg-footer-hills img{bottom:70px;width:1100px;opacity:1;filter:brightness(1.35) saturate(1.15)}
+  .fg-footer-hills:before,.fg-footer-hills:after{display:none}
 }

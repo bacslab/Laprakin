@@ -525,7 +525,6 @@ export default function LandingPage({ navigate }) {
             : <MediaPlaceholder label="Comparison video" />}
           {!media.compareVideoUrl && <button type="button" className="fg-play-placeholder" aria-label="Video perbandingan belum tersedia"><Play size={24} fill="currentColor" /></button>}
         </div>
-        <p className="fg-compare-note" data-aos="fade-up">Video akan menampilkan prompt, bahan, proses, dan output secara berdampingan—tanpa klaim yang dibuat-buat.</p>
       </section>
 
       <section id="fitur" className="fg-features fg-section fg-container">

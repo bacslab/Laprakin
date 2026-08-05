@@ -22,6 +22,8 @@ def check(page, viewport):
     assert media.evaluate("node => getComputedStyle(node).margin") == "0px"
     rows = feature.evaluate("node => getComputedStyle(node).gridTemplateRows.split(' ').map(parseFloat)")
     assert 3.95 <= rows[1] / rows[0] <= 4.05
+    assert 459 <= feature.bounding_box()["height"] <= 461
+    assert float(feature.locator(".fg-feature-copy").evaluate("node => parseFloat(getComputedStyle(node).paddingLeft)")) >= 22
     assert page.locator(".fg-hero-video").evaluate("node => getComputedStyle(node).transform") != "none"
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     if viewport["width"] <= 700:
@@ -32,9 +34,11 @@ def check(page, viewport):
         card_box = page.locator(".fg-step-card.is-active").bounding_box()
         controls_box = page.locator(".fg-step-controls").bounding_box()
         assert card_box and card_box["width"] <= 321 and controls_box and controls_box["y"] > card_box["y"] + card_box["height"]
+        assert float(page.locator(".fg-step-card.is-active").evaluate("node => parseFloat(getComputedStyle(node).paddingTop)")) >= 19
         page.locator(".fg-footer").scroll_into_view_if_needed()
         hills = page.locator(".fg-footer-hills img").bounding_box()
-        assert hills and hills["height"] > 0 and page.locator(".fg-footer-hills img").evaluate("node => getComputedStyle(node).opacity") == "1"
+        hills_style = page.locator(".fg-footer-hills img").evaluate("node => ({ opacity: getComputedStyle(node).opacity, bottom: getComputedStyle(node).bottom })")
+        assert hills and hills["height"] > 0 and hills_style["opacity"] == "1" and hills_style["bottom"] == "70px"
 
 
 with sync_playwright() as playwright:
