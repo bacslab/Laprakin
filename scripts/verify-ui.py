@@ -5,6 +5,7 @@ def check(page, viewport):
     page.set_viewport_size(viewport)
     page.goto("http://localhost:5173/", wait_until="networkidle")
     page.wait_for_selector(".fg-page")
+    page.wait_for_selector(".fg-step-card")
     assert page.locator(".fg-step-card").count() == 6
     assert page.locator(".fg-step-media img").count() == 6
     step_image = page.locator(".fg-step-media img").first
@@ -20,11 +21,16 @@ def check(page, viewport):
     media = feature.locator(".fg-media-placeholder")
     assert feature.evaluate("node => getComputedStyle(node).padding") == "0px"
     assert media.evaluate("node => getComputedStyle(node).margin") == "0px"
-    rows = feature.evaluate("node => getComputedStyle(node).gridTemplateRows.split(' ').map(parseFloat)")
-    assert 3.95 <= rows[1] / rows[0] <= 4.05
-    assert 459 <= feature.bounding_box()["height"] <= 461
+    media_box = media.bounding_box()
+    assert media_box and abs(media_box["width"] / media_box["height"] - 1.5) < 0.01
+    if viewport["width"] > 700:
+        assert 459 <= feature.bounding_box()["height"] <= 461
+    else:
+        assert feature.bounding_box()["height"] < 460
     assert feature.locator(".fg-feature-copy span").count() == 0
-    assert float(feature.locator(".fg-feature-copy").evaluate("node => parseFloat(getComputedStyle(node).paddingLeft)")) >= 26
+    assert float(feature.locator(".fg-feature-copy").evaluate("node => parseFloat(getComputedStyle(node).paddingLeft)")) >= 24
+    if viewport["width"] <= 700:
+        assert float(feature.locator(".fg-feature-copy").evaluate("node => parseFloat(getComputedStyle(node).paddingBottom)")) >= 18
     assert page.locator(".fg-hero-video").evaluate("node => getComputedStyle(node).transform") != "none"
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     if viewport["width"] <= 700:

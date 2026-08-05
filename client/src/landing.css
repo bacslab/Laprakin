@@ -291,3 +291,22 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
   .fg-footer-hills img{bottom:70px;width:1100px;opacity:1;filter:brightness(1.35) saturate(1.15)}
   .fg-footer-hills:before,.fg-footer-hills:after{display:none}
 }
+
+/* Feature media uses one source-friendly ratio at every breakpoint. */
+.fg-feature-row article{
+  height:auto;
+  min-height:0;
+  grid-template-rows:minmax(92px,auto) auto;
+}
+.fg-feature-copy{min-height:92px}
+.fg-feature-row .fg-media-placeholder{
+  width:100%;
+  height:auto;
+  min-height:0;
+  aspect-ratio:3/2;
+}
+
+@media(max-width:700px){
+  .fg-feature-row article{grid-template-rows:auto auto}
+  .fg-feature-copy{min-height:0;padding:18px 24px 20px}
+}
