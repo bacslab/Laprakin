@@ -3,7 +3,7 @@ import time
 from playwright.sync_api import sync_playwright
 
 
-BASE_URL = "http://127.0.0.1:5173"
+BASE_URL = "http://localhost:5173"
 stamp = int(time.time() * 1000)
 email = f"mobile-ui-{stamp}@example.test"
 password = "KataSandi-Mobile-2026"

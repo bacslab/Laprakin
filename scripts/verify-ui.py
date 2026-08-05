@@ -3,7 +3,7 @@ from playwright.sync_api import sync_playwright
 
 def check(page, viewport):
     page.set_viewport_size(viewport)
-    page.goto("http://127.0.0.1:5173/", wait_until="networkidle")
+    page.goto("http://localhost:5173/", wait_until="networkidle")
     page.wait_for_selector(".fg-page")
     assert page.locator(".fg-step-card").count() == 6
     assert page.locator(".fg-step-media img").count() == 6
@@ -24,6 +24,17 @@ def check(page, viewport):
     assert 3.95 <= rows[1] / rows[0] <= 4.05
     assert page.locator(".fg-hero-video").evaluate("node => getComputedStyle(node).transform") != "none"
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    if viewport["width"] <= 700:
+        lines = page.locator(".fg-statement-line")
+        assert lines.count() == 6
+        assert all(line.evaluate("node => getComputedStyle(node).whiteSpace") == "nowrap" for line in lines.all())
+        page.locator("#cara-pakai").scroll_into_view_if_needed()
+        card_box = page.locator(".fg-step-card.is-active").bounding_box()
+        controls_box = page.locator(".fg-step-controls").bounding_box()
+        assert card_box and card_box["width"] <= 321 and controls_box and controls_box["y"] > card_box["y"] + card_box["height"]
+        page.locator(".fg-footer").scroll_into_view_if_needed()
+        hills = page.locator(".fg-footer-hills img").bounding_box()
+        assert hills and hills["height"] > 0 and page.locator(".fg-footer-hills img").evaluate("node => getComputedStyle(node).opacity") == "1"
 
 
 with sync_playwright() as playwright:

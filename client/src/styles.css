@@ -10191,7 +10191,7 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 }
 
 /* One field system: standalone controls share one surface, radius, and inset. */
-.workspace input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+.workspace input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]):not(.project-search input):not(.search-field input):not(.settings-sidebar-search input):not(.recent-search-field input),
 .workspace textarea,
 .workspace .select-trigger{
   box-sizing:border-box;
@@ -10200,7 +10200,7 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   background:var(--workspace-card)!important;
   color:var(--workspace-text)!important;
 }
-.workspace input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]){
+.workspace input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]):not(.project-search input):not(.search-field input):not(.settings-sidebar-search input):not(.recent-search-field input){
   min-height:40px;
   padding:0 12px!important;
 }
@@ -10229,6 +10229,27 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   border-radius:0!important;
   background:transparent!important;
   box-shadow:none!important;
+}
+
+/* Nested search inputs are text only; the surrounding wrapper owns the field chrome. */
+.workspace .project-search input,
+.workspace .search-field input,
+.workspace .settings-reference .settings-sidebar-search input,
+.workspace .recent-search-field input{
+  min-height:0!important;
+  height:100%!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  outline:0!important;
+}
+
+/* In light mode the greeting keeps the product name neutral across every accent. */
+.workspace:not(.theme-dark) .chat-welcome.chat-welcome-minimal h1 em,
+.workspace:not(.theme-dark) .empty-chat .chat-welcome h1 em{
+  color:#000!important;
 }
 
 /* Bright accents use a darker companion wherever the accent is rendered as ink. */

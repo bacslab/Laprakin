@@ -10,6 +10,14 @@ gsap.registerPlugin(ScrollTrigger);
 
 const STATEMENT_COPY = 'Laprakin membantu merapikan proses penulisan, supaya energi kamu tetap tercurah pada praktikum dan proses belajar.';
 const STATEMENT_WORDS = STATEMENT_COPY.split(' ');
+const STATEMENT_LINES = [
+  ['Laprakin', 'membantu'],
+  ['merapikan', 'proses'],
+  ['penulisan,', 'supaya', 'energi'],
+  ['kamu', 'tetap', 'tercurah'],
+  ['pada', 'praktikum', 'dan', 'proses'],
+  ['belajar.'],
+];
 
 const STEPS = [
   ['Masuk ke workspace', 'Buka satu ruang kerja untuk menyimpan bahan, percakapan, draft, dan revisi dalam satu alur.'],
@@ -447,7 +455,12 @@ export default function LandingPage({ navigate }) {
 
       <section ref={statementRef} className="fg-statement fg-container">
         <p aria-label={STATEMENT_COPY}>
-          {STATEMENT_WORDS.map((word, index) => <span key={`${word}-${index}`} aria-hidden="true" className={`fg-statement-word ${index === 0 ? 'is-accent' : ''}`}>{word}</span>)}
+          {STATEMENT_LINES.map((line, lineIndex) => <span key={lineIndex} className="fg-statement-line">
+            {line.map((word) => {
+              const index = STATEMENT_WORDS.indexOf(word);
+              return <span key={`${word}-${lineIndex}`} aria-hidden="true" className={`fg-statement-word ${index === 0 ? 'is-accent' : ''}`}>{word}</span>;
+            })}
+          </span>)}
         </p>
       </section>
 
