@@ -41,8 +41,14 @@ const SOURCES = [
 const FEATURES = [
   ['Upload berbagai sumber', 'Masukkan PDF, DOCX, screenshot, gambar, spreadsheet, teks, dan tautan dalam satu workspace.'],
   ['Mode AI sesuai kebutuhan', 'Gunakan Basic untuk tugas harian, Thinking untuk analisis, dan XtraThink untuk pembahasan yang lebih kompleks.'],
-  ['Export ke Word', 'Unduh laporan dalam format DOCX untuk diperiksa, dirapikan, dan dikumpulkan saat sudah siap.'],
-  ['Personalisasi penulisan', 'Atur gaya bahasa, sudut pandang, struktur awal, dan instruksi tambahan sebagai acuan AI.'],
+  ['Lengkapi identitas akademik', 'Isi profil akademik dan data laporan agar dokumen mengikuti kebutuhanmu. Data ini dipakai hanya saat pembuatan dokumen.'],
+  ['Personalisasi penulisan', 'Atur nama panggilan, gaya bahasa, sudut pandang, struktur awal, dan instruksi tambahan sebagai acuan AI.'],
+];
+const FEATURE_IMAGES = [
+  '/landing/fitur/Fitur 1.png',
+  '/landing/fitur/Fitur 2.png',
+  '/landing/fitur/Fitur 3.png',
+  '/landing/fitur/Fitur 4.png',
 ];
 const FEATURE_ROWS = Array.from({ length: Math.ceil(FEATURES.length / 2) }, (_, index) => FEATURES.slice(index * 2, index * 2 + 2));
 
@@ -532,11 +538,14 @@ export default function LandingPage({ navigate }) {
           <p>Empat kemampuan utama yang membantu dari bahan sampai dokumen siap ditinjau.</p>
         </SectionTitle>
         <div className="fg-features-stack">
-          {FEATURE_ROWS.map((row) => <div className="fg-feature-row" key={row[0][0]}>
-            {row.map(([title, text]) => <article key={title}>
+          {FEATURE_ROWS.map((row, rowIndex) => <div className="fg-feature-row" key={row[0][0]}>
+            {row.map(([title, text], columnIndex) => {
+              const featureIndex = rowIndex * 2 + columnIndex;
+              return <article key={title}>
               <div className="fg-feature-copy"><h3>{title}</h3><p>{text}</p></div>
-              <MediaPlaceholder label="Feature preview" />
-            </article>)}
+              <img className="fg-feature-image" src={FEATURE_IMAGES[featureIndex]} alt={`Tampilan fitur Laprakin: ${title}`} />
+            </article>;
+            })}
           </div>)}
         </div>
       </section>

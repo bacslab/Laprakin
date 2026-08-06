@@ -6770,8 +6770,9 @@ body[data-laprakin-theme] .auth-page .auth-card h1{margin:0;color:var(--auth-tex
 .auth-page .google-button{height:42px;border:1px solid var(--auth-line);border-radius:10px;background:var(--auth-input);color:var(--auth-text);font-size:11px;font-weight:700;transition:border-color .2s ease,background-color .2s ease,color .2s ease}
 .auth-page .google-button:hover{border-color:var(--auth-line);background:var(--auth-soft);color:var(--auth-text)}
 .auth-page .google-button b{width:19px;height:19px;display:grid;place-items:center;border-radius:50%;background:var(--auth-text);color:var(--auth-surface);font-size:10px}
-.auth-divider{height:1px;position:relative;margin:1px 0;background:var(--auth-line);text-align:center}
-.auth-divider span{position:relative;top:-8px;padding:0 10px;background:var(--auth-surface);color:var(--auth-muted);font-size:8px;text-transform:uppercase;letter-spacing:.08em}
+.auth-divider{display:flex;align-items:center;gap:12px;margin:4px 0;color:var(--auth-muted);text-align:center}
+.auth-divider:before,.auth-divider:after{content:"";height:1px;flex:1;background:var(--auth-line)}
+.auth-divider span{position:static;padding:0;background:transparent;color:inherit;font-size:8px;line-height:1;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
 .auth-page .auth-form{display:grid;gap:12px}
 body[data-laprakin-theme] .auth-page .auth-form label{display:grid;gap:7px;color:var(--auth-text);font-size:10px;font-weight:680}
 .auth-page .auth-form label>span{display:flex;align-items:center;justify-content:space-between}

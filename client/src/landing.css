@@ -146,8 +146,8 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
 .fg-feature-copy{display:block;padding:14px 30px 12px}
 .fg-feature-copy h3{margin:0;font-size:21px;line-height:1.2;letter-spacing:-.035em}
 .fg-feature-copy p{max-width:500px;margin:7px 0 0;color:#a9a9a9;font-size:12px;line-height:1.45}
-.fg-feature-row .fg-media-placeholder{position:relative;border-radius:0;background:#414141;transition:none}
-.fg-feature-row article:hover .fg-media-placeholder{transform:none}
+.fg-feature-image{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:contain;background:#414141;transition:none}
+.fg-feature-row article:hover .fg-feature-image{transform:none}
 
 .fg-faq{display:flex;flex-direction:column;align-items:center}
 .fg-faq-list{width:min(920px,100%);display:grid;gap:8px;margin-top:54px}
@@ -299,11 +299,12 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
   grid-template-rows:minmax(92px,auto) auto;
 }
 .fg-feature-copy{min-height:96px;padding:18px 34px 18px}
-.fg-feature-row .fg-media-placeholder{
+.fg-feature-image{
   width:100%;
   height:auto;
   min-height:0;
   aspect-ratio:3/2;
+  object-fit:contain;
 }
 
 @media(max-width:700px){
