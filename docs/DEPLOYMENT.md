@@ -140,7 +140,7 @@ Simpan backup terenkripsi. Jangan menyimpan file laporan atau database user pada
 Repository menyediakan `ops/backup-laprakin.sh` dan systemd timer untuk snapshot SQLite yang konsisten, upload privat, serta media CMS. Backup dienkripsi AES-256-CBC/PBKDF2 dan disimpan 30 hari secara default.
 
 ```bash
-sudo install -d -o laprakin -g laprakin -m 700 /var/backups/laprakin
+sudo install -d -o root -g root -m 700 /var/backups/laprakin
 sudo install -m 0644 ops/laprakin-backup.service /etc/systemd/system/
 sudo install -m 0644 ops/laprakin-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -153,6 +153,8 @@ sudo systemctl start laprakin-backup.service
 Arsip disimpan di `/var/backups/laprakin/` dan kuncinya di `/var/backups/laprakin/.backup-key`, **bukan** di dalam `/opt/laprakin`. Ini wajib: proses deploy merotasi `/opt/laprakin` menjadi `/opt/laprakin-rollback-*`, sehingga arsip dan kunci yang berada di dalamnya akan terlantar. Karena skrip membuat kunci baru bila file kunci tidak ditemukan, kondisi itu membuat seluruh arsip lama **permanen tidak dapat didekripsi**.
 
 Unit systemd memanggil skrip lewat `/bin/bash` karena deploy dari archive dapat menghapus bit executable (`status=203/EXEC` bila dipanggil langsung).
+
+Unit backup berjalan sebagai `root` karena Docker Compose perlu membaca `server/.env` yang tetap dijaga `root:root` dengan permission `0600`; permission secret tidak perlu dilonggarkan hanya agar backup berjalan.
 
 Salin `.backup-key` ke password manager/secret vault terpisah, dan sinkronkan arsip ke object storage privat. Backup lokal pada disk VM yang sama bukan pengganti backup offsite.
 
