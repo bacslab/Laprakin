@@ -3183,6 +3183,10 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   const input = chatMessageSchema.parse(req.body || {});
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  const userConfiguration = parseJson(session.configuration_json, {});
+  if (!String(userConfiguration.courseName || '').trim() || !String(userConfiguration.moduleTitle || '').trim()) {
+    throw new HttpError(409, 'Isi mata kuliah dan modul atau materi sebelum memulai chat.', 'CHAT_CONFIGURATION_REQUIRED');
+  }
   if (!input.allowExternalAi) {
     throw new HttpError(412, 'Aktifkan provider AI eksternal di Settings > Data controls untuk memakai chat AI.', 'AI_CONSENT_REQUIRED');
   }
@@ -3240,34 +3244,6 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     } catch (error) {
       if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
       throw error;
-    }
-    const aiCourseName = isPlausibleAcademicContext(assistant.courseName) ? assistant.courseName : '';
-    const aiModuleTitle = isPlausibleAcademicContext(assistant.moduleTitle) ? assistant.moduleTitle : '';
-    const aiProjectName = isPlausibleAcademicContext(assistant.projectName) ? assistant.projectName : aiCourseName;
-    if (aiCourseName || aiModuleTitle || aiProjectName) {
-      const nextConfiguration = {
-        ...parseJson(refreshed.configuration_json, {}),
-        ...(aiCourseName ? { courseName: aiCourseName } : {}),
-        ...(aiModuleTitle ? { moduleTitle: aiModuleTitle } : {}),
-      };
-      db.prepare(`
-        UPDATE chat_sessions SET
-          configuration_json = ?,
-          course_name = CASE WHEN ? <> '' THEN ? ELSE course_name END,
-          practice_topic = CASE WHEN ? <> '' THEN ? ELSE practice_topic END,
-          course_group = CASE WHEN ? <> '' THEN ? ELSE course_group END,
-          updated_at = ?
-        WHERE id = ? AND owner_user_id = ?
-      `).run(
-        JSON.stringify(nextConfiguration),
-        aiCourseName, aiCourseName,
-        aiModuleTitle, aiModuleTitle,
-        aiProjectName, aiProjectName,
-        now(),
-        refreshed.id,
-        req.user.id,
-      );
-      refreshed = refreshChatWorkflow(refreshed.id, req.user);
     }
     const analysis = analyzeChatRequest({
       session: refreshed,

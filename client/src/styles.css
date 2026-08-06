@@ -10093,6 +10093,140 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   }
 }
 
+/* V63 - deterministic chat intake, elastic composer, and quieter settings UI. */
+.workspace .composer,
+.workspace .empty-chat .composer,
+.workspace .chat-surface.has-chat .composer{
+  min-height:0!important;
+}
+.workspace .composer textarea,
+.workspace .empty-chat .composer textarea,
+.workspace .chat-surface.has-chat .composer textarea{
+  min-height:0!important;
+  height:auto;
+  align-self:auto!important;
+}
+.workspace .message-turn-assistant .message-actions{
+  justify-content:flex-start!important;
+  margin-left:0!important;
+}
+.workspace .config-required-note{
+  display:grid;
+  grid-template-columns:18px minmax(0,1fr);
+  gap:9px;
+  align-items:start;
+  border:1px solid var(--workspace-line);
+  border-radius:10px;
+  padding:11px;
+  background:var(--workspace-hover);
+  color:var(--workspace-muted);
+}
+.workspace .config-required-note svg{margin-top:1px;color:var(--workspace-muted)}
+.workspace .config-required-note div{display:grid;gap:3px}
+.workspace .config-required-note b{color:var(--workspace-text);font-size:.61rem}
+.workspace .config-required-note p{margin:0;font-size:.52rem;line-height:1.5}
+
+.workspace .settings-v2 :is(
+  .billing-overview-icon,
+  .transaction-mark
+){
+  border:1px solid var(--workspace-line)!important;
+  background:var(--workspace-hover)!important;
+  color:var(--workspace-muted)!important;
+}
+.workspace .settings-v2 :is(
+  .storage-cards>span>svg,
+  .storage-file-list article>svg,
+  .settings-empty-state>svg,
+  .safety-account-status>svg,
+  .settings-connected-status,
+  .settings-trust-card>svg
+){
+  color:var(--workspace-muted)!important;
+}
+.workspace .settings-v2 .settings-connected-status{
+  border-color:var(--workspace-line)!important;
+  background:var(--workspace-hover)!important;
+}
+
+.workspace .feedback-modal-v2{
+  width:min(850px,calc(100vw - 32px))!important;
+  max-height:min(680px,calc(100dvh - 32px))!important;
+}
+.workspace .feedback-modal-v2 .feedback-layout{
+  min-height:0!important;
+  grid-template-columns:minmax(0,1fr) 270px!important;
+  overflow:hidden;
+}
+.workspace .feedback-modal-v2 .feedback-form{
+  min-width:0;
+  max-height:calc(100dvh - 92px);
+  gap:12px!important;
+  overflow-y:auto;
+  padding:20px 22px!important;
+  scrollbar-width:thin;
+}
+.workspace .feedback-modal-v2 .feedback-form>header h2{
+  margin-top:5px;
+  font-size:1.04rem;
+}
+.workspace .feedback-modal-v2 .feedback-form>header p{
+  max-width:540px;
+  line-height:1.55;
+}
+.workspace .feedback-modal-v2 .feedback-rating legend small,
+.workspace .feedback-modal-v2 .feedback-consent label>span small{
+  color:var(--workspace-muted);
+  font-size:.47rem;
+  font-weight:600;
+}
+.workspace .feedback-modal-v2 .feedback-rating>div{gap:5px}
+.workspace .feedback-modal-v2 .feedback-rating button{min-height:42px}
+.workspace .feedback-modal-v2 .feedback-body textarea{min-height:96px!important}
+.workspace .feedback-modal-v2 .feedback-consent{
+  grid-template-columns:1fr!important;
+  gap:7px!important;
+}
+.workspace .feedback-modal-v2 .feedback-consent .toggle-control{
+  min-height:52px!important;
+  padding:9px 10px!important;
+}
+.workspace .feedback-modal-v2 .feedback-submit{
+  width:max-content;
+  min-width:148px;
+  justify-self:end;
+  padding-inline:16px;
+}
+.workspace .feedback-modal-v2 .feedback-history{
+  max-height:calc(100dvh - 92px)!important;
+  padding:18px!important;
+}
+.workspace .feedback-modal-v2 .feedback-empty{
+  min-height:220px!important;
+  padding:24px 8px;
+}
+
+@media(max-width:700px){
+  .workspace .feedback-modal-v2 .feedback-layout{
+    display:block!important;
+    max-height:calc(100dvh - 72px)!important;
+    overflow-y:auto!important;
+  }
+  .workspace .feedback-modal-v2 .feedback-form{
+    max-height:none;
+    overflow:visible;
+    padding:17px!important;
+  }
+  .workspace .feedback-modal-v2 .feedback-history{
+    max-height:none!important;
+    padding:17px!important;
+  }
+  .workspace .feedback-modal-v2 .feedback-submit{
+    width:100%;
+    justify-self:stretch;
+  }
+}
+
 @media(max-width:700px){
   .workspace .workspace-header{
     padding-left:56px!important;
@@ -10645,4 +10779,14 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
     display:inline-flex!important;
     justify-self:end!important;
   }
+}
+
+/* Settings content icons remain neutral regardless of the selected accent. */
+.workspace .settings-v2 :is(.billing-overview-icon,.transaction-mark){
+  border-color:var(--workspace-line)!important;
+  background:var(--workspace-hover)!important;
+  color:var(--workspace-muted)!important;
+}
+.workspace .settings-v2 :is(.storage-cards>span>svg,.storage-file-list article>svg,.settings-empty-state>svg,.safety-account-status>svg,.settings-connected-status,.settings-trust-card>svg){
+  color:var(--workspace-muted)!important;
 }

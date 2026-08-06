@@ -73,8 +73,9 @@ export function generateChatTitle({ documentType = 'lab_report', courseName = ''
   const course = normalizeContextValue(courseName);
   const topic = normalizeContextValue(practiceTopic);
   if (!course && !topic) return '';
-  const prefix = documentType === 'lab_report' ? 'Laprak' : documentType === 'proposal' ? 'Proposal' : documentType === 'paper' ? 'Makalah' : documentType === 'journal' ? 'Jurnal' : 'Tugas';
-  return `${prefix} ${[course, topic].filter(Boolean).join(' - ')}`.replace(/\s+/g, ' ').trim().slice(0, 100);
+  // Room chat dinamai dari materi yang pengguna isi. Jenis dokumen dan mata
+  // kuliah sudah punya tempat sendiri sehingga judul tidak perlu mengulangnya.
+  return (topic || course).replace(/\s+/g, ' ').trim().slice(0, 100);
 }
 
 export function analyzeChatRequest({ session = {}, messages = [], attachments = [] }) {
@@ -233,11 +234,11 @@ export function inferChatContext({ messages = [], configuration = {} }) {
     if (!content) continue;
     const courseName = firstContextMatch(content, COURSE_PATTERNS);
     const moduleTitle = firstContextMatch(content, MODULE_PATTERNS);
-    if (courseName) {
+    if (courseName && !normalizeContextValue(next.courseName)) {
       next.courseName = courseName;
       extracted.courseName = courseName;
     }
-    if (moduleTitle) {
+    if (moduleTitle && !normalizeContextValue(next.moduleTitle)) {
       next.moduleTitle = moduleTitle;
       extracted.moduleTitle = moduleTitle;
     }

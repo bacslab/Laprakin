@@ -8,7 +8,7 @@ import {
   PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Save, Send, Settings2,
   ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, UploadCloud, X,
   ChevronRight, Database, Eye, GripVertical, Keyboard, MoreHorizontal, Pencil, Pin, PinOff, UserRound, Volume2, BellRing, Shield, Sliders, Monitor, Palette, Languages, CircleUserRound, LogOut as LogOutIcon, LayoutDashboard, Users, AlertTriangle, ClipboardList, Megaphone, RefreshCw, MessageSquareText, Activity, FileCog,
-  Copy, Share2, ThumbsDown, ThumbsUp, Upload,
+  Copy, ThumbsDown, ThumbsUp, Upload,
 } from 'lucide-react';
 import { api, clearCsrfToken, download, setCsrfToken } from './api';
 import { departments, programs } from './data';
@@ -1573,10 +1573,26 @@ function Workspace() {
   };
   const openSession = async (id) => { try { const data = await api(`/chat/sessions/${id}`); hydrate(data); setPendingConfigRequest(null); setRoute('chat'); setRightOpen(false); setDocumentOpen(false); setContextOpen(false); if (window.innerWidth <= 700) setLeftCollapsed(true); } catch (err) { setNotice(err.message); } };
   const saveConfig = async () => {
-    if (!active) return;
+    const targetSession = active || pendingConfigRequest?.session;
+    if (!targetSession) return;
+    const courseName = String(config.configuration.courseName || '').trim();
+    const moduleTitle = String(config.configuration.moduleTitle || '').trim();
+    if (!courseName || !moduleTitle) {
+      setNotice('Isi mata kuliah dan modul atau materi sebelum memulai chat.');
+      return;
+    }
     setBusy(true);
     try {
-      const data = await api(`/chat/sessions/${active.id}`, { method: 'PUT', body: sessionPayload({ ...config, courseGroup: config.configuration.courseName || 'Belum dikelompokkan' }) });
+      const nextTitle = pendingConfigRequest ? moduleTitle.slice(0, 100) : config.title;
+      const data = await api(`/chat/sessions/${targetSession.id}`, {
+        method: 'PUT',
+        body: sessionPayload({
+          ...config,
+          title: nextTitle,
+          configuration: { ...config.configuration, courseName, moduleTitle },
+          courseGroup: courseName,
+        }),
+      });
       setActive(data.session);
       setSessions((old) => old.map((item) => item.id === data.session.id ? data.session : item));
       const queued = pendingConfigRequest;
@@ -1670,7 +1686,7 @@ function Workspace() {
     if (!input.trim() && !pendingLandingFiles.length) return;
     let current = active;
     const requiresConfiguration = !current;
-    if (pendingConfigRequest?.session?.id === current?.id) {
+    if (current?.id && pendingConfigRequest?.session?.id === current.id) {
       setRightOpen(true);
       return;
     }
@@ -1731,15 +1747,15 @@ function Workspace() {
     if (!current) return;
     const content = input.trim() || 'Saya sudah menambahkan bahan untuk laprak ini.';
     const files = [...pendingLandingFiles];
-    // Composer harus langsung kembali kosong setelah submit. Menunggu seluruh
-    // upload dan respons AI selesai membuat pesan terlihat belum terkirim.
-    setInput('');
-    setPendingLandingFiles([]);
     if (requiresConfiguration) {
       setPendingConfigRequest({ session: current, content, files, kind: attachmentKind });
       setRightOpen(true);
       return;
     }
+    // Prompt new chat tetap terlihat selama konfigurasi wajib belum disimpan.
+    // Untuk chat yang siap diproses, composer langsung kembali ke ukuran awal.
+    setInput('');
+    setPendingLandingFiles([]);
     await dispatchChatMessage({ session: current, content, files, kind: attachmentKind });
   };
   const uploadFiles = async (current, files, kind = '', finalize = true) => {
@@ -2110,7 +2126,24 @@ function Workspace() {
     {page === 'chat' && <aside className={`right-config ${documentOpen ? 'right-document' : ''}`}>
       {documentOpen
         ? <DocumentSidePanel documentState={documentState} activeJob={activeJob} workflow={workflow} busy={busy || actionBusy} user={user} onClose={() => setDocumentOpen(false)} onAction={documentAction} onDownload={downloadExport} onRestoreVersion={restoreDocumentVersion} onStartQuiz={startDocumentQuiz} onSubmitQuiz={submitDocumentQuiz} />
-        : <div className="config-inner"><div className="right-head"><div><b>Konfigurasi chat</b><small>Hanya untuk laprak ini.</small></div><IconButton label="Tutup konfigurasi" onClick={() => setRightOpen(false)}><PanelRightClose size={16} /></IconButton></div>{active ? <><div className="right-body"><label>Nama laprak<input value={config.title} onChange={(event) => updateConfig({ title: event.target.value })} /></label><label>Mata kuliah<input value={config.configuration.courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Opsional" /></label><label>Modul atau konteks<input value={config.configuration.moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Opsional" /></label><label>Dosen pengampu <small>opsional</small><input value={config.configuration.lecturerName || ''} onChange={(event) => updateConfig({ configuration: { lecturerName: event.target.value } })} placeholder="Nama dosen" /></label><label>NIP dosen <small>opsional</small><input value={config.configuration.lecturerNip || ''} onChange={(event) => updateConfig({ configuration: { lecturerNip: event.target.value } })} placeholder="NIP jika ada" /></label><label>Jenis struktur<CustomSelect value={config.configuration.documentProfile} onChange={(value) => updateConfig({ configuration: { documentProfile: value } })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></label><div className="structure-choice"><button className={config.structureMode === 'guided' ? 'active' : ''} onClick={() => updateConfig({ structureMode: 'guided' })}><LayoutTemplate size={15} /><span><b>Struktur prodi</b><small>Dipakai otomatis.</small></span></button><button className={config.structureMode === 'custom' ? 'active' : ''} onClick={() => updateConfig({ structureMode: 'custom' })}><SlidersHorizontal size={15} /><span><b>Struktur khusus</b><small>Hanya bila tugas berbeda.</small></span></button></div>{config.structureMode === 'custom' && <label>Susunan bagian<textarea value={config.configuration.customStructure} onChange={(event) => updateConfig({ configuration: { customStructure: event.target.value } })} placeholder="Pendahuluan, hasil, pembahasan, kesimpulan" /></label>}<label>Instruksi tambahan<textarea value={config.configuration.instructions} onChange={(event) => updateConfig({ configuration: { instructions: event.target.value } })} placeholder="Contoh: fokus ke analisis hasil." /></label></div><div className="right-foot"><Button onClick={saveConfig} disabled={busy}><Save size={14} />Simpan</Button><small>Jurusan, prodi, gaya penulisan, dan billing ada di Settings. Dark mode bisa diubah dari header workspace.</small></div></> : <div className="empty-config"><PanelRightOpen size={20} /><b>Buat chat laprak dulu.</b><p>Panel ini baru dipakai untuk mengubah konteks tugas yang sedang dibuka.</p></div>}</div>}
+        : <div className="config-inner">
+          <div className="right-head"><div><b>Konfigurasi chat</b><small>{pendingConfigRequest ? 'Lengkapi sebelum AI mulai bekerja.' : 'Hanya untuk laprak ini.'}</small></div><IconButton label="Tutup konfigurasi" onClick={() => setRightOpen(false)}><PanelRightClose size={16} /></IconButton></div>
+          {(active || pendingConfigRequest?.session) ? <>
+            <div className="right-body">
+              {pendingConfigRequest && <div className="config-required-note"><CircleAlert size={16} /><div><b>Konteks wajib diisi</b><p>AI baru memproses prompt setelah mata kuliah dan materi disimpan.</p></div></div>}
+              {!pendingConfigRequest && <label>Nama chat<input value={config.title} onChange={(event) => updateConfig({ title: event.target.value })} /></label>}
+              <label>Mata kuliah <small>wajib</small><input required value={config.configuration.courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Contoh: Jaringan Komputer" /></label>
+              <label>Modul atau materi <small>wajib</small><input required value={config.configuration.moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Contoh: Routing Protocol" /></label>
+              <label>Dosen pengampu <small>opsional</small><input value={config.configuration.lecturerName || ''} onChange={(event) => updateConfig({ configuration: { lecturerName: event.target.value } })} placeholder="Nama dosen" /></label>
+              <label>NIP dosen <small>opsional</small><input value={config.configuration.lecturerNip || ''} onChange={(event) => updateConfig({ configuration: { lecturerNip: event.target.value } })} placeholder="NIP jika ada" /></label>
+              <label>Jenis struktur<CustomSelect value={config.configuration.documentProfile} onChange={(value) => updateConfig({ configuration: { documentProfile: value } })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></label>
+              <div className="structure-choice"><button className={config.structureMode === 'guided' ? 'active' : ''} onClick={() => updateConfig({ structureMode: 'guided' })}><LayoutTemplate size={15} /><span><b>Struktur prodi</b><small>Dipakai otomatis.</small></span></button><button className={config.structureMode === 'custom' ? 'active' : ''} onClick={() => updateConfig({ structureMode: 'custom' })}><SlidersHorizontal size={15} /><span><b>Struktur khusus</b><small>Hanya bila tugas berbeda.</small></span></button></div>
+              {config.structureMode === 'custom' && <label>Susunan bagian<textarea value={config.configuration.customStructure} onChange={(event) => updateConfig({ configuration: { customStructure: event.target.value } })} placeholder="Pendahuluan, hasil, pembahasan, kesimpulan" /></label>}
+              <label>Instruksi tambahan<textarea value={config.configuration.instructions} onChange={(event) => updateConfig({ configuration: { instructions: event.target.value } })} placeholder="Contoh: fokus ke analisis hasil." /></label>
+            </div>
+            <div className="right-foot"><Button onClick={saveConfig} disabled={busy}><Save size={14} />{pendingConfigRequest ? 'Simpan & mulai' : 'Simpan'}</Button><small>Mata kuliah dan materi disimpan persis dari isianmu, bukan ditebak AI.</small></div>
+          </> : <div className="empty-config"><PanelRightOpen size={20} /><b>Belum ada chat aktif.</b><p>Kirim prompt untuk membuka konfigurasi awal.</p></div>}
+        </div>}
     </aside>}
     {SETTINGS_MODAL_TABS[modal] && <SettingsModal initialTab={SETTINGS_MODAL_TABS[modal]} onClose={() => setModal(null)} onSaved={refreshSession} onArchivedChanged={loadSessions} onOpenBilling={() => { setModal(null); navigate('/pricing'); }} prefs={prefs} setPrefs={setPrefs} />}{modal === 'help' && <HelpModal onClose={() => setModal(null)} />}{modal === 'feedback' && <FeedbackModal onClose={() => setModal(null)} />}{modal === 'notifications' && <NotificationModal onClose={() => setModal(null)} />}{identityIntake && <IdentityIntakeModal user={user} busy={busy} onSave={completeIdentityIntake} onBack={() => setIdentityIntake(null)} />}{tutorialOpen && <WorkspaceTutorial onClose={closeTutorial} />}{productUpdate && <ProductUpdatePopup update={productUpdate} onReceipt={recordProductUpdate} onClose={closeProductUpdate} />}
   </div>;
@@ -2389,13 +2422,6 @@ function AssistantMessageActions({ message }) {
       window.setTimeout(() => setCopied(false), 1400);
     } catch { setNotice('Jawaban AI belum dapat disalin.'); }
   };
-  const share = async () => {
-    try {
-      if (navigator.share) await navigator.share({ title: 'Jawaban Laprakin', text });
-      else await navigator.clipboard.writeText(text);
-      setNotice(navigator.share ? 'Jawaban siap dibagikan.' : 'Jawaban disalin untuk dibagikan.');
-    } catch { /* Dialog share dibatalkan pengguna. */ }
-  };
   const rate = (value) => {
     setReaction((current) => current === value ? '' : value);
     setNotice(value === 'up' ? 'Masukan positif tersimpan.' : 'Masukan perbaikan tersimpan.');
@@ -2404,7 +2430,6 @@ function AssistantMessageActions({ message }) {
     <button type="button" onClick={copy} aria-label="Salin jawaban" title="Salin jawaban">{copied ? <Check size={14} /> : <Copy size={14} />}</button>
     <button type="button" className={reaction === 'up' ? 'selected' : ''} onClick={() => rate('up')} aria-label="Jawaban membantu" title="Membantu"><ThumbsUp size={14} /></button>
     <button type="button" className={reaction === 'down' ? 'selected' : ''} onClick={() => rate('down')} aria-label="Jawaban perlu diperbaiki" title="Perlu diperbaiki"><ThumbsDown size={14} /></button>
-    <button type="button" onClick={share} aria-label="Bagikan jawaban" title="Bagikan jawaban"><Share2 size={14} /></button>
     <time dateTime={message.created_at || message.createdAt}>{timestamp}</time>
   </footer>;
 }
@@ -2779,20 +2804,18 @@ function resizeComposerTextarea(textarea) {
   const lineHeight = Number.parseFloat(style.lineHeight) || fontSize * 1.5;
   const verticalPadding = (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0);
   const verticalBorder = (Number.parseFloat(style.borderTopWidth) || 0) + (Number.parseFloat(style.borderBottomWidth) || 0);
-  const minContentHeight = lineHeight * 2 + verticalPadding;
-  const maxContentHeight = lineHeight * 11 + verticalPadding;
-  const minBoxHeight = Math.ceil(minContentHeight + verticalBorder);
+  const minBoxHeight = Math.ceil(lineHeight * 2 + verticalPadding + verticalBorder);
+  const maxBoxHeight = Math.ceil(lineHeight * 11 + verticalPadding + verticalBorder);
 
   // Reset to the minimum before reading scrollHeight. This makes deletion
   // shrink the composer immediately instead of measuring its previous height.
   textarea.classList.remove('is-overflowing');
   textarea.style.overflowY = 'hidden';
-  textarea.style.height = `${minBoxHeight}px`;
+  textarea.style.height = '0px';
 
-  const requiredContentHeight = Math.max(textarea.scrollHeight, minContentHeight);
-  const overflowing = requiredContentHeight > maxContentHeight + 2;
-  const targetContentHeight = Math.min(requiredContentHeight, maxContentHeight);
-  textarea.style.height = `${Math.ceil(targetContentHeight + verticalBorder)}px`;
+  const requiredBoxHeight = Math.max(textarea.scrollHeight + verticalBorder, minBoxHeight);
+  const overflowing = requiredBoxHeight > maxBoxHeight + 2;
+  textarea.style.height = `${Math.min(Math.ceil(requiredBoxHeight), maxBoxHeight)}px`;
   textarea.classList.toggle('is-overflowing', overflowing);
   textarea.style.overflowY = overflowing ? 'auto' : 'hidden';
 }
@@ -2829,7 +2852,7 @@ function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, up
   return <div className={`composer-zone ${centered ? 'composer-centered composer-claude' : ''}`}>
     {pendingFiles.length ? <div className="pending-files">{pendingFiles.map((file, index) => <PendingAttachmentChip file={file} index={index} key={`${file.name}-${index}`} onRemove={onRemovePending} />)}</div> : null}
     <form className={`composer ${centered ? 'composer-style-reference' : ''}`} onSubmit={send}>
-      <textarea ref={textareaRef} rows="2" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send(event); } }} placeholder={placeholder} />
+      <textarea ref={textareaRef} rows="2" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={placeholder} />
       <div className="composer-bottom-row">
         <div className="composer-left">
           <CustomSelect className="composer-select" value={attachmentKind} onChange={setAttachmentKind} ariaLabel="Jenis bahan" options={[{ value: '', label: 'Deteksi otomatis' }, { value: 'module', label: 'Modul' }, { value: 'instruction', label: 'Instruksi' }, { value: 'practice_evidence', label: 'Bukti praktik' }, { value: 'template', label: 'Template' }, { value: 'supporting_document', label: 'Dokumen pendukung' }]} />
@@ -3673,20 +3696,21 @@ function HelpModal({ onClose }) {
 function FeedbackModal({ onClose }) {
   const { setNotice } = useApp();
   const [items, setItems] = useState([]);
-  const [form, setForm] = useState({ category: 'idea', rating: 5, body: '', contactAllowed: false, allowPublicQuote: false, publicAlias: '' });
+  const emptyForm = { category: 'idea', rating: null, body: '', contactAllowed: false, allowPublicQuote: false, publicAlias: '' };
+  const [form, setForm] = useState(emptyForm);
   const [busy, setBusy] = useState(false);
   const categories = [{ value: 'idea', label: 'Ide fitur' }, { value: 'bug', label: 'Bug' }, { value: 'experience', label: 'Pengalaman' }, { value: 'other', label: 'Lainnya' }];
   useEffect(() => { api('/feedback').then((data) => setItems(data.items || [])).catch((err) => setNotice(err.message)); }, []);
-  const submit = async (event) => { event.preventDefault(); setBusy(true); try { const data = await api('/feedback', { method: 'POST', body: form }); setItems((old) => [data.item, ...old]); setForm({ category: 'idea', rating: 5, body: '', contactAllowed: false, allowPublicQuote: false, publicAlias: '' }); setNotice('Feedback terkirim.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
+  const submit = async (event) => { event.preventDefault(); if (busy || form.body.trim().length < 12 || (form.allowPublicQuote && !form.publicAlias.trim())) return; setBusy(true); try { const data = await api('/feedback', { method: 'POST', body: { ...form, body: form.body.trim(), publicAlias: form.publicAlias.trim() } }); setItems((old) => [data.item, ...old]); setForm(emptyForm); setNotice('Feedback terkirim.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   return <Modal title="Feedback" onClose={onClose} className="feedback-modal feedback-modal-v2">
     <div className="feedback-layout">
       <form className="feedback-form" onSubmit={submit}>
-        <header><span>Bagikan masukan</span><h2>Bantu kami memperbaiki Laprakin.</h2><p>Masukan yang spesifik lebih mudah ditindaklanjuti.</p></header>
-        <fieldset className="feedback-category"><legend>Kategori</legend><div>{categories.map((item) => <button type="button" key={item.value} className={form.category === item.value ? 'active' : ''} onClick={() => setForm({ ...form, category: item.value })}>{item.label}</button>)}</div></fieldset>
-        <fieldset className="feedback-rating"><legend>Pengalaman kamu</legend><div>{[1,2,3,4,5].map((rating) => <button type="button" key={rating} className={form.rating === rating ? 'active' : ''} onClick={() => setForm({ ...form, rating })}><b>{rating}</b><span>{rating === 1 ? 'Buruk' : rating === 5 ? 'Bagus' : ''}</span></button>)}</div></fieldset>
+        <header><span>Masukan produk</span><h2>Ceritakan yang perlu kami perbaiki.</h2><p>Jelaskan kendala atau hasil yang kamu harapkan. Tim akan membaca riwayatnya di panel sebelah.</p></header>
+        <fieldset className="feedback-category"><legend>Jenis masukan</legend><div>{categories.map((item) => <button type="button" key={item.value} aria-pressed={form.category === item.value} className={form.category === item.value ? 'active' : ''} onClick={() => setForm({ ...form, category: item.value })}>{item.label}</button>)}</div></fieldset>
+        <fieldset className="feedback-rating"><legend>Nilai pengalaman <small>opsional</small></legend><div>{[1,2,3,4,5].map((rating) => <button type="button" key={rating} aria-pressed={form.rating === rating} aria-label={`Nilai ${rating} dari 5`} className={form.rating === rating ? 'active' : ''} onClick={() => setForm({ ...form, rating: form.rating === rating ? null : rating })}><b>{rating}</b><span>{rating === 1 ? 'Buruk' : rating === 5 ? 'Bagus' : ''}</span></button>)}</div></fieldset>
         <label className="feedback-body"><span>Masukan</span><textarea minLength="12" maxLength="1200" required value={form.body} onChange={(event) => setForm({ ...form, body: event.target.value })} placeholder="Apa yang terjadi, dan seperti apa hasil yang kamu harapkan?"/><small>{form.body.length} / 1200</small></label>
-        <div className="feedback-consent"><Toggle checked={form.contactAllowed} onChange={(checked) => setForm({ ...form, contactAllowed: checked })} title="Boleh dihubungi" description="Tim dapat membalas lewat akun ini."/><Toggle checked={form.allowPublicQuote} onChange={(checked) => setForm({ ...form, allowPublicQuote: checked })} title="Boleh dijadikan testimoni" description="Hanya dengan alias yang kamu tentukan."/>{form.allowPublicQuote && <label><span>Alias publik</span><input value={form.publicAlias} onChange={(event) => setForm({ ...form, publicAlias: event.target.value })} placeholder="Mahasiswa TI semester 4"/></label>}</div>
-        <button className="feedback-submit" type="submit" disabled={busy || form.body.trim().length < 12}>{busy ? <LoaderCircle className="spin" size={15}/> : <Send size={15}/>}Kirim feedback</button>
+        <div className="feedback-consent"><Toggle checked={form.contactAllowed} onChange={(checked) => setForm({ ...form, contactAllowed: checked })} title="Boleh dihubungi" description="Tim dapat membalas lewat akun ini."/><Toggle checked={form.allowPublicQuote} onChange={(checked) => setForm({ ...form, allowPublicQuote: checked, publicAlias: checked ? form.publicAlias : '' })} title="Boleh dijadikan testimoni" description="Tidak dipublikasikan tanpa alias dan persetujuanmu."/>{form.allowPublicQuote && <label><span>Alias publik <small>wajib</small></span><input required value={form.publicAlias} onChange={(event) => setForm({ ...form, publicAlias: event.target.value })} placeholder="Contoh: Mahasiswa TI semester 4"/></label>}</div>
+        <button className="feedback-submit" type="submit" disabled={busy || form.body.trim().length < 12 || (form.allowPublicQuote && !form.publicAlias.trim())}>{busy ? <LoaderCircle className="spin" size={15}/> : <Send size={15}/>}Kirim masukan</button>
       </form>
       <aside className="feedback-history"><header><div><b>Riwayat</b><small>{items.length} masukan</small></div><MessageSquareText size={17}/></header>{items.length ? <div>{items.map((item) => <article key={item.id}><div><span>{item.category} · {item.rating ? `${item.rating}/5` : 'tanpa rating'}</span><small>{formatDate(item.updatedAt)}</small></div><p>{item.body}</p><em>{item.status}</em>{item.replies?.map((reply) => <div className="feedback-reply" key={reply.id}><b>Tim Laprakin</b><p>{reply.body}</p></div>)}</article>)}</div> : <div className="feedback-empty"><MessageSquareText size={18}/><b>Belum ada feedback</b><p>Masukan yang dikirim akan tersimpan dan balasan tim muncul di sini.</p></div>}</aside>
     </div>

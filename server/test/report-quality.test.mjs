@@ -9,6 +9,7 @@ import {
   AI_SLOP_PATTERNS,
   analyzeChatRequest,
   generateChatTitle,
+  inferChatContext,
   inferDocumentType,
   isPlausibleAcademicContext,
   reportParameterIssues,
@@ -41,13 +42,23 @@ test('inferDocumentType mengenali jenis dokumen dan menghormati urutan prioritas
 test('generateChatTitle hanya memakai konteks akademik yang spesifik', () => {
   assert.equal(
     generateChatTitle({ documentType: 'lab_report', courseName: 'Jaringan Komputer', practiceTopic: 'Routing Statis' }),
-    'Laprak Jaringan Komputer - Routing Statis',
+    'Routing Statis',
   );
-  assert.equal(generateChatTitle({ documentType: 'paper', courseName: 'Basis Data', practiceTopic: '' }), 'Makalah Basis Data');
+  assert.equal(generateChatTitle({ documentType: 'paper', courseName: 'Basis Data', practiceTopic: '' }), 'Basis Data');
 
   // Nilai generik ditolak sehingga judul tidak berubah menjadi "Laprak laprak".
   assert.equal(generateChatTitle({ courseName: 'laprak', practiceTopic: 'praktikum' }), '');
   assert.equal(generateChatTitle({}), '');
+});
+
+test('inferChatContext tidak menimpa mata kuliah dan modul yang sudah diisi user', () => {
+  const result = inferChatContext({
+    configuration: { courseName: 'Jaringan Komputer', moduleTitle: 'Routing Protocol' },
+    messages: [{ role: 'user', content: 'Buat untuk mata kuliah Basis Data dengan materi Trigger.' }],
+  });
+  assert.equal(result.configuration.courseName, 'Jaringan Komputer');
+  assert.equal(result.configuration.moduleTitle, 'Routing Protocol');
+  assert.deepEqual(result.extracted, {});
 });
 
 test('analyzeChatRequest meminta hanya konteks laprak yang belum disebutkan', () => {
