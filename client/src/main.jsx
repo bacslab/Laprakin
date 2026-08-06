@@ -2065,7 +2065,6 @@ function Workspace() {
         <Link to="/app" className="workspace-brand"><BrandMark /><b>Laprakin</b></Link>
         <IconButton className="sidebar-collapse-button" label={leftCollapsed ? 'Buka sidebar' : 'Minimalkan sidebar'} onClick={() => setLeftCollapsed(!leftCollapsed)}>{leftCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</IconButton>
       </div>
-      <Button className="new-chat" onClick={startNewChat} disabled={busy}><Plus size={15} /><span>Chat baru</span></Button>
       <nav className="workspace-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={page === key ? 'active' : ''} onClick={() => key === 'chat' ? startNewChat() : setRoute(key)} title={label}><Icon size={16} /><span>{label}</span></button>)}</nav>
       <div className="sidebar-session-scroll">
         {pinnedProjects.length || pinnedSessions.length ? <div className="pinned-session-block">
