@@ -10561,8 +10561,10 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   align-self:flex-end!important;
 }
 .workspace .message-source-bar .source-preview-list{
-  width:100%!important;
-  justify-content:flex-end!important;
+  width:max-content!important;
+  max-width:100%!important;
+  margin-left:auto!important;
+  justify-content:flex-start!important;
 }
 @keyframes workspace-sidebar-open{
   from{transform:translateX(-104%)}
@@ -10592,8 +10594,10 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
     width:min(88%,620px)!important;
   }
   .workspace .message-source-bar .source-preview-list{
-    width:100%!important;
-    justify-content:flex-end!important;
+    width:max-content!important;
+    max-width:100%!important;
+    margin-left:auto!important;
+    justify-content:flex-start!important;
   }
 }
 
