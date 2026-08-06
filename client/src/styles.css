@@ -10604,3 +10604,45 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 @media(prefers-reduced-motion:reduce){
   .workspace .left-sidebar{animation:none!important}
 }
+
+/* V62 - keep uploaded files on the same right edge as their user message. */
+.workspace .message-turn{min-width:0}
+.workspace .message-turn-user{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+}
+.workspace .message-turn-user .message-source-bar{
+  width:min(84%,680px)!important;
+  max-width:min(84%,680px)!important;
+  margin:0 0 8px auto!important;
+  align-self:flex-end!important;
+}
+.workspace .message-turn-user .message-source-bar .source-preview-list{
+  width:100%!important;
+  max-width:100%!important;
+  margin:0!important;
+  justify-content:flex-start!important;
+}
+.workspace .message-turn-user .message-source-bar .source-preview-item:first-child{
+  margin-left:auto;
+}
+
+@media(max-width:700px){
+  .workspace .message-turn-user .message-source-bar{
+    width:88%!important;
+    max-width:88%!important;
+  }
+  .workspace .settings-v2 .settings-row.theme-settings-row{
+    grid-template-columns:minmax(0,1fr) auto!important;
+    align-items:center!important;
+  }
+  .workspace .settings-v2 .theme-settings-row .theme-picker{
+    width:auto!important;
+    max-width:max-content!important;
+    min-width:0!important;
+    display:inline-flex!important;
+    justify-self:end!important;
+  }
+}
