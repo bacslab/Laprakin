@@ -5,8 +5,11 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-User=laprakin
-Group=laprakin
+# Compose membaca server/.env yang sengaja dijaga root:root 0600. Backup sudah
+# memiliki akses penuh ke data sensitif, jadi jalankan unit sebagai root tanpa
+# melonggarkan permission secret aplikasi.
+User=root
+Group=root
 WorkingDirectory=/opt/laprakin
 # Dipanggil lewat bash karena deploy dari archive dapat menghapus bit executable.
 ExecStart=/bin/bash /opt/laprakin/ops/backup-laprakin.sh
