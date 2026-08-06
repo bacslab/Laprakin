@@ -10552,3 +10552,51 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   .workspace .toast.toast-positive,
   .workspace .toast.toast-negative{animation:none}
 }
+
+
+/* V61 - keep mobile workspace controls visible and aligned to the chat rail. */
+.workspace .message-source-bar{
+  width:min(76%,620px)!important;
+  margin:0 0 -12px auto!important;
+  align-self:flex-end!important;
+}
+.workspace .message-source-bar .source-preview-list{
+  width:100%!important;
+  justify-content:flex-end!important;
+}
+@keyframes workspace-sidebar-open{
+  from{transform:translateX(-104%)}
+  to{transform:translateX(0)}
+}
+@media(max-width:700px){
+  .workspace .left-sidebar{
+    will-change:transform;
+    transition:transform .28s cubic-bezier(.22,.78,.24,1)!important;
+  }
+  .workspace:not(.left-collapsed) .left-sidebar{
+    animation:workspace-sidebar-open .28s cubic-bezier(.22,.78,.24,1) both;
+  }
+  .workspace .ai-mode-popover{
+    top:auto!important;
+    right:0!important;
+    bottom:calc(100% + 8px)!important;
+    transform-origin:bottom right!important;
+    z-index:120!important;
+  }
+  .workspace .settings-v2 .settings-row .theme-picker{
+    justify-self:end!important;
+    width:max-content!important;
+    min-width:0!important;
+  }
+  .workspace .message-source-bar{
+    width:min(88%,620px)!important;
+  }
+  .workspace .message-source-bar .source-preview-list{
+    width:100%!important;
+    justify-content:flex-end!important;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .workspace .left-sidebar{animation:none!important}
+}
