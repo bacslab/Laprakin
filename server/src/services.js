@@ -2579,13 +2579,13 @@ Aturan:
     try {
       parsed = JSON.parse(result.text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim());
     } catch {
-      throw new HttpError(502, 'Analisis gambar dari AI tidak lengkap. Silakan coba susun lagi.', 'AI_EVIDENCE_INVALID');
+      throw new HttpError(502, 'Analisis gambar belum lengkap. Silakan coba susun lagi.', 'AI_EVIDENCE_INVALID');
     }
     const byFileId = new Map((parsed.evidence || []).map((item) => [String(item.fileId), item]));
     for (const image of batch) {
       const evidence = byFileId.get(image.id);
       if (!evidence) {
-        throw new HttpError(502, `AI melewatkan bukti ${image.original_name}. Silakan coba susun lagi.`, 'AI_EVIDENCE_INCOMPLETE');
+        throw new HttpError(502, `Bukti ${image.original_name} belum berhasil dibaca. Silakan coba susun lagi.`, 'AI_EVIDENCE_INCOMPLETE');
       }
       const relevant = evidence.relevant === true;
       db.prepare(`
@@ -2729,7 +2729,7 @@ ${parameters.filter((parameter) => parameter.includeInDraft).map((parameter) => 
         throw error;
       }
       if (!Array.isArray(parsed.sections) || !parsed.sections.length) {
-        throw new HttpError(502, 'Provider AI belum mengembalikan bagian laporan yang valid.', 'AI_INVALID_RESPONSE');
+        throw new HttpError(502, 'Bagian laporan belum berhasil disusun. Silakan coba lagi.', 'AI_INVALID_RESPONSE');
       }
       return parsed.sections.slice(0, 12).map((section, index) => ({
         type: ['implementation', 'output', 'conclusion', 'appendix'].includes(section.type) ? section.type : 'implementation',
@@ -2737,7 +2737,7 @@ ${parameters.filter((parameter) => parameter.includeInDraft).map((parameter) => 
         content: String(section.content || '').slice(0, 16000),
       }));
     }
-    throw new HttpError(502, 'Respons AI belum lengkap. Silakan coba susun draft lagi.', 'AI_INVALID_RESPONSE');
+    throw new HttpError(502, 'Draft belum lengkap. Silakan coba susun lagi.', 'AI_INVALID_RESPONSE');
   };
 
   progress(54, 'Menyusun draft dari bahan terverifikasi');
@@ -2814,8 +2814,8 @@ export async function generateDocument(documentId, userId, progress, options = {
   if (!readiness.canGenerate) {
     throw new HttpError(422, `Draft belum bisa disusun. Lengkapi: ${readiness.missingForGenerate.map((item) => item.label).join(', ')}.`, 'DOCUMENT_INPUT_INCOMPLETE');
   }
-  if (!recipe[EXTERNAL_AI_CONSENT_KEY]) throw new HttpError(412, 'Aktifkan pemrosesan AI eksternal untuk menyusun draft.', 'AI_CONSENT_REQUIRED');
-  if (!isAiConfigured()) throw new HttpError(503, 'Kapasitas AI dokumen belum siap. Coba lagi setelah model NaraRouter tersedia.', 'AI_NOT_READY');
+  if (!recipe[EXTERNAL_AI_CONSENT_KEY]) throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum menyusun draft.', 'AI_CONSENT_REQUIRED');
+  if (!isAiConfigured()) throw new HttpError(503, 'Fitur ini belum siap digunakan. Coba lagi sebentar.', 'AI_NOT_READY');
 
   progress(20, 'Menyiapkan sumber dan bukti');
   mappings = await analyzeEvidenceImages({ document, user, images, mappings, progress });

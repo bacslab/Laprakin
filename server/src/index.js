@@ -100,6 +100,23 @@ import {
   extractText,
   syncConfiguredAdminAccount,
 } from './services.js';
+
+const FRIENDLY_AI_RETRY_MESSAGE = 'Belum berhasil diproses. Coba lagi sebentar. Bahanmu tetap tersimpan dan kredit tidak terpakai.';
+const FRIENDLY_AI_NOT_READY_MESSAGE = 'Fitur ini belum siap digunakan. Coba lagi sebentar.';
+const TECHNICAL_AI_ERROR_PATTERN = /(?:^|_)(?:AI|NARAROUTER|CLOUDFLARE)(?:_|$)|provider|api|quota|limit|resource_exhausted|timeout|network|forbidden|unauthorized|telegram_required|\b(?:401|403|429|5\d\d)\b/i;
+
+function isTechnicalAiError(error) {
+  return TECHNICAL_AI_ERROR_PATTERN.test(`${error?.code || ''} ${error?.message || ''}`);
+}
+
+function friendlyErrorMessage(error, status) {
+  if (isTechnicalAiError(error)) return status === 503 ? FRIENDLY_AI_NOT_READY_MESSAGE : FRIENDLY_AI_RETRY_MESSAGE;
+  return status >= 500 ? 'Belum berhasil diproses. Coba lagi sebentar.' : (error?.message || 'Permintaan belum dapat diproses.');
+}
+
+function friendlyErrorCode(error) {
+  return isTechnicalAiError(error) ? 'REQUEST_NOT_COMPLETED' : (error?.code || 'INTERNAL_ERROR');
+}
 import {
   buildOrderQuote,
   checkoutRequestSchema,
@@ -1134,7 +1151,7 @@ const supportLimiter = rateLimit({
   max: config.supportMaxMessagesPerHour,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: { message: 'Bantuan AI sedang dibatasi sebentar. Coba lagi nanti.', code: 'SUPPORT_RATE_LIMIT' } },
+  message: { error: { message: 'Bantuan sedang sibuk. Coba lagi nanti.', code: 'SUPPORT_RATE_LIMIT' } },
 });
 
 const aiChatLimiter = rateLimit({
@@ -1142,7 +1159,7 @@ const aiChatLimiter = rateLimit({
   max: config.aiMaxRequestsPerHour * 3,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: { message: 'Terlalu banyak permintaan AI dari jaringan ini. Coba lagi nanti.', code: 'AI_NETWORK_RATE_LIMIT' } },
+  message: { error: { message: 'Belum berhasil diproses. Coba lagi sebentar.', code: 'REQUEST_NOT_COMPLETED' } },
 });
 
 const integrationCheckLimiter = rateLimit({
@@ -1323,8 +1340,9 @@ function recordJobEvent(jobId) {
 function publicJob(job) {
   const terminal = ['failed', 'canceled'].includes(job.status);
   const rawError = String(job.error_message || '');
-  const safeError = /(?:JSON|Unterminated string|Unexpected (?:end|token)|position \d+)/i.test(rawError)
-    ? 'Respons AI sempat tidak lengkap. Coba susun draft lagi.'
+  const safeError = TECHNICAL_AI_ERROR_PATTERN.test(rawError)
+    || /(?:JSON|Unterminated string|Unexpected (?:end|token)|position \d+)/i.test(rawError)
+    ? FRIENDLY_AI_RETRY_MESSAGE
     : rawError;
   return {
     id: job.id,
@@ -1560,7 +1578,7 @@ async function runJob(job) {
           UPDATE jobs SET status = 'queued', progress = 0, message = ?, error_message = ?, run_after = ?, heartbeat_at = ?
           WHERE id = ?
         `).run(
-          providerBusy ? 'Kapasitas penuh, mencoba model cadangan' : 'Akan dicoba lagi',
+          providerBusy ? 'Mencoba lagi' : 'Akan dicoba lagi',
           error?.message || 'Terjadi kesalahan sementara.',
           runAfter,
           now(),
@@ -1593,9 +1611,7 @@ async function runJob(job) {
               nanoid(),
               session.id,
               job.owner_user_id,
-              providerBusy
-                ? 'Kapasitas penyusunan AI sedang penuh. Dokumen kerja dan bahanmu tetap tersimpan, credit tidak terpakai. Tekan Susun draft untuk melanjutkan saat kapasitas tersedia.'
-                : 'Draft belum berhasil disusun. Dokumen kerja dan bahanmu tetap tersimpan, credit tidak terpakai. Buka proses lalu tekan Susun draft untuk mencoba lagi.',
+              FRIENDLY_AI_RETRY_MESSAGE + ' Tekan Susun draft untuk mencoba lagi.',
               JSON.stringify({
                 kind: 'generation_failed',
                 jobId: job.id,
@@ -1690,7 +1706,6 @@ function recoverFailedGenerationSessions() {
       LIMIT 1
     `).get(session.id, session.owner_user_id, `%"jobId":"${session.job_id}"%`);
     if (!existingMessage) {
-      const providerBusy = /(?:kapasitas|RESOURCE_EXHAUSTED|TIMEOUT|NETWORK)/i.test(String(session.error_message || ''));
       db.prepare(`
         INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
         VALUES (?, ?, ?, 'assistant', ?, ?, ?)
@@ -1698,9 +1713,7 @@ function recoverFailedGenerationSessions() {
         nanoid(),
         session.id,
         session.owner_user_id,
-        providerBusy
-          ? 'Kapasitas penyusunan AI sempat penuh. Dokumen kerja dan bahanmu tetap tersimpan, credit tidak terpakai. Buka proses lalu tekan Susun draft untuk melanjutkan.'
-          : 'Penyusunan sebelumnya belum berhasil. Dokumen kerja dan bahanmu tetap tersimpan, credit tidak terpakai. Buka proses lalu tekan Susun draft untuk mencoba lagi.',
+        FRIENDLY_AI_RETRY_MESSAGE + ' Buka proses lalu tekan Susun draft untuk mencoba lagi.',
         JSON.stringify({ kind: 'generation_failed', jobId: session.job_id, recovered: true }),
         now(),
       );
@@ -3192,7 +3205,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     throw new HttpError(409, 'Isi mata kuliah dan modul atau materi sebelum memulai chat.', 'CHAT_CONFIGURATION_REQUIRED');
   }
   if (!input.allowExternalAi) {
-    throw new HttpError(412, 'Aktifkan provider AI eksternal di Settings > Data controls untuk memakai chat AI.', 'AI_CONSENT_REQUIRED');
+    throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum memakai chat.', 'AI_CONSENT_REQUIRED');
   }
   const aiModes = aiModeAccessForUser(req.user.id);
   if (!aiModes[input.aiMode]?.available) {
@@ -3244,7 +3257,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     try {
       assistant = isAiConfigured()
         ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode })
-        : { text: 'Provider AI belum aktif di environment lokal ini. Isi NARAROUTER_API_KEY untuk menguji respons AI nyata.', model: 'local-unconfigured', provider: 'local' };
+        : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
     } catch (error) {
       if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
       throw error;
@@ -3322,7 +3335,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   try {
     assistant = isAiConfigured()
       ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode })
-      : { text: 'Provider AI belum aktif di environment lokal ini. Isi NARAROUTER_API_KEY untuk menguji respons AI nyata.', model: 'local-unconfigured', provider: 'local' };
+      : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
   } catch (error) {
     if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
     throw error;
@@ -3795,8 +3808,8 @@ app.post('/api/documents/:id/generate', requireAuth, requireCsrf, requireDocumen
     throw new HttpError(422, `Draft belum bisa disusun. Lengkapi: ${readiness.missingForGenerate.map((item) => item.label).join(', ')}.`, 'DOCUMENT_INPUT_INCOMPLETE');
   }
   const recipe = parseJson(req.document.recipe_json, {});
-  if (!recipe.allowExternalAi) throw new HttpError(412, 'Aktifkan pemrosesan AI eksternal sebelum menyusun draft.', 'AI_CONSENT_REQUIRED');
-  if (!isAiConfigured()) throw new HttpError(503, 'Kapasitas AI dokumen belum siap. Coba lagi setelah model NaraRouter tersedia.', 'AI_NOT_READY');
+  if (!recipe.allowExternalAi) throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum menyusun draft.', 'AI_CONSENT_REQUIRED');
+  if (!isAiConfigured()) throw new HttpError(503, FRIENDLY_AI_NOT_READY_MESSAGE, 'AI_NOT_READY');
   const entitlement = revisionEntitlementForUser(req.user.id);
   const isInitialDraft = !req.document.generated_at;
   const revisionCount = Number(req.document.revision_count || 0);
@@ -3836,8 +3849,8 @@ app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentO
   if (!req.document.generated_at) throw new HttpError(409, 'Susun draft pertama sebelum meminta revisi.', 'REVISION_DRAFT_REQUIRED');
   ensureNoActiveJob(req.document.id, 'generate');
   const recipe = parseJson(req.document.recipe_json, {});
-  if (!recipe.allowExternalAi) throw new HttpError(412, 'Aktifkan pemrosesan AI eksternal sebelum merevisi draft.', 'AI_CONSENT_REQUIRED');
-  if (!isAiConfigured()) throw new HttpError(503, 'Kapasitas AI dokumen belum siap. Coba lagi setelah model NaraRouter tersedia.', 'AI_NOT_READY');
+  if (!recipe.allowExternalAi) throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum merevisi draft.', 'AI_CONSENT_REQUIRED');
+  if (!isAiConfigured()) throw new HttpError(503, FRIENDLY_AI_NOT_READY_MESSAGE, 'AI_NOT_READY');
   const entitlement = revisionEntitlementForUser(req.user.id);
   const revisionCount = Number(req.document.revision_count || 0);
   if (revisionCount >= entitlement.maxRevisions) {
@@ -5465,8 +5478,8 @@ app.use((err, req, res, _next) => {
   if (status >= 500) console.error(`[${req.requestId}]`, err);
   return res.status(status).json({
     error: {
-      message: status >= 500 ? 'Terjadi kesalahan pada server.' : (err.message || 'Permintaan tidak dapat diproses.'),
-      code: err.code || 'INTERNAL_ERROR',
+      message: friendlyErrorMessage(err, status),
+      code: friendlyErrorCode(err),
       ...(status < 500 && err.details ? { details: err.details } : {}),
       requestId: req.requestId,
     },
