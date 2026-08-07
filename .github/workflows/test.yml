@@ -45,4 +45,4 @@ jobs:
         with:
           fetch-depth: 0
       - name: Majukan branch release ke commit yang lulus
-        run: git push origin "${{ github.sha }}:refs/heads/release"
+        run: git push origin "${{ github.sha }}:refs/heads/release" --force
