@@ -3271,8 +3271,13 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     const isClarification = assistant.isClarification ?? initialWorkflow.state === 'CLARIFICATION_REQUIRED';
     const fallbackShouldGenerate = initialWorkflow.state === 'READY_TO_GENERATE'
       && (previousState === 'CLARIFICATION_REQUIRED' || analysis.hasAttachments || analysis.hasGenerationIntent);
+    // Jika konteks sudah lengkap dan user sudah mengirim bahan, pembuatan
+    // laprak tidak boleh berhenti hanya karena jawaban singkat dari model
+    // memilih RESPOND. Model tetap membantu menentukan konteks, tetapi
+    // kesiapan workflow menjadi sumber keputusan eksekusinya.
     const autoGenerate = initialWorkflow.state === 'READY_TO_GENERATE'
-      && (assistant.shouldGenerate ?? fallbackShouldGenerate);
+      && !isClarification
+      && (assistant.shouldGenerate === true || fallbackShouldGenerate);
     if (!isClarification && refreshed.course_name) {
       refreshed = await refreshChatWorkPlan(refreshed, req.user, { content: input.content, aiMode: input.aiMode });
     }

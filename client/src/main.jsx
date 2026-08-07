@@ -1367,6 +1367,7 @@ function Workspace() {
   const [sessions, setSessions] = useState([]); const [active, setActive] = useState(null); const [messages, setMessages] = useState([]); const [attachments, setAttachments] = useState([]); const [documentState, setDocumentState] = useState(null); const [workflow, setWorkflow] = useState(null); const [activeJob, setActiveJob] = useState(null);
   const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [pendingConfigRequest, setPendingConfigRequest] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
   const actionInFlightRef = useRef(false);
+  const sendInFlightRef = useRef(false);
   const tutorialAutoOpenedRef = useRef(false);
   const [productUpdate, setProductUpdate] = useState(null);
   const page = location.pathname.includes('/projects') ? 'projects' : location.pathname.includes('/documents') ? 'documents' : 'chat';
@@ -1697,9 +1698,13 @@ function Workspace() {
   };
   const send = async (event) => {
     event?.preventDefault();
-    if (!input.trim() && !pendingLandingFiles.length) return;
+    if (sendInFlightRef.current || busy || actionBusy || (!input.trim() && !pendingLandingFiles.length)) return;
+    sendInFlightRef.current = true;
+    try {
     let current = active;
     const requiresConfiguration = !current;
+    const landingContent = input.trim() || 'Saya sudah menambahkan bahan untuk laprak ini.';
+    const landingFiles = [...pendingLandingFiles];
     if (current?.id && pendingConfigRequest?.session?.id === current.id) {
       setRightOpen(true);
       return;
@@ -1757,20 +1762,25 @@ function Workspace() {
         return;
       }
     }
-    if (!current) current = await createSession(true);
+    if (!current) {
+      // Hapus draft lokal sebelum menunggu pembuatan room baru selesai supaya
+      // composer tidak menampilkan ulang pesan/file yang sedang dipindahkan.
+      setInput('');
+      setPendingLandingFiles([]);
+      current = await createSession(true);
+    }
     if (!current) return;
-    const content = input.trim() || 'Saya sudah menambahkan bahan untuk laprak ini.';
-    const files = [...pendingLandingFiles];
+    const content = landingContent;
+    const files = landingFiles;
     if (requiresConfiguration) {
       setPendingConfigRequest({ session: current, content, files, kind: attachmentKind });
       setRightOpen(true);
       return;
     }
-    // Prompt new chat tetap terlihat selama konfigurasi wajib belum disimpan.
-    // Untuk chat yang siap diproses, composer langsung kembali ke ukuran awal.
-    setInput('');
-    setPendingLandingFiles([]);
     await dispatchChatMessage({ session: current, content, files, kind: attachmentKind });
+    } finally {
+      sendInFlightRef.current = false;
+    }
   };
   const uploadFiles = async (current, files, kind = '', finalize = true) => {
     const groups = new Map();
