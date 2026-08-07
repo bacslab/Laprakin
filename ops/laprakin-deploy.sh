@@ -41,6 +41,7 @@ CANARY_PORT="${LAPRAKIN_CANARY_PORT:-4555}"
 LOCK_FILE="$STATE_DIR/deploy.lock"
 DISK_CLEANUP_THRESHOLD_KB="${LAPRAKIN_DISK_CLEANUP_THRESHOLD_KB:-8388608}"
 MIN_BUILD_SPACE_KB="${LAPRAKIN_MIN_BUILD_SPACE_KB:-6291456}"
+BUILD_TIMEOUT_SECONDS="${LAPRAKIN_BUILD_TIMEOUT_SECONDS:-900}"
 
 export GIT_SSH_COMMAND="ssh -i $SSH_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
@@ -151,7 +152,7 @@ git -C "$REPO_DIR" archive --format=tar "$TARGET" | tar -x -C "$APP_DIR" || fail
 
 # ── Bangun image kandidat ───────────────────────────────────────────────────
 cd "$APP_DIR" || fail "direktori aplikasi tidak ditemukan"
-docker build -q -t laprakin-laprakin:candidate . >/dev/null 2>&1 || fail "build image gagal pada ${TARGET:0:7}"
+timeout --foreground "$BUILD_TIMEOUT_SECONDS" docker build -q -t laprakin-laprakin:candidate . >/dev/null 2>&1 || fail "build image kandidat tidak selesai"
 
 # ── Uji boot di container terisolasi ────────────────────────────────────────
 # Memeriksa sintaks saja tidak cukup: kesalahan inisialisasi seperti const yang
