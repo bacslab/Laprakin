@@ -1642,6 +1642,13 @@ function Workspace() {
       setActive(synced.session);
       setConfig({ title: synced.session.title || 'Laprak baru', structureMode: synced.session.structure_mode || 'guided', configuration: { ...defaultChatConfig.configuration, ...(synced.session.configuration || {}) } });
       setSessions((old) => old.map((item) => item.id === synced.session.id ? synced.session : item));
+      setMessages((items) => [...items, {
+        id: `local-user-${crypto.randomUUID()}`,
+        role: 'user',
+        content,
+        meta: { aiMode },
+        created_at: new Date().toISOString(),
+      }]);
       const data = await api(`/chat/sessions/${current.id}/messages`, {
         method: 'POST',
         body: { content, aiMode, allowExternalAi: prefs.allowExternalAi !== false },
@@ -1764,18 +1771,17 @@ function Workspace() {
       }
     }
     if (!current) {
-      // Hapus draft lokal sebelum menunggu pembuatan room baru selesai supaya
-      // composer tidak menampilkan ulang pesan/file yang sedang dipindahkan.
       setInput('');
       setPendingLandingFiles([]);
-      current = await createSession(true);
+      current = await createSession(false);
     }
     if (!current) return;
     const content = landingContent;
     const files = landingFiles;
-    if (requiresConfiguration) {
-      setPendingConfigRequest({ session: current, content, files, kind: attachmentKind });
-      setRightOpen(true);
+    setInput('');
+    setPendingLandingFiles([]);
+    if (!identityComplete) {
+      setIdentityIntake({ session: current, content, files, kind: attachmentKind });
       return;
     }
     await dispatchChatMessage({ session: current, content, files, kind: attachmentKind });
