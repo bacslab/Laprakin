@@ -15,9 +15,7 @@
  * Pemakaian:
  *   node scripts/bench-providers/bench.mjs            # semua provider yang punya key
  *   node scripts/bench-providers/bench.mjs groq mistral  # subset
- *   BENCH_INCLUDE_GEMINI=1 node scripts/bench-providers/bench.mjs
- *     (Gemini production key TIDAK dipakai kecuali flag ini di-set eksplisit,
- *      supaya benchmark tidak diam-diam memakan kuota produksi.)
+ *   BENCH_MODEL_NARAROUTER=<alias-dari-model-registry> node scripts/bench-providers/bench.mjs nararouter
  */
 
 import fs from 'node:fs';
@@ -103,7 +101,7 @@ const PROVIDERS = [
   { id: 'cloudflare', label: 'Cloudflare Workers AI', key: 'CLOUDFLARE_API_TOKEN', extraKey: 'CLOUDFLARE_ACCOUNT_ID', base: null, model: '@cf/openai/gpt-oss-120b' },
   { id: 'zai', label: 'Z.ai', key: 'ZAI_API_KEY', base: 'https://api.z.ai/api/paas/v4', model: 'glm-4.7-flash' },
   { id: 'cohere', label: 'Cohere', key: 'COHERE_API_KEY', base: 'https://api.cohere.com', model: 'command-a-03-2025', style: 'cohere' },
-  { id: 'gemini', label: 'Google Gemini (referensi produksi)', key: 'GEMINI_API_KEY', base: null, model: process.env.GEMINI_MODEL_DOCUMENT || 'gemini-3.6-flash', style: 'gemini', optIn: 'BENCH_INCLUDE_GEMINI' },
+  { id: 'nararouter', label: 'NaraRouter', key: 'NARAROUTER_API_KEY', base: process.env.NARAROUTER_BASE_URL || 'https://router.bynara.id/v1', model: process.env.AI_MODEL_DOCUMENT || 'auto' },
 ];
 
 function providerModel(provider) {
@@ -228,33 +226,6 @@ async function runCohere(provider, prompt) {
   };
 }
 
-async function runGemini(provider, prompt) {
-  const started = Date.now();
-  const model = providerModel(provider);
-  const response = await fetchWithTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': process.env[provider.key] },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 4000, responseFormat: { text: { mimeType: 'APPLICATION_JSON' } } },
-      }),
-    },
-  );
-  if (!response.ok) throw new Error(`HTTP ${response.status}: ${(await response.text()).slice(0, 400)}`);
-  const payload = await response.json();
-  return {
-    text: (payload.candidates?.[0]?.content?.parts || []).map((part) => part.text || '').join(''),
-    ttftMs: null,
-    latencyMs: Date.now() - started,
-    inputTokens: payload.usageMetadata?.promptTokenCount ?? null,
-    outputTokens: payload.usageMetadata?.candidatesTokenCount ?? null,
-    jsonModeUsed: true,
-  };
-}
-
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function main() {
@@ -279,7 +250,7 @@ async function main() {
     const runs = [];
     for (let runIndex = 1; runIndex <= REQUESTS_PER_PROVIDER; runIndex += 1) {
       try {
-        const runner = provider.style === 'cohere' ? runCohere : provider.style === 'gemini' ? runGemini : runOpenAiCompat;
+        const runner = provider.style === 'cohere' ? runCohere : runOpenAiCompat;
         const result = await runner(provider, prompt);
         const json = checkJson(result.text);
         runs.push({ run: runIndex, warmup: runIndex === 1, ...result, jsonValid: json.valid, wordCount: json.wordCount });

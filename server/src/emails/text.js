@@ -42,7 +42,7 @@ export function sanitizeOperationalSummary(value, fallback = 'Kejadian operasion
     .join('\n')
     .replace(SECRET_ASSIGNMENT, '$1=[disembunyikan]')
     .replace(BEARER_TOKEN, 'Bearer [disembunyikan]')
-    .replace(/\b(?:re|AIza)[A-Za-z0-9_-]{16,}\b/g, '[credential disembunyikan]')
+    .replace(/\b(?:re|sk|key)[A-Za-z0-9_-]{16,}\b/gi, '[credential disembunyikan]')
     .slice(0, 800)
     .trim();
   return sanitized || fallback;

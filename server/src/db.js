@@ -744,14 +744,17 @@ CREATE TABLE IF NOT EXISTS ai_usage_events (
   user_id TEXT,
   purpose TEXT NOT NULL,
   mode TEXT NOT NULL DEFAULT 'basic',
-  provider TEXT NOT NULL DEFAULT 'gemini',
+  provider TEXT NOT NULL DEFAULT 'nararouter',
   model TEXT NOT NULL,
   status TEXT NOT NULL,
   input_tokens INTEGER NOT NULL DEFAULT 0,
   output_tokens INTEGER NOT NULL DEFAULT 0,
+  reasoning_tokens INTEGER NOT NULL DEFAULT 0,
   total_tokens INTEGER NOT NULL DEFAULT 0,
   latency_ms INTEGER NOT NULL DEFAULT 0,
   error_code TEXT NOT NULL DEFAULT '',
+  fallback_count INTEGER NOT NULL DEFAULT 0,
+  fallback_reason TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
 );
@@ -1042,6 +1045,9 @@ CREATE TABLE IF NOT EXISTS pricing_overrides (
 `);
 ensureColumn('ai_usage_events', 'context_type', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('ai_usage_events', 'context_id', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('ai_usage_events', 'reasoning_tokens', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('ai_usage_events', 'fallback_count', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('ai_usage_events', 'fallback_reason', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('user_devices', 'profile_hash', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('pricing_overrides', 'credits', 'INTEGER');
 ensureColumn('pricing_overrides', 'duration_days', 'INTEGER');

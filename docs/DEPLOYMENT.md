@@ -25,12 +25,14 @@ SMTP_PASS=...
 SMTP_SECURE=false
 
 AI_REQUIRED=true
-GEMINI_API_KEY=secret-dari-google-ai-studio
-GEMINI_MODEL_BASIC=gemini-3.5-flash-lite
-GEMINI_MODEL_THINKING=gemini-3.6-flash
-GEMINI_MODEL_XTRATHINK=gemini-3.6-flash
-GEMINI_MODEL_DOCUMENT=gemini-3.5-flash
-GEMINI_MODEL_SUPPORT=gemini-3.5-flash-lite
+NARAROUTER_API_KEY=secret-dari-nararouter
+NARAROUTER_BASE_URL=https://router.bynara.id/v1
+NARAROUTER_MAX_RPM=8
+NARAROUTER_MAX_CONCURRENCY=2
+AI_MODEL_DOCUMENT=auto
+AI_MODEL_VISION=auto
+AI_MODEL_REVIEWER=auto
+AI_MODEL_CHAT=auto
 AI_REQUEST_TIMEOUT_MS=45000
 AI_MAX_RETRIES=2
 AI_MAX_REQUESTS_PER_HOUR=60
@@ -109,7 +111,7 @@ Catatan: deployment production aktif saat ini bukan Render. Render blueprint tet
 - [ ] Alur hapus akun dan support access diuji.
 - [ ] User test dengan bahan praktikum nyata yang sudah diizinkan dilakukan.
 - [ ] Tidak ada API key di browser/client bundle.
-- [ ] Gemini auth key/restricted key, billing alert, quota, dan model stable sudah diverifikasi.
+- [ ] NaraRouter key, billing alert, quota, dan capability registry sudah diverifikasi.
 - [ ] Google OAuth consent screen dipublish dan redirect URI production cocok persis.
 - [ ] `/api/health/ready` mengembalikan `ai: configured` dan `googleOauth: configured`.
 - [ ] `NODE_ENV=production npm run verify:production` lulus menggunakan secret dan domain production yang sebenarnya.
@@ -271,5 +273,5 @@ Ikuti checklist rinci pada `docs/AI_GOOGLE_PRODUCTION.md`. Production sengaja ga
 - Gunakan `npm run verify:production`, `/api/health/ready`, dan panel **Admin → AI & Login** untuk pemeriksaan operasional. Ketiganya hanya menampilkan status dan metadata aman.
 - Pastikan `server/.env` dimiliki operator deployment, permission `0600`, tidak masuk image, dan tidak pernah masuk repository.
 - Jika secret sempat tampil, anggap telah bocor: buat credential baru, deploy, verifikasi integrasi, lalu cabut credential lama. Rotasi `JWT_SECRET`, `DEVICE_HMAC_SECRET`, dan `TOKEN_HMAC_SECRET` juga mengakhiri sesi lama.
-- Gemini API key harus dibatasi hanya ke `generativelanguage.googleapis.com`. Resend SMTP memakai key `sending_access`, bukan `full_access`.
+- NaraRouter API key hanya boleh berada di secret store backend. Resend SMTP memakai key `sending_access`, bukan `full_access`.
 - Google OAuth client secret dan Midtrans Server Key harus dirotasi dari dashboard provider; lakukan deploy dan verifikasi sebelum menonaktifkan secret lama agar downtime minimum.

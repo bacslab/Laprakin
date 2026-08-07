@@ -2,7 +2,7 @@ import { generateAiContent } from '../server/src/ai.js';
 import { config } from '../server/src/config.js';
 import { db } from '../server/src/db.js';
 
-if (!config.geminiKey) throw new Error('GEMINI_API_KEY belum tersedia.');
+if (!config.naraRouterApiKey) throw new Error('NARAROUTER_API_KEY belum tersedia.');
 
 const startedAt = new Date().toISOString();
 const scenarios = [

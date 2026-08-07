@@ -33,7 +33,7 @@ if (runtimeEnvironment === 'production') {
   if (fs.existsSync(productionLocalPath)) {
     const productionLocal = dotenv.parse(fs.readFileSync(productionLocalPath));
     for (const [key, value] of Object.entries(productionLocal)) {
-      if (/^GEMINI_(?:API_KEY|MODEL(?:_.+)?)$/.test(key) && !developmentKeys.has(key)) {
+      if (/^(?:NARAROUTER_|CLOUDFLARE_AI_)/.test(key) && !developmentKeys.has(key)) {
         process.env[key] = value;
         developmentKeys.add(key);
       }
@@ -77,14 +77,20 @@ export const config = {
   deviceSecret: process.env.DEVICE_HMAC_SECRET || 'dev-device-secret-change-me',
   tokenSecret: process.env.TOKEN_HMAC_SECRET || process.env.JWT_SECRET || 'dev-token-secret-change-me',
   adminEmail: (process.env.ADMIN_EMAIL || 'hilmimubarok2006@gmail.com').trim().toLowerCase(),
-  geminiKey: process.env.GEMINI_API_KEY || '',
-  geminiKeyValid: /^AIza[0-9A-Za-z_-]{20,}$/.test(process.env.GEMINI_API_KEY || ''),
-  geminiModel: process.env.GEMINI_MODEL || process.env.GEMINI_MODEL_BASIC || 'gemini-3.5-flash-lite',
-  geminiModelBasic: process.env.GEMINI_MODEL_BASIC || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
-  geminiModelThinking: process.env.GEMINI_MODEL_THINKING || 'gemini-3.6-flash',
-  geminiModelXtraThink: process.env.GEMINI_MODEL_XTRATHINK || 'gemini-3.6-flash',
-  geminiModelDocument: process.env.GEMINI_MODEL_DOCUMENT || 'gemini-3.6-flash',
-  geminiModelSupport: process.env.GEMINI_MODEL_SUPPORT || 'gemini-3.5-flash-lite',
+  naraRouterApiKey: process.env.NARAROUTER_API_KEY || '',
+  naraRouterBaseUrl: (process.env.NARAROUTER_BASE_URL || 'https://router.bynara.id/v1').replace(/\/$/, ''),
+  naraRouterMaxRpm: boundedInt(process.env.NARAROUTER_MAX_RPM, 8, 1, 10),
+  naraRouterMaxConcurrency: boundedInt(process.env.NARAROUTER_MAX_CONCURRENCY, 2, 1, 8),
+  aiModelDocument: process.env.AI_MODEL_DOCUMENT || 'auto',
+  aiModelVision: process.env.AI_MODEL_VISION || 'auto',
+  aiModelReviewer: process.env.AI_MODEL_REVIEWER || 'auto',
+  aiModelChat: process.env.AI_MODEL_CHAT || 'auto',
+  aiCircuitFailureThreshold: boundedInt(process.env.AI_CIRCUIT_FAILURE_THRESHOLD, 4, 1, 20),
+  aiCircuitCooldownMs: boundedInt(process.env.AI_CIRCUIT_COOLDOWN_MS, 30000, 1000, 300000),
+  cloudflareAiEnabled: process.env.CLOUDFLARE_AI_ENABLED === 'true',
+  cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
+  cloudflareAiToken: process.env.CLOUDFLARE_AI_TOKEN || '',
+  cloudflareAiModel: process.env.CLOUDFLARE_AI_MODEL || '@cf/google/gemma-4-26b-a4b-it',
   aiRequired: process.env.AI_REQUIRED ? process.env.AI_REQUIRED !== 'false' : nodeEnv === 'production',
   aiRequestTimeoutMs: boundedInt(process.env.AI_REQUEST_TIMEOUT_MS, 45000, 5000, 120000),
   aiMaxRetries: boundedInt(process.env.AI_MAX_RETRIES, 2, 1, 4),
@@ -92,6 +98,7 @@ export const config = {
   aiMaxRequestsPerDay: boundedInt(process.env.AI_MAX_REQUESTS_PER_DAY, 5000, 100, 100000),
   aiContextCharacters: boundedInt(process.env.AI_CONTEXT_CHARACTERS, 24000, 4000, 80000),
   aiAttachmentCharacters: boundedInt(process.env.AI_ATTACHMENT_CHARACTERS, 18000, 2000, 60000),
+  aiOperationalContextTokens: boundedInt(process.env.AI_OPERATIONAL_CONTEXT_TOKENS, 220000, 16000, 1000000),
   referralHoldDays: Math.max(0, Number(process.env.REFERRAL_HOLD_DAYS ?? 7)),
   paymentsMode: process.env.PAYMENTS_MODE || 'manual',
   // MIDTRANS_ENVIRONMENT is canonical; MIDTRANS_IS_PRODUCTION is accepted for deployment compatibility.
@@ -155,8 +162,6 @@ export function productionConfigChecks() {
   const secretValues = [process.env.JWT_SECRET, process.env.DEVICE_HMAC_SECRET, process.env.TOKEN_HMAC_SECRET];
   const secretsReady = secretValues.every((value) => typeof value === 'string' && value.length >= 32)
     && new Set(secretValues).size === secretValues.length;
-  const configuredModels = [config.geminiModelBasic, config.geminiModelThinking, config.geminiModelXtraThink, config.geminiModelDocument, config.geminiModelSupport];
-  const modelsStable = configuredModels.every((model) => !/(?:latest|preview|experimental|exp-|gemini-2\.0)/i.test(model));
   const originsReady = app.valid && config.allowedOrigins.length > 0 && config.allowedOrigins.every((origin) => {
     const parsed = productionUrl(origin);
     return parsed.valid;
@@ -178,8 +183,9 @@ export function productionConfigChecks() {
     { name: 'allowed origins', ok: originsReady, detail: originsReady ? `${config.allowedOrigins.length} origin HTTPS` : 'ALLOWED_ORIGINS wajib HTTPS dan memuat origin APP_URL' },
     { name: 'reverse proxy trust', ok: config.trustProxyHops >= 1, detail: config.trustProxyHops >= 1 ? `${config.trustProxyHops} hop` : 'TRUST_PROXY_HOPS minimal 1 di belakang Cloudflare/reverse proxy' },
     { name: 'application secrets', ok: secretsReady, detail: secretsReady ? '3 secret unik, minimal 32 karakter' : 'JWT_SECRET, DEVICE_HMAC_SECRET, dan TOKEN_HMAC_SECRET wajib unik dan minimal 32 karakter' },
-    { name: 'AI required and credential', ok: config.aiRequired && config.geminiKeyValid, detail: config.aiRequired && config.geminiKeyValid ? 'AI_REQUIRED=true dan API key Gemini valid' : 'Set AI_REQUIRED=true dan gunakan API key Gemini berformat AIza...' },
-    { name: 'stable AI models', ok: modelsStable, detail: modelsStable ? [...new Set(configuredModels)].join(', ') : 'Model preview/latest/experimental tidak diizinkan' },
+    { name: 'AI required and Nara credential', ok: config.aiRequired && Boolean(config.naraRouterApiKey), detail: config.aiRequired && config.naraRouterApiKey ? 'AI_REQUIRED=true dan NaraRouter API key tersedia' : 'Set AI_REQUIRED=true dan NARAROUTER_API_KEY' },
+    { name: 'NaraRouter endpoint', ok: /^https:\/\//i.test(config.naraRouterBaseUrl), detail: /^https:\/\//i.test(config.naraRouterBaseUrl) ? config.naraRouterBaseUrl : 'NARAROUTER_BASE_URL wajib memakai HTTPS' },
+    { name: 'NaraRouter limiter', ok: config.naraRouterMaxRpm <= 8 && config.naraRouterMaxConcurrency <= 2, detail: `${config.naraRouterMaxRpm} RPM, concurrency ${config.naraRouterMaxConcurrency}` },
     { name: 'verified email authentication', ok: smtpReady, detail: smtpReady ? 'Registrasi email terverifikasi aktif; Google OAuth dapat berjalan berdampingan' : 'SMTP production wajib untuk verifikasi email manual' },
     { name: 'Google OAuth credential', ok: googleCredentialsReady, detail: config.googleOauthRequired ? (googleCredentialsReady ? 'Credential Google tersedia' : 'Client ID dan client secret wajib tersedia') : 'Google OAuth dinonaktifkan' },
     { name: 'Google OAuth HTTPS callback', ok: googleRedirectReady, detail: config.googleOauthRequired ? (googleRedirectReady ? config.googleRedirectUri : 'Callback wajib memakai origin API_URL dan path /api/auth/google/callback') : 'Google OAuth dinonaktifkan' },

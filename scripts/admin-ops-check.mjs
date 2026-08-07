@@ -85,7 +85,7 @@ const server = spawn(process.execPath, ['server/src/index.js'], {
     API_URL: base,
     ALLOWED_ORIGINS: 'http://localhost:5173',
     ADMIN_EMAIL: adminEmail,
-    GEMINI_API_KEY: '',
+    NARAROUTER_API_KEY: '',
     LAPRAKIN_DATA_DIR: path.join(sandbox, 'data'),
     LAPRAKIN_UPLOAD_DIR: path.join(sandbox, 'uploads'),
     EMAIL_MODE: 'console',
@@ -132,7 +132,7 @@ try {
     INSERT INTO ai_usage_events (
       id, user_id, purpose, mode, provider, model, status,
       input_tokens, output_tokens, total_tokens, latency_ms, error_code, created_at
-    ) VALUES (?, ?, 'document-generate', 'basic', 'gemini', 'contract-model', 'success',
+    ) VALUES (?, ?, 'document-generate', 'basic', 'nararouter', 'contract-model', 'success',
       120, 80, 200, 450, '', ?)
   `).run(randomUUID(), userA.id, timestamp);
   const alertId = randomUUID();

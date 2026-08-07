@@ -47,13 +47,13 @@ Referensi: [Google OAuth untuk web server](https://developers.google.com/identit
 
 ## 5. Gemini production
 
-1. Simpan `GEMINI_API_KEY` hanya di secret store backend.
+1. Simpan `NARAROUTER_API_KEY` hanya di secret store backend.
 2. Gunakan Gemini auth key terbaru atau key yang dibatasi khusus Gemini API; jangan gunakan unrestricted standard key.
 3. Aktifkan billing budget, quota, dan alert biaya.
 4. Setelah deployment, jalankan `npm run test:ai-live` dari environment yang dapat mengakses provider.
 5. Pantau call, token, latency, dan error melalui tab **AI & Login** di Admin Console. Prompt, file, dan output tidak disimpan pada telemetry.
 
-Referensi: [Keamanan Gemini API keys](https://ai.google.dev/gemini-api/docs/api-key).
+Referensi credential provider mengikuti dokumentasi NaraRouter dan secret manager deployment.
 
 ## 6. Release gate
 

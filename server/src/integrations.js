@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { getAiReadiness, initializeAiModelRegistry } from './ai.js';
 
 const GOOGLE_DISCOVERY_URL = 'https://accounts.google.com/.well-known/openid-configuration';
 
@@ -19,38 +20,20 @@ function publicNetworkError(error) {
   return { code: 'NETWORK_ERROR', message: 'Endpoint integrasi tidak dapat dihubungi.' };
 }
 
-export async function verifyGeminiIntegration() {
-  if (!config.geminiKeyValid) return { ok: false, code: config.geminiKey ? 'AI_CREDENTIAL_INVALID' : 'AI_NOT_CONFIGURED', models: [] };
-  const models = [...new Set([
-    config.geminiModelBasic,
-    config.geminiModelThinking,
-    config.geminiModelXtraThink,
-    config.geminiModelDocument,
-    config.geminiModelSupport,
-  ])];
-  const results = [];
-  for (const model of models) {
-    try {
-      const { response, payload } = await fetchJson(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}`,
-        { headers: { 'x-goog-api-key': config.geminiKey } },
-        config.googleRequestTimeoutMs,
-      );
-      const supportsGenerateContent = Array.isArray(payload.supportedGenerationMethods)
-        && payload.supportedGenerationMethods.includes('generateContent');
-      results.push({
-        model,
-        ok: response.ok && supportsGenerateContent,
-        status: response.status,
-        supportsGenerateContent,
-        inputTokenLimit: Number(payload.inputTokenLimit || 0),
-        outputTokenLimit: Number(payload.outputTokenLimit || 0),
-      });
-    } catch (error) {
-      results.push({ model, ok: false, status: 0, ...publicNetworkError(error) });
-    }
+export async function verifyNaraRouterIntegration() {
+  if (!config.naraRouterApiKey) return { ok: false, code: 'AI_NOT_CONFIGURED', models: [] };
+  try {
+    await initializeAiModelRegistry();
+    const readiness = getAiReadiness();
+    return {
+      ok: readiness.configured && readiness.registryCached && readiness.textReady && readiness.documentReady,
+      code: readiness.registryCached ? '' : 'NARAROUTER_MODELS_UNAVAILABLE',
+      models: readiness.models,
+      visionReady: readiness.visionReady,
+    };
+  } catch (error) {
+    return { ok: false, code: error?.code || 'NARAROUTER_ERROR', models: [] };
   }
-  return { ok: results.length > 0 && results.every((item) => item.ok), models: results };
 }
 
 export async function verifyGoogleOidcIntegration() {
@@ -85,11 +68,11 @@ export async function verifyAzureBlobIntegration() {
 }
 
 export async function verifyProductionIntegrations() {
-  const [gemini, googleOidc, azureBlob] = await Promise.all([
-    verifyGeminiIntegration(),
+  const [naraRouter, googleOidc, azureBlob] = await Promise.all([
+    verifyNaraRouterIntegration(),
     verifyGoogleOidcIntegration(),
     verifyAzureBlobIntegration(),
   ]);
-  return { ok: gemini.ok && googleOidc.ok, gemini, googleOidc, azureBlob, checkedAt: new Date().toISOString() };
+  return { ok: naraRouter.ok && googleOidc.ok, naraRouter, googleOidc, azureBlob, checkedAt: new Date().toISOString() };
 }
 

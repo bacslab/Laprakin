@@ -41,7 +41,7 @@ for (const [name, directory] of [['data directory', config.dataDir], ['upload di
 try {
   const bundleFiles = await filesUnder(config.staticClientDir);
   const backendSecrets = [
-    config.geminiKey,
+    config.naraRouterApiKey,
     config.googleClientSecret,
     config.jwtSecret,
     config.deviceSecret,
@@ -63,7 +63,7 @@ try {
 }
 
 const integrations = await verifyProductionIntegrations();
-record('Gemini credentials and models', integrations.gemini.ok, integrations.gemini.models?.map((item) => `${item.model}:${item.ok ? 'ok' : item.status || item.code}`).join(', '));
+record('NaraRouter credentials and model registry', integrations.naraRouter.ok, integrations.naraRouter.models?.map((item) => item.model || item).join(', '));
 record('Google OIDC discovery', integrations.googleOidc.ok, integrations.googleOidc.code || integrations.googleOidc.redirectOrigin || '');
 
 const failed = checks.filter((check) => !check.ok);

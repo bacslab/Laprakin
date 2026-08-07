@@ -22,6 +22,7 @@ import {
 import { EMAIL_LOGO_URL } from './emails/_components/email-layout.js';
 import { capitalizeInitial } from './emails/text.js';
 import { verifyProductionIntegrations } from './integrations.js';
+import { getAiReadiness, initializeAiModelRegistry, isAiConfigured } from './ai.js';
 import {
   analyzeChatRequest,
   assessChatReadiness,
@@ -1763,11 +1764,13 @@ const institutionLogoUpload = multer({
 
 app.get('/api/health', (_req, res) => {
   const queue = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE status IN ('queued', 'running')").get().count;
+  const aiReadiness = getAiReadiness();
   res.json({
     ok: true,
     mode: config.nodeEnv,
-    aiConfigured: config.geminiKeyValid,
-    aiCredentialIssue: config.geminiKey && !config.geminiKeyValid ? 'GEMINI_API_KEY harus memakai API key Google AI Studio berawalan AIza.' : '',
+    aiConfigured: isAiConfigured(),
+    visionReady: aiReadiness.visionReady,
+    aiCredentialIssue: config.naraRouterApiKey && !isAiConfigured() ? 'Model NaraRouter belum siap atau capability registry belum tersedia.' : '',
     googleLoginConfigured: Boolean(!config.manualEmailAuthOnly && config.googleOauthRequired && config.googleClientId && config.googleClientSecret),
     paymentsMode: config.paymentsMode,
     queueDepth: queue,
@@ -1779,10 +1782,11 @@ app.get('/api/health/ready', (_req, res) => {
   try {
     db.prepare('SELECT 1').get();
     const missing = [];
-    if (config.aiRequired && !config.geminiKeyValid) missing.push('ai');
+    const aiReadiness = getAiReadiness();
+    if (config.aiRequired && (!aiReadiness.configured || !aiReadiness.registryCached || !aiReadiness.textReady || !aiReadiness.documentReady)) missing.push('ai');
     if (config.googleOauthRequired && (!config.googleClientId || !config.googleClientSecret)) missing.push('google_oauth');
     if (missing.length) return res.status(503).json({ ok: false, database: 'ready', missing });
-    return res.json({ ok: true, database: 'ready', worker: workerBusy ? 'busy' : 'idle', ai: config.geminiKeyValid ? 'configured' : 'disabled', googleOauth: config.googleOauthRequired ? 'configured' : 'disabled' });
+    return res.json({ ok: true, database: 'ready', worker: workerBusy ? 'busy' : 'idle', ai: aiReadiness.textReady ? 'configured' : 'disabled', vision: aiReadiness.visionReady ? 'ready' : 'unavailable', googleOauth: config.googleOauthRequired ? 'configured' : 'disabled' });
   } catch {
     return res.status(503).json({ ok: false, database: 'unavailable' });
   }
@@ -1793,11 +1797,11 @@ app.get('/api/meta', (_req, res) => {
     departments,
     programs,
     features: {
-      geminiConfigured: config.geminiKeyValid,
+      nararouterConfigured: isAiConfigured(),
       manualPayments: config.paymentsMode === 'manual' && !config.isProd,
       uploadMaxMb: config.maxUploadBytes / 1024 / 1024,
       googleLoginEnabled: Boolean(!config.manualEmailAuthOnly && config.googleOauthRequired && config.googleClientId && config.googleClientSecret),
-      supportAiEnabled: Boolean(config.supportAiEnabled && config.geminiKeyValid),
+      supportAiEnabled: Boolean(config.supportAiEnabled && isAiConfigured()),
     },
   });
 });
@@ -3238,9 +3242,9 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     let refreshed = refreshChatWorkflow(session.id, req.user);
     let assistant;
     try {
-      assistant = config.geminiKeyValid
+      assistant = isAiConfigured()
         ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode })
-        : { text: 'Provider AI belum aktif di environment lokal ini. Isi GEMINI_API_KEY untuk menguji respons AI nyata.', model: 'local-unconfigured' };
+        : { text: 'Provider AI belum aktif di environment lokal ini. Isi NARAROUTER_API_KEY untuk menguji respons AI nyata.', model: 'local-unconfigured', provider: 'local' };
     } catch (error) {
       if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
       throw error;
@@ -3281,7 +3285,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
         JSON.stringify({
           kind: isClarification ? 'clarification' : 'assistant_response',
           aiMode: input.aiMode,
-          provider: config.geminiKeyValid ? 'gemini' : 'local',
+          provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
           model: assistant.model,
           workflow: assistant.workflow || null,
           workPlan: isClarification ? null : parseJson(refreshed.work_plan_json, {}),
@@ -3316,9 +3320,9 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   const links = Array.from(input.content.matchAll(/https?:\/\/[^\s)]+/g)).map((match) => match[0]).slice(0, 8);
   let assistant;
   try {
-    assistant = config.geminiKeyValid
+    assistant = isAiConfigured()
       ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode })
-      : { text: 'Provider AI belum aktif di environment lokal ini. Isi GEMINI_API_KEY untuk menguji respons AI nyata.', model: 'local-unconfigured' };
+      : { text: 'Provider AI belum aktif di environment lokal ini. Isi NARAROUTER_API_KEY untuk menguji respons AI nyata.', model: 'local-unconfigured', provider: 'local' };
   } catch (error) {
     if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
     throw error;
@@ -3334,7 +3338,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       WHERE session_id = ? AND owner_user_id = ? AND message_id IS NULL AND deleted_at IS NULL
     `).run(userMessageId, session.id, req.user.id);
     db.prepare(`INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at) VALUES (?, ?, ?, 'assistant', ?, ?, ?)`)
-      .run(nanoid(), session.id, req.user.id, assistant.text, JSON.stringify({ aiMode: input.aiMode, provider: config.geminiKeyValid ? 'gemini' : 'local', model: assistant.model, workflow: assistant.workflow || null }), timestamp);
+      .run(nanoid(), session.id, req.user.id, assistant.text, JSON.stringify({ aiMode: input.aiMode, provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'), model: assistant.model, workflow: assistant.workflow || null }), timestamp);
     db.prepare('UPDATE chat_sessions SET configuration_json = ?, updated_at = ? WHERE id = ?')
       .run(effectiveSession.configuration_json, timestamp, session.id);
     db.exec('COMMIT');
@@ -3349,7 +3353,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     const autoTitle = (candidate || 'Laprak baru').slice(0, 72);
     db.prepare(`UPDATE chat_sessions SET title = ?, course_group = CASE WHEN course_group = '' OR course_group = 'Belum dikelompokkan' THEN ? ELSE course_group END WHERE id = ?`).run(autoTitle, cfg.courseName || 'Belum dikelompokkan', session.id);
   }
-  audit(req.user.id, 'ai.chat_completed', 'chat_session', session.id, { mode: input.aiMode, model: assistant.model, provider: config.geminiKeyValid ? 'gemini' : 'local' });
+  audit(req.user.id, 'ai.chat_completed', 'chat_session', session.id, { mode: input.aiMode, model: assistant.model, provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local') });
   const messages = db.prepare('SELECT id, role, content, meta_json, created_at FROM chat_messages WHERE session_id = ? AND owner_user_id = ? ORDER BY created_at ASC').all(session.id, req.user.id).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) }));
   const refreshedSession = exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id));
   res.json({ session: refreshedSession, messages, attachments: listChatAttachments(session.id, req.user.id), workflow: chatWorkflow(refreshedSession, req.user) });
@@ -3792,7 +3796,7 @@ app.post('/api/documents/:id/generate', requireAuth, requireCsrf, requireDocumen
   }
   const recipe = parseJson(req.document.recipe_json, {});
   if (!recipe.allowExternalAi) throw new HttpError(412, 'Aktifkan pemrosesan AI eksternal sebelum menyusun draft.', 'AI_CONSENT_REQUIRED');
-  if (!config.geminiKeyValid) throw new HttpError(503, 'GEMINI_API_KEY harus berupa API key Google AI Studio berawalan AIza sebelum draft dapat disusun.', 'AI_CREDENTIAL_INVALID');
+  if (!isAiConfigured()) throw new HttpError(503, 'Kapasitas AI dokumen belum siap. Coba lagi setelah model NaraRouter tersedia.', 'AI_NOT_READY');
   const entitlement = revisionEntitlementForUser(req.user.id);
   const isInitialDraft = !req.document.generated_at;
   const revisionCount = Number(req.document.revision_count || 0);
@@ -3833,7 +3837,7 @@ app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentO
   ensureNoActiveJob(req.document.id, 'generate');
   const recipe = parseJson(req.document.recipe_json, {});
   if (!recipe.allowExternalAi) throw new HttpError(412, 'Aktifkan pemrosesan AI eksternal sebelum merevisi draft.', 'AI_CONSENT_REQUIRED');
-  if (!config.geminiKeyValid) throw new HttpError(503, 'GEMINI_API_KEY harus berupa API key Google AI Studio berawalan AIza sebelum revisi dapat diproses.', 'AI_CREDENTIAL_INVALID');
+  if (!isAiConfigured()) throw new HttpError(503, 'Kapasitas AI dokumen belum siap. Coba lagi setelah model NaraRouter tersedia.', 'AI_NOT_READY');
   const entitlement = revisionEntitlementForUser(req.user.id);
   const revisionCount = Number(req.document.revision_count || 0);
   if (revisionCount >= entitlement.maxRevisions) {
@@ -5093,7 +5097,9 @@ app.get('/api/admin/ai/usage', requireAuth, requireAdmin, (req, res) => {
       SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS failed,
       COALESCE(SUM(input_tokens), 0) AS input_tokens,
       COALESCE(SUM(output_tokens), 0) AS output_tokens,
+      COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
       COALESCE(SUM(total_tokens), 0) AS total_tokens,
+      COALESCE(SUM(fallback_count), 0) AS fallback_count,
       COALESCE(ROUND(AVG(latency_ms)), 0) AS average_latency_ms
     FROM ai_usage_events WHERE created_at >= ? AND (? = '' OR user_id = ?)
   `).get(since, userFilter, userFilter);
@@ -5136,8 +5142,8 @@ app.get('/api/admin/ai/usage', requireAuth, requireAdmin, (req, res) => {
   const recent = db.prepare(`
     SELECT usage.id, usage.user_id, user.email, user.full_name,
       usage.purpose, usage.mode, usage.provider, usage.model, usage.status,
-      usage.input_tokens, usage.output_tokens, usage.total_tokens,
-      usage.latency_ms, usage.error_code, usage.created_at
+      usage.input_tokens, usage.output_tokens, usage.reasoning_tokens, usage.total_tokens,
+      usage.latency_ms, usage.error_code, usage.fallback_count, usage.fallback_reason, usage.created_at
     FROM ai_usage_events usage
     LEFT JOIN users user ON user.id = usage.user_id
     WHERE usage.created_at >= ? AND (? = '' OR usage.user_id = ?)
@@ -5154,9 +5160,12 @@ app.get('/api/admin/ai/usage', requireAuth, requireAdmin, (req, res) => {
     status: row.status,
     inputTokens: Number(row.input_tokens || 0),
     outputTokens: Number(row.output_tokens || 0),
+    reasoningTokens: Number(row.reasoning_tokens || 0),
     totalTokens: Number(row.total_tokens || 0),
     latencyMs: Number(row.latency_ms || 0),
     errorCode: row.error_code || '',
+    fallbackCount: Number(row.fallback_count || 0),
+    fallbackReason: row.fallback_reason || '',
     createdAt: row.created_at,
   }));
   res.json({ days, since, userId: userFilter || null, totals, breakdown, daily, byUser, recent });
@@ -5166,7 +5175,7 @@ app.post('/api/admin/integrations/check', requireAuth, requireCsrf, requireAdmin
   const result = await verifyProductionIntegrations();
   audit(req.user.id, 'admin.integrations_checked', 'system', 'integrations', {
     ok: result.ok,
-    gemini: result.gemini.ok,
+    nararouter: result.naraRouter.ok,
     googleOidc: result.googleOidc.ok,
   });
   res.status(result.ok ? 200 : 503).json(result);
@@ -5466,6 +5475,7 @@ app.use((err, req, res, _next) => {
 
 recoverInterruptedJobs();
 recoverFailedGenerationSessions();
+initializeAiModelRegistry().catch((error) => console.error('[ai] startup model discovery:', error?.code || error?.message || error));
 queueMicrotask(drainJobQueue);
 setInterval(() => { drainJobQueue().catch((error) => console.error('[jobs]', error)); }, config.jobPollMs).unref();
 setInterval(() => { cleanupExpiredResources().catch((error) => console.error('[retention]', error)); }, config.retentionSweepMinutes * 60 * 1000).unref();

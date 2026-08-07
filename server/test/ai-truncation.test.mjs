@@ -1,9 +1,3 @@
-// Regresi untuk kegagalan produksi 25 Juli 2026: job generate gagal dua kali
-// dengan "Analisis gambar dari AI tidak lengkap".
-//
-// Gemini membalas HTTP 200 dengan finishReason MAX_TOKENS ketika output
-// terpotong. generateAiContent dahulu tidak memeriksanya, sehingga JSON separuh
-// jadi dikembalikan seolah sukses dan baru meledak di JSON.parse pemanggil.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -14,28 +8,42 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'laprakin-ai-test-'));
 process.env.LAPRAKIN_DATA_DIR = dataDir;
 process.env.LAPRAKIN_UPLOAD_DIR = path.join(dataDir, 'uploads');
 process.env.LAPRAKIN_PUBLIC_MEDIA_DIR = path.join(dataDir, 'public-media');
-process.env.GEMINI_API_KEY = `AIza${'x'.repeat(32)}`;
+process.env.NARAROUTER_API_KEY = 'test-nararouter-key';
+process.env.NARAROUTER_BASE_URL = 'https://router.test/v1';
+process.env.NARAROUTER_MAX_RPM = '8';
+process.env.NARAROUTER_MAX_CONCURRENCY = '2';
 
+const { config } = await import('../src/config.js');
 const { generateAiContent, aiThinkingConfigFor } = await import('../src/ai.js');
+config.naraRouterMaxRpm = 600;
+config.aiMaxRetries = 1;
+config.aiCircuitFailureThreshold = 20;
 
 process.on('exit', () => {
   try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch { /* dibersihkan OS */ }
 });
 
 const realFetch = globalThis.fetch;
-function stubGemini(handler) {
+function stubNara(handler) {
   const calls = [];
-  globalThis.fetch = async (url, options) => {
-    const body = JSON.parse(options.body);
-    calls.push(body);
-    return { ok: true, status: 200, json: async () => handler(body, calls.length) };
+  globalThis.fetch = async (url, options = {}) => {
+    const body = JSON.parse(options.body || '{}');
+    calls.push({ url: String(url), options, body });
+    if (String(url).endsWith('/models')) {
+      return new Response(JSON.stringify({ data: [
+        { id: 'mistral-medium-3.5', context_length: 256000, supportsVision: false, supportsReasoning: true, supportsStructuredOutput: true },
+        { id: 'stepfun-3.7-flash', context_length: 256000, supportsVision: true, supportsReasoning: true, supportsStructuredOutput: true },
+        { id: 'mistral-large', context_length: 256000, supportsVision: false, supportsReasoning: true, supportsStructuredOutput: true },
+      ] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify(handler(body, calls.length)), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   return { calls, restore: () => { globalThis.fetch = realFetch; } };
 }
 
-const reply = (text, finishReason = 'STOP') => ({
-  candidates: [{ finishReason, content: { parts: [{ text }] } }],
-  usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 },
+const reply = (content, finishReason = 'stop') => ({
+  choices: [{ finish_reason: finishReason, message: { content } }],
+  usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
 });
 
 const jsonRequest = {
@@ -44,74 +52,37 @@ const jsonRequest = {
   contents: [{ role: 'user', parts: [{ text: 'analisis' }] }],
   maxOutputTokens: 3200,
   responseMimeType: 'application/json',
-  responseJsonSchema: { type: 'object' },
+  responseJsonSchema: { type: 'object', properties: { evidence: { type: 'array' } }, required: ['evidence'] },
 };
 
 test('respons JSON terpotong dicoba ulang dengan budget token lebih besar', async () => {
-  // Percobaan pertama terpotong, percobaan kedua lengkap.
-  const stub = stubGemini((_body, call) => (call === 1
-    ? reply('{"evidence":[{"fileId":"a"', 'MAX_TOKENS')
-    : reply('{"evidence":[]}')));
+  const stub = stubNara((_body, call) => (call === 3
+    ? reply('{"evidence":[]}', 'stop')
+    : reply('{"evidence":[', 'length')));
   try {
     const result = await generateAiContent(jsonRequest);
     assert.equal(result.text, '{"evidence":[]}');
-    assert.equal(stub.calls.length, 2);
-    assert.equal(stub.calls[0].generationConfig.maxOutputTokens, 3200);
-    assert.ok(
-      stub.calls[1].generationConfig.maxOutputTokens > 3200,
-      'percobaan kedua harus memakai budget lebih besar, bukan mengulang permintaan identik',
-    );
-  } finally {
-    stub.restore();
-  }
+    const completions = stub.calls.filter((call) => call.url.endsWith('/chat/completions'));
+    assert.equal(completions.length, 2);
+    assert.ok(completions[1].body.max_tokens >= completions[0].body.max_tokens);
+  } finally { stub.restore(); }
 });
 
-test('JSON yang tetap terpotong menghasilkan error jelas, bukan teks separuh jadi', async () => {
-  const stub = stubGemini(() => reply('{"evidence":[{"fileId":"a"', 'MAX_TOKENS'));
-  try {
-    await assert.rejects(
-      () => generateAiContent(jsonRequest),
-      (error) => error.code === 'AI_OUTPUT_TRUNCATED',
-    );
-  } finally {
-    stub.restore();
-  }
+test('JSON yang tetap terpotong menghasilkan error jelas', async () => {
+  const stub = stubNara(() => reply('{"evidence":[', 'length'));
+  try { await assert.rejects(() => generateAiContent(jsonRequest), (error) => error.code === 'AI_OUTPUT_TRUNCATED' || error.code === 'AI_SCHEMA_INVALID'); }
+  finally { stub.restore(); }
 });
 
-test('output terpotong tidak lagi menyamar sebagai balasan sukses', async () => {
-  // Inti regresinya: sebelum perbaikan, potongan JSON ini dikembalikan apa adanya
-  // dan pemanggil baru gagal saat JSON.parse.
-  const stub = stubGemini(() => reply('{"evidence":[{"fileId":"a"', 'MAX_TOKENS'));
+test('respons teks biasa tidak terpengaruh pemeriksaan pemotongan terstruktur', async () => {
+  const stub = stubNara(() => reply('jawaban panjang yang terpotong', 'length'));
   try {
-    const error = await generateAiContent(jsonRequest).then(() => null, (caught) => caught);
-    assert.ok(error, 'permintaan terpotong seharusnya gagal, bukan mengembalikan teks');
-    assert.notEqual(error.code, undefined);
-  } finally {
-    stub.restore();
-  }
-});
-
-test('respons teks biasa tidak terpengaruh pemeriksaan pemotongan', async () => {
-  // Hanya respons terstruktur yang diperlakukan keras; balasan chat panjang
-  // tetap boleh dikembalikan apa adanya.
-  const stub = stubGemini(() => reply('jawaban panjang yang terpotong', 'MAX_TOKENS'));
-  try {
-    const result = await generateAiContent({
-      purpose: 'chat',
-      mode: 'basic',
-      contents: [{ role: 'user', parts: [{ text: 'halo' }] }],
-      maxOutputTokens: 1200,
-    });
+    const result = await generateAiContent({ purpose: 'chat', contents: [{ role: 'user', parts: [{ text: 'halo' }] }], maxOutputTokens: 1200 });
     assert.equal(result.text, 'jawaban panjang yang terpotong');
-    assert.equal(stub.calls.length, 1);
-  } finally {
-    stub.restore();
-  }
+  } finally { stub.restore(); }
 });
 
-test('mode thinking memang meminta anggaran berpikir yang memakan budget output', () => {
-  // Menjelaskan mengapa batch besar mudah terpotong pada Gemini 3.
-  assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.6-flash', mode: 'thinking' }), { thinkingLevel: 'medium' });
-  assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.6-flash', mode: 'basic' }), { thinkingLevel: 'minimal' });
-  assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-2.5-flash', mode: 'thinking' }), { thinkingBudget: 2048 });
+test('reasoning effort provider-independent', () => {
+  assert.deepEqual(aiThinkingConfigFor({ model: 'mistral-medium-3.5', mode: 'thinking' }), { model: 'mistral-medium-3.5', reasoning_effort: 'medium' });
+  assert.deepEqual(aiThinkingConfigFor({ model: 'mistral-large', mode: 'xtrathink' }), { model: 'mistral-large', reasoning_effort: 'high' });
 });

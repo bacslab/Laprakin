@@ -31,7 +31,7 @@ const server = spawn(process.execPath, ['server/src/index.js'], {
     APP_URL: 'http://localhost:5173',
     API_URL: base,
     ALLOWED_ORIGINS: 'http://localhost:5173',
-    GEMINI_API_KEY: '',
+    NARAROUTER_API_KEY: '',
     LAPRAKIN_DATA_DIR: path.join(sandbox, 'data'),
     LAPRAKIN_UPLOAD_DIR: path.join(sandbox, 'uploads'),
     JOB_POLL_MS: '100',
