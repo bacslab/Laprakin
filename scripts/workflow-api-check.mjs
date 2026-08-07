@@ -251,7 +251,7 @@ try {
   assert.equal(briefResult.workflow.state, 'READY_TO_GENERATE');
   assert.equal(briefResult.workflow.canCreateDocument, true);
   assert.equal(briefResult.workflow.canGenerateDraft, true);
-  assert.equal(briefResult.session.title, 'Laprak Jaringan Komputer - Static Routing');
+  assert.equal(briefResult.session.title, 'Static Routing');
   assert.equal(briefResult.workflow.workPlan.ready, true);
   assert.ok(briefResult.workflow.workPlan.steps.length >= 4 && briefResult.workflow.workPlan.steps.length <= 7);
   assert.equal(new Set(briefResult.workflow.workPlan.steps.map((step) => step.title.toLowerCase())).size, briefResult.workflow.workPlan.steps.length);
@@ -322,7 +322,7 @@ try {
   assert.equal(clarified.workflow.state, 'READY_TO_GENERATE');
   assert.equal(clarified.workflow.clarificationCount, 1);
   assert.equal(clarified.autoGenerate, true);
-  assert.equal(clarified.session.title, 'Laprak Basis Data - Trigger');
+  assert.equal(clarified.session.title, 'Trigger');
   assert.equal(clarified.messages.filter((message) => message.role === 'user').length, 1);
   assert.equal(clarified.workflow.workPlan.ready, true);
   assert.notDeepEqual(

@@ -410,7 +410,10 @@ export async function generateAiContent({ userId = null, contextType = '', conte
         if (!text) throw new AiProviderError('Provider AI tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502, retryable: true });
         if (structured) {
           let parsed;
-          try { parsed = JSON.parse(text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim()); } catch { parsed = null; }
+          const extractedText = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]?.trim()
+            || text.match(/\{[\s\S]*\}/)?.[0]?.trim()
+            || text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+          try { parsed = JSON.parse(extractedText); } catch { parsed = null; }
           if (!parsed || !schemaValid(parsed, responseJsonSchema)) throw new AiProviderError('Provider AI mengembalikan JSON yang tidak valid.', { code: 'AI_SCHEMA_INVALID', status: 502, retryable: true });
         }
         if (structured && isTruncated(payload, maxOutputTokens)) throw new AiProviderError('Jawaban AI terpotong sebelum lengkap.', { code: 'AI_OUTPUT_TRUNCATED', status: 502, retryable: true });

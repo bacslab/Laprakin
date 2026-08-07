@@ -35,6 +35,14 @@ export function getCsrfToken() {
   return sessionStorage.getItem(CSRF_KEY) || '';
 }
 
+export function friendlyClientErrorMessage(error) {
+  const msg = String(error?.message || error || '').trim();
+  if (!msg || /failed to fetch|networkerror|load failed|net::err_/i.test(msg)) {
+    return 'Koneksi internet bermasalah atau layanan sedang tidak dapat dijangkau. Silakan periksa koneksi kamu dan coba lagi.';
+  }
+  return msg;
+}
+
 export async function api(path, options = {}) {
   const {
     method = 'GET',
@@ -47,18 +55,24 @@ export async function api(path, options = {}) {
   if (!form) headers['content-type'] = 'application/json';
   if (includeCsrf && getCsrfToken()) headers['x-laprakin-csrf'] = getCsrfToken();
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    method,
-    credentials: 'include',
-    headers,
-    body: body ? (form ? body : JSON.stringify(body)) : undefined,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method,
+      credentials: 'include',
+      headers,
+      body: body ? (form ? body : JSON.stringify(body)) : undefined,
+    });
+  } catch (netErr) {
+    throw new Error(friendlyClientErrorMessage(netErr));
+  }
 
   const contentType = response.headers.get('content-type') || '';
   const payload = contentType.includes('application/json') ? await response.json() : await response.text();
 
   if (!response.ok) {
-    const error = new Error(payload?.error?.message || payload || 'Permintaan gagal.');
+    const rawMessage = payload?.error?.message || payload || 'Permintaan belum dapat diproses.';
+    const error = new Error(friendlyClientErrorMessage(rawMessage));
     error.code = payload?.error?.code;
     error.payload = payload;
     throw error;
@@ -70,13 +84,18 @@ export async function api(path, options = {}) {
 export async function download(path, fileName) {
   const headers = { 'x-laprakin-device': deviceId, 'x-laprakin-client-profile': clientProfile };
   if (getCsrfToken()) headers['x-laprakin-csrf'] = getCsrfToken();
-  const response = await fetch(`${API_BASE}${path.replace('/api', '')}`, {
-    credentials: 'include',
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path.replace('/api', '')}`, {
+      credentials: 'include',
+      headers,
+    });
+  } catch (netErr) {
+    throw new Error(friendlyClientErrorMessage(netErr));
+  }
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error?.message || 'File tidak dapat diunduh.');
+    throw new Error(friendlyClientErrorMessage(payload?.error?.message || 'File tidak dapat diunduh.'));
   }
 
   const blob = await response.blob();
@@ -92,3 +111,4 @@ export async function download(path, fileName) {
 export function eventUrl(path) {
   return `${API_BASE}${path}`;
 }
+

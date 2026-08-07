@@ -1854,7 +1854,7 @@ function Workspace() {
       await loadDocuments();
     } catch (err) {
       if (stage === 'generate' && targetSession?.id) {
-        try { hydrate(await api(`/chat/sessions/${targetSession.id}`)); } catch { appendAssistantMessage(err.message); }
+        try { hydrate(await api(`/chat/sessions/${targetSession.id}`)); } catch (innerErr) { appendAssistantMessage(innerErr.message || err.message); }
       } else {
         appendAssistantMessage(err.message);
       }
@@ -1933,7 +1933,7 @@ function Workspace() {
       return true;
     } catch (err) {
       if (['generate', 'revise'].includes(action) && active?.id) {
-        try { hydrate(await api(`/chat/sessions/${active.id}`)); } catch { appendAssistantMessage(err.message); }
+        try { hydrate(await api(`/chat/sessions/${active.id}`)); } catch (innerErr) { appendAssistantMessage(innerErr.message || err.message); }
       } else {
         appendAssistantMessage(err.message);
       }
@@ -2856,10 +2856,10 @@ function resizeComposerTextarea(textarea) {
 function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, centered, pendingFiles = [], onPasteImages, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade }) {
   const textareaRef = useRef(null);
   const shortcutItems = [
-    { key: 'laprak', label: 'Laprak', icon: FileText, prompt: 'Buatkan saya laprak untuk mata kuliah [nama mata kuliah], dengan materi [topik praktikum].' },
-    { key: 'proposal', label: 'Proposal', icon: LayoutTemplate, prompt: 'Bantu saya menyusun proposal tentang [topik] berdasarkan ketentuan berikut: ' },
-    { key: 'makalah', label: 'Makalah', icon: GraduationCap, prompt: 'Bantu saya menyusun makalah untuk mata kuliah [nama mata kuliah], dengan topik [topik].' },
-    { key: 'tugas-akhir', label: 'Tugas akhir', icon: ClipboardList, prompt: 'Bantu saya mengerjakan bagian [nama bagian] tugas akhir berdasarkan arahan dan sumber berikut: ' },
+    { key: 'laprak', label: 'Laprak', icon: FileText, prompt: 'Buatkan saya laporan praktikum berdasarkan bahan dan instruksi yang tersedia.' },
+    { key: 'proposal', label: 'Proposal', icon: LayoutTemplate, prompt: 'Bantu saya menyusun proposal berdasarkan bahan dan instruksi berikut: ' },
+    { key: 'makalah', label: 'Makalah', icon: GraduationCap, prompt: 'Bantu saya menyusun makalah berdasarkan bahan dan instruksi berikut: ' },
+    { key: 'tugas-akhir', label: 'Tugas akhir', icon: ClipboardList, prompt: 'Bantu saya mengerjakan bagian tugas akhir berdasarkan arahan dan sumber berikut: ' },
     { key: 'jurnal', label: 'Jurnal', icon: Pencil, prompt: 'Bantu saya menyusun artikel jurnal dari data dan tujuan penelitian berikut: ' },
   ];
   const placeholder = centered ? 'Ceritakan tugas yang ingin kamu susun...' : (pendingFiles.length ? 'Tambahkan pesan untuk bahan ini...' : 'Tulis tugasmu, tempel link, atau paste gambar...');

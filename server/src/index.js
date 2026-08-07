@@ -101,17 +101,20 @@ import {
   syncConfiguredAdminAccount,
 } from './services.js';
 
-const FRIENDLY_AI_RETRY_MESSAGE = 'Belum berhasil diproses. Coba lagi sebentar. Bahanmu tetap tersimpan dan kredit tidak terpakai.';
-const FRIENDLY_AI_NOT_READY_MESSAGE = 'Fitur ini belum siap digunakan. Coba lagi sebentar.';
-const TECHNICAL_AI_ERROR_PATTERN = /(?:^|_)(?:AI|NARAROUTER|CLOUDFLARE)(?:_|$)|provider|api|quota|limit|resource_exhausted|timeout|network|forbidden|unauthorized|telegram_required|\b(?:401|403|429|5\d\d)\b/i;
+const FRIENDLY_AI_RETRY_MESSAGE = 'Proses AI belum berhasil diselesaikan. Silakan coba lagi beberapa saat lagi. Bahanmu tetap tersimpan aman.';
+const FRIENDLY_AI_NOT_READY_MESSAGE = 'Layanan AI sedang disiapkan. Silakan coba kembali sebentar lagi.';
+const TECHNICAL_AI_ERROR_PATTERN = /^(?:AI_|NARAROUTER_|CLOUDFLARE_)|(?:^|_)(?:AI|NARAROUTER|CLOUDFLARE)(?:_|$)|resource_exhausted|ai_provider_error|ai_schema_invalid|ai_output_truncated|ai_capacity_unavailable|ai_vision_unavailable/i;
 
 function isTechnicalAiError(error) {
-  return TECHNICAL_AI_ERROR_PATTERN.test(`${error?.code || ''} ${error?.message || ''}`);
+  if (error?.name === 'AiProviderError') return true;
+  const code = String(error?.code || '');
+  if (/^(?:DEVICE_REGISTRATION_LIMIT|REGISTRATION_RISK_LIMIT|RATE_LIMIT_EXCEEDED)$/i.test(code)) return false;
+  return TECHNICAL_AI_ERROR_PATTERN.test(code);
 }
 
 function friendlyErrorMessage(error, status) {
   if (isTechnicalAiError(error)) return status === 503 ? FRIENDLY_AI_NOT_READY_MESSAGE : FRIENDLY_AI_RETRY_MESSAGE;
-  return status >= 500 ? 'Belum berhasil diproses. Coba lagi sebentar.' : (error?.message || 'Permintaan belum dapat diproses.');
+  return status >= 500 ? 'Permintaan belum berhasil diproses. Silakan coba beberapa saat lagi.' : (error?.message || 'Permintaan belum dapat diproses.');
 }
 
 function friendlyErrorCode(error) {
@@ -1340,10 +1343,11 @@ function recordJobEvent(jobId) {
 function publicJob(job) {
   const terminal = ['failed', 'canceled'].includes(job.status);
   const rawError = String(job.error_message || '');
-  const safeError = TECHNICAL_AI_ERROR_PATTERN.test(rawError)
-    || /(?:JSON|Unterminated string|Unexpected (?:end|token)|position \d+)/i.test(rawError)
+  const isTechnical = TECHNICAL_AI_ERROR_PATTERN.test(rawError)
+    || /(?:JSON|Unterminated string|Unexpected (?:end|token)|position \d+|sqlite|constraint|typeerror|referenceerror|syntaxerror|ENOENT|ENOSPC)/i.test(rawError);
+  const safeError = isTechnical
     ? FRIENDLY_AI_RETRY_MESSAGE
-    : rawError;
+    : (rawError || FRIENDLY_AI_RETRY_MESSAGE);
   return {
     id: job.id,
     documentId: job.document_id,
@@ -3201,9 +3205,6 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
   const userConfiguration = parseJson(session.configuration_json, {});
-  if (!String(userConfiguration.courseName || '').trim() || !String(userConfiguration.moduleTitle || '').trim()) {
-    throw new HttpError(409, 'Isi mata kuliah dan modul atau materi sebelum memulai chat.', 'CHAT_CONFIGURATION_REQUIRED');
-  }
   if (!input.allowExternalAi) {
     throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum memakai chat.', 'AI_CONSENT_REQUIRED');
   }

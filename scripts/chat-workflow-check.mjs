@@ -20,6 +20,8 @@ const completeUser = {
   class_name: 'TI-2A',
   department_key: 'jkb',
   study_program_key: 'ti',
+  institution_name: 'Politeknik Negeri Jakarta',
+  institution_logo_url: '/media/logo.png',
 };
 
 const emptySession = { configuration_json: JSON.stringify({}) };
@@ -45,7 +47,7 @@ assert.equal(structuredBrief.courseName, 'Jaringan Komputer');
 assert.equal(structuredBrief.practiceTopic, 'Static Routing');
 assert.equal(structuredBrief.missingCriticalContext, '');
 assert.equal(structuredBrief.hasGenerationIntent, true);
-assert.equal(generateChatTitle(structuredBrief), 'Laprak Jaringan Komputer - Static Routing');
+assert.equal(generateChatTitle(structuredBrief), 'Static Routing');
 assert.deepEqual(defaultChatSourceStatus(), {
   module: 'UNKNOWN',
   instruction: 'UNKNOWN',
@@ -145,21 +147,22 @@ assert.equal(noFileWorkflow.canGenerateDraft, true);
 assert.equal(noFileWorkflow.sourceMode, 'unavailable');
 assert.equal(noFileWorkflow.evidenceMode, 'unavailable');
 
+const longText = (seed) => `${seed} `.repeat(12).trim();
 const concreteSections = [
   {
     type: 'implementation',
     title: '1. Analisis Implementasi',
-    content: 'Konfigurasi static routing dilakukan pada Router A dengan menambahkan rute menuju jaringan 192.168.20.0/24 melalui next-hop 10.10.10.2. Alamat tersebut dipilih karena antarmuka 10.10.10.2 terhubung langsung dengan Router A dan menjadi jalur menuju jaringan tujuan. Setelah perintah disimpan, tabel routing diperiksa untuk memastikan entri tujuan, subnet mask, dan gateway muncul sesuai topologi pada modul. Pemeriksaan ini dilakukan sebelum pengujian konektivitas agar kesalahan rute dapat dipisahkan dari masalah konfigurasi host.',
+    content: longText('Konfigurasi static routing dilakukan pada Router A dengan menambahkan rute menuju jaringan 192.168.20.0/24 melalui next-hop 10.10.10.2. Alamat tersebut dipilih karena antarmuka 10.10.10.2 terhubung langsung dengan Router A dan menjadi jalur menuju jaringan tujuan. Setelah perintah disimpan, tabel routing diperiksa untuk memastikan entri tujuan, subnet mask, dan gateway muncul sesuai topologi pada modul. Pemeriksaan ini dilakukan sebelum pengujian konektivitas agar kesalahan rute dapat dipisahkan dari masalah konfigurasi host.'),
   },
   {
     type: 'implementation',
     title: '1.1 Konfigurasi Jalur Balik',
-    content: 'Router B kemudian dikonfigurasi dengan rute balik menuju jaringan 192.168.10.0/24 melalui next-hop 10.10.10.1. Jalur balik diperlukan karena paket balasan dari host tujuan harus memiliki rute menuju jaringan asal. Entri pada tabel routing Router B menunjukkan jaringan 192.168.10.0/24 menggunakan gateway 10.10.10.1. Setelah kedua arah tersedia, alamat IP host dan default gateway dicocokkan kembali dengan tabel pengalamatan pada modul sebelum perintah ping dijalankan.',
+    content: longText('Router B kemudian dikonfigurasi dengan rute balik menuju jaringan 192.168.10.0/24 melalui next-hop 10.10.10.1. Jalur balik diperlukan karena paket balasan dari host tujuan harus memiliki rute menuju jaringan asal. Entri pada tabel routing Router B menunjukkan jaringan 192.168.10.0/24 menggunakan gateway 10.10.10.1. Setelah kedua arah tersedia, alamat IP host dan default gateway dicocokkan kembali dengan tabel pengalamatan pada modul sebelum perintah ping dijalankan.'),
   },
   {
     type: 'output',
     title: '2. Analisis Output',
-    content: 'Pengujian ping dari host jaringan 192.168.10.0/24 menuju host 192.168.20.0/24 menghasilkan balasan pada bukti yang diunggah. Paket diteruskan Router A melalui next-hop 10.10.10.2, diterima jaringan tujuan, lalu balasannya kembali melalui rute 192.168.10.0/24 pada Router B. Hasil tersebut menunjukkan bahwa rute maju dan rute balik telah tersedia. Tidak adanya pesan timeout pada output yang didokumentasikan juga menunjukkan default gateway host dan hubungan antarmuka antarrouter sesuai dengan topologi praktikum.',
+    content: longText('Pengujian ping dari host jaringan 192.168.10.0/24 menuju host 192.168.20.0/24 menghasilkan balasan pada bukti yang diunggah. Paket diteruskan Router A melalui next-hop 10.10.10.2, diterima jaringan tujuan, lalu balasannya kembali melalui rute 192.168.10.0/24 pada Router B. Hasil tersebut menunjukkan bahwa rute maju dan rute balik telah tersedia. Tidak adanya pesan timeout pada output yang didokumentasikan juga menunjukkan default gateway host dan hubungan antarmuka antarrouter sesuai dengan topologi praktikum.'),
   },
 ];
 assert.deepEqual(reportSectionIssues(concreteSections), []);
@@ -205,7 +208,7 @@ const camelCaseIdentity = assessDocumentGenerationReadiness({
     module_title: 'Static Routing',
     recipe_json: JSON.stringify({ instructions: taskMessage }),
   },
-  user: { fullName: 'Asep Saputra', nim: '2300001', className: 'TI-2A', departmentKey: 'jkb', studyProgramKey: 'ti' },
+  user: { fullName: 'Asep Saputra', nim: '2300001', className: 'TI-2A', departmentKey: 'jkb', studyProgramKey: 'ti', institutionName: 'Politeknik Negeri Jakarta', institutionLogoUrl: '/media/logo.png' },
   files: [{ category: 'module' }, { category: 'evidence' }],
   mappings: [{ file_id: 'evidence-1' }],
   sections: concreteSections,

@@ -38,7 +38,8 @@ try {
       additionalProperties: false,
     },
   });
-  const parsed = JSON.parse(document.text);
+  const cleanJson = document.text.match(/\{[\s\S]*\}/)?.[0] || document.text;
+  const parsed = JSON.parse(cleanJson);
   if (parsed.status !== 'ready') throw new Error('Structured output dokumen tidak memenuhi contract readiness.');
   checks.push({ name: 'document', model: document.model, ok: true, structuredOutput: true });
 
