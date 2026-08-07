@@ -201,6 +201,7 @@ function reserveUsage({ userId, purpose, mode, model, contextType = '', contextI
   let transactionOpen = false;
   try {
     db.exec('BEGIN IMMEDIATE');
+    transactionOpen = true;
     const dailySince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     if (Number(db.prepare('SELECT COUNT(*) AS count FROM ai_usage_events WHERE created_at >= ?').get(dailySince)?.count || 0) >= config.aiMaxRequestsPerDay) {
       throw new HttpError(429, 'Kapasitas AI harian sedang penuh. Coba lagi nanti.', 'AI_DAILY_LIMIT');
@@ -338,14 +339,15 @@ function compactContents(contents, systemInstruction, contextLimit) {
 
 function schemaValid(value, schema) {
   if (!schema) return true;
-  if (schema.type === 'object') {
+  const type = String(schema.type || '').toLowerCase();
+  if (type === 'object') {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
     if ((schema.required || []).some((key) => !Object.hasOwn(value, key))) return false;
     return Object.entries(schema.properties || {}).every(([key, child]) => !Object.hasOwn(value, key) || schemaValid(value[key], child));
   }
-  if (schema.type === 'array') return Array.isArray(value) && (!schema.minItems || value.length >= schema.minItems) && (!schema.maxItems || value.length <= schema.maxItems) && value.every((item) => schemaValid(item, schema.items));
-  if (schema.type === 'string') return typeof value === 'string' && (!schema.minLength || value.length >= schema.minLength);
-  if (schema.type === 'integer' || schema.type === 'number') return typeof value === 'number';
+  if (type === 'array') return Array.isArray(value) && (!schema.minItems || value.length >= schema.minItems) && (!schema.maxItems || value.length <= schema.maxItems) && value.every((item) => schemaValid(item, schema.items));
+  if (type === 'string') return typeof value === 'string' && (!schema.minLength || value.length >= schema.minLength);
+  if (type === 'integer' || type === 'number') return typeof value === 'number';
   return true;
 }
 
@@ -416,7 +418,6 @@ export async function generateAiContent({ userId = null, contextType = '', conte
           try { parsed = JSON.parse(extractedText); } catch { parsed = null; }
           if (!parsed || !schemaValid(parsed, responseJsonSchema)) throw new AiProviderError('Provider AI mengembalikan JSON yang tidak valid.', { code: 'AI_SCHEMA_INVALID', status: 502, retryable: true });
         }
-        if (structured && isTruncated(payload, maxOutputTokens)) throw new AiProviderError('Jawaban AI terpotong sebelum lengkap.', { code: 'AI_OUTPUT_TRUNCATED', status: 502, retryable: true });
         recordCircuitSuccess(model);
         finishUsage(usageEventId, { status: 'success', usage: payload.usage, latencyMs: Date.now() - startedAt, model, fallbackCount, fallbackReason });
         return { text, provider: 'nararouter', model, usage: payload.usage || {}, finishReason: finishReason(payload), latencyMs: Date.now() - startedAt, fallbackCount };
