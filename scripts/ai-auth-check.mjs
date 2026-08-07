@@ -65,6 +65,15 @@ globalThis.fetch = async (url, options = {}) => {
       usageMetadata: { promptTokenCount: 11, candidatesTokenCount: 0, totalTokenCount: 11 },
     }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
+  if (requestText.includes('Trigger billing depleted')) {
+    return new Response(JSON.stringify({
+      error: {
+        code: 429,
+        status: 'RESOURCE_EXHAUSTED',
+        message: 'Your prepayment credits are depleted. Please manage billing.',
+      },
+    }), { status: 429, headers: { 'content-type': 'application/json' } });
+  }
   if (requestText.includes('Trigger safety contract')) {
     return new Response(JSON.stringify({
       promptFeedback: { blockReason: 'SAFETY' },
@@ -106,6 +115,19 @@ const standardBody = JSON.parse(generationRequests[1].options.body);
 assert.equal(standardBody.safetySettings.length, 4);
 assert.ok(standardBody.safetySettings.every((setting) => setting.threshold === 'BLOCK_MEDIUM_AND_ABOVE'));
 assert.deepEqual(standardBody.generationConfig.thinkingConfig, { thinkingLevel: 'minimal' });
+
+await assert.rejects(
+  generateAiContent({
+    purpose: `${purpose}-billing`,
+    contents: [{ role: 'user', parts: [{ text: 'Trigger billing depleted' }] }],
+    maxOutputTokens: 80,
+  }),
+  (error) => error.code === 'GEMINI_BILLING_DEPLETED'
+    && error.status === 503
+    && error.retryable === false
+    && error.message.includes('Kredit Gemini'),
+);
+
 assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.6-flash', mode: 'thinking', purpose: 'chat' }), { thinkingLevel: 'medium' });
 assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.6-flash', mode: 'xtrathink', purpose: 'chat' }), { thinkingLevel: 'high' });
 assert.deepEqual(aiThinkingConfigFor({ model: 'gemini-3.5-flash', mode: 'thinking', purpose: 'document' }), { thinkingLevel: 'high' });

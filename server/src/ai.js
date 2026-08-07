@@ -119,17 +119,21 @@ function finishUsage(id, { status, usage, latencyMs, errorCode = '' }) {
 
 function providerError(status, payload) {
   const providerCode = String(payload?.error?.status || `HTTP_${status}`).slice(0, 80);
-  const retryable = RETRYABLE_STATUS.has(status);
-  const publicStatus = status === 429 ? 429 : 502;
+  const providerMessage = String(payload?.error?.message || '');
+  const billingDepleted = /prepayment credits? (?:are )?depleted|prepay(?:ment)? credits?.*depleted/i.test(providerMessage);
+  const retryable = RETRYABLE_STATUS.has(status) && !billingDepleted;
+  const publicStatus = billingDepleted ? 503 : status === 429 ? 429 : 502;
   const wrongCredentialType = status === 401 && !/^AIza[0-9A-Za-z_-]{20,}$/.test(config.geminiKey);
-  const message = status === 429
-    ? 'Kapasitas AI sedang penuh. Coba lagi sebentar.'
+  const message = billingDepleted
+    ? 'Kredit Gemini untuk project production sudah habis. Tambahkan prepaid credit atau perbaiki billing project di Google AI Studio, lalu coba lagi.'
+    : status === 429
+      ? 'Kapasitas AI sedang penuh. Coba lagi sebentar.'
     : wrongCredentialType
       ? 'GEMINI_API_KEY bukan API key Gemini yang valid. Buat key di Google AI Studio; token OAuth seperti AQ.A tidak dapat dipakai.'
       : status === 401
         ? 'GEMINI_API_KEY ditolak Google. Periksa kembali key atau buat key baru di Google AI Studio.'
         : 'Provider AI belum dapat menyelesaikan permintaan ini.';
-  return new AiProviderError(message, { code: `GEMINI_${providerCode}`, status: publicStatus, retryable });
+  return new AiProviderError(message, { code: billingDepleted ? 'GEMINI_BILLING_DEPLETED' : `GEMINI_${providerCode}`, status: publicStatus, retryable });
 }
 
 function sleep(milliseconds) {
