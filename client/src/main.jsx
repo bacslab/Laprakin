@@ -1368,6 +1368,7 @@ function Workspace() {
   const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [pendingConfigRequest, setPendingConfigRequest] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
   const actionInFlightRef = useRef(false);
   const sendInFlightRef = useRef(false);
+  const autoResumeDocumentsRef = useRef(new Set());
   const tutorialAutoOpenedRef = useRef(false);
   const [productUpdate, setProductUpdate] = useState(null);
   const page = location.pathname.includes('/projects') ? 'projects' : location.pathname.includes('/documents') ? 'documents' : 'chat';
@@ -1939,6 +1940,14 @@ function Workspace() {
       return false;
     } finally { setBusy(false); }
   };
+  useEffect(() => {
+    const documentId = active?.document_id;
+    const latestJob = activeJob || documentState?.jobs?.[0] || null;
+    const liveJob = ['queued', 'running', 'retry_queued'].includes(latestJob?.status);
+    if (!documentId || documentState?.status !== 'analyzed' || busy || liveJob || autoResumeDocumentsRef.current.has(documentId)) return;
+    autoResumeDocumentsRef.current.add(documentId);
+    documentAction('generate');
+  }, [active?.document_id, activeJob?.id, activeJob?.status, busy, documentState?.status]);
   const restoreDocumentVersion = async (versionId) => {
     if (!active?.document_id || !versionId) return false;
     const confirmed = await showDialog({
