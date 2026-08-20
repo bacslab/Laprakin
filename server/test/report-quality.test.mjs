@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import {
   AI_SLOP_PATTERNS,
   analyzeChatRequest,
+  assessDocumentGenerationReadiness,
   generateChatTitle,
   inferChatContext,
   inferDocumentType,
@@ -76,6 +77,21 @@ test('isPlausibleAcademicContext menolak sapaan dan pertanyaan sebagai konteks',
   for (const noise of ['halo', 'oke', 'tolong', 'gimana', 'apa itu laprak', 'kenapa error', '', '   ', 'laporan']) {
     assert.equal(isPlausibleAcademicContext(noise), false, `seharusnya ditolak: ${JSON.stringify(noise)}`);
   }
+});
+
+test('singkatan akademik tetap dianggap konteks dokumen yang valid', () => {
+  const readiness = assessDocumentGenerationReadiness({
+    document: {
+      title: 'DHCP',
+      course_name: 'MIS',
+      module_title: 'DHCP',
+      recipe_json: JSON.stringify({ allowExternalAi: true, evidenceMode: 'unavailable' }),
+    },
+    user: {},
+    files: [{ category: 'module', mime_type: 'application/pdf' }],
+  });
+  assert.equal(readiness.canGenerate, true);
+  assert.deepEqual(readiness.missingForGenerate, []);
 });
 
 test('reportSectionIssues meloloskan draft yang sudah lengkap', () => {

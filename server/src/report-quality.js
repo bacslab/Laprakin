@@ -195,7 +195,8 @@ function words(value = '') {
 
 function meaningfulTitle(value = '') {
   const title = String(value || '').trim();
-  return title.length >= 6 && !GENERIC_CHAT_TITLES.test(title);
+  const academicAcronym = /^[A-Z0-9][A-Z0-9.+#&/-]{1,11}$/.test(title);
+  return (title.length >= 6 || academicAcronym) && !GENERIC_CHAT_TITLES.test(title);
 }
 
 function normalizeContextValue(value = '') {
