@@ -33,7 +33,7 @@ fi
 APP_DIR="${LAPRAKIN_APP_DIR:-/opt/laprakin}"
 STATE_DIR="${LAPRAKIN_DEPLOY_STATE_DIR:-/var/lib/laprakin-deploy}"
 REPO_DIR="$STATE_DIR/repo"
-REPO_URL="${LAPRAKIN_REPO_URL:-git@github.com:Mubax5/Laprakin.git}"
+REPO_URL="${LAPRAKIN_REPO_URL:-git@github.com:bacslab/Laprakin.git}"
 BRANCH="${LAPRAKIN_DEPLOY_BRANCH:-release}"
 SSH_KEY="${LAPRAKIN_DEPLOY_KEY:-$STATE_DIR/deploy-key}"
 NOTIFY="${LAPRAKIN_NOTIFY_BIN:-/usr/local/bin/laprakin-notify.sh}"
