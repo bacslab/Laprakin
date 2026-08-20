@@ -448,7 +448,7 @@ export default function LandingPage({ navigate }) {
         <div className="fg-hero-content">
           <div className="fg-hero-copy">
             <h1>Fokus praktikum.<br />Urusan laporan, <span>laprakin.</span></h1>
-            <p>Satukan bahan, susun draft, dan revisi laporan dalam satu workspace yang memahami alur tugas akademikmu.</p>
+            <p>Satukan bahan, terima dokumen jadi, dan revisi laporan dalam satu workspace yang memahami alur tugas akademikmu.</p>
           </div>
           <GradientButton onClick={() => navigate('/auth')}>Coba sekarang</GradientButton>
           <div className="fg-video-frame fg-hero-video" data-cursor="PLAY">

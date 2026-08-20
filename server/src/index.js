@@ -101,8 +101,8 @@ import {
   syncConfiguredAdminAccount,
 } from './services.js';
 
-const FRIENDLY_AI_RETRY_MESSAGE = 'Proses AI belum berhasil diselesaikan. Silakan coba lagi beberapa saat lagi. Bahanmu tetap tersimpan aman.';
-const FRIENDLY_AI_NOT_READY_MESSAGE = 'Layanan AI sedang disiapkan. Silakan coba kembali sebentar lagi.';
+const FRIENDLY_AI_RETRY_MESSAGE = 'Laprakin masih menyiapkan hasilmu. Bahan tetap tersimpan aman dan proses akan dilanjutkan otomatis.';
+const FRIENDLY_AI_NOT_READY_MESSAGE = 'Laprakin sedang menyiapkan layanan. Coba kembali sebentar lagi.';
 const TECHNICAL_AI_ERROR_PATTERN = /^(?:AI_|NARAROUTER_|CLOUDFLARE_)|(?:^|_)(?:AI|NARAROUTER|CLOUDFLARE)(?:_|$)|resource_exhausted|ai_provider_error|ai_schema_invalid|ai_output_truncated|ai_capacity_unavailable|ai_vision_unavailable/i;
 
 function isTechnicalAiError(error) {
@@ -1405,6 +1405,160 @@ function enqueueJob({ documentId, userId, jobType, payload = {}, maxAttempts = c
   return jobId;
 }
 
+function activeDocumentPipelineJob(documentId, userId) {
+  return db.prepare(`
+    SELECT * FROM jobs
+    WHERE document_id = ? AND owner_user_id = ?
+      AND job_type IN ('analyze', 'generate')
+      AND status IN ('queued', 'running')
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(documentId, userId) || null;
+}
+
+function queueDocumentGeneration({
+  documentId,
+  userId,
+  aiMode = 'basic',
+  forceLocalFallback = false,
+  recoveryAttempt = 0,
+} = {}) {
+  const active = activeDocumentPipelineJob(documentId, userId);
+  if (active) return active.id;
+
+  const document = db.prepare(`
+    SELECT * FROM documents
+    WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL
+  `).get(documentId, userId);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  if (!document || !user) throw new HttpError(404, 'Dokumen tidak ditemukan.', 'DOCUMENT_NOT_FOUND');
+  if (document.generated_at) return null;
+
+  const files = db.prepare('SELECT * FROM document_files WHERE document_id = ? AND deleted_at IS NULL').all(documentId);
+  const mappings = db.prepare('SELECT * FROM evidence_mappings WHERE document_id = ?').all(documentId);
+  const readiness = assessDocumentGenerationReadiness({ document, user, files, mappings });
+  if (!readiness.canGenerate) {
+    throw new HttpError(422, 'Bahan laprak belum cukup untuk disusun.', 'DOCUMENT_INPUT_INCOMPLETE');
+  }
+  const recipe = parseJson(document.recipe_json, {});
+  if (!recipe.allowExternalAi && !forceLocalFallback) {
+    throw new HttpError(412, 'Izin pemrosesan bahan belum aktif.', 'AI_CONSENT_REQUIRED');
+  }
+
+  const entitlement = revisionEntitlementForUser(userId);
+  let bucket = null;
+  let creditSessionId = null;
+  const creditSession = db.prepare(`
+    SELECT id FROM chat_sessions
+    WHERE document_id = ? AND owner_user_id = ? AND archived_at IS NULL
+    LIMIT 1
+  `).get(documentId, userId);
+  if (creditSession) {
+    creditSessionId = creditSession.id;
+    bucket = reserveLaprakCredit(userId, creditSession.id);
+  } else {
+    bucket = consumeCredit(userId, documentId);
+  }
+
+  const jobId = enqueueJob({
+    documentId,
+    userId,
+    jobType: 'generate',
+    maxAttempts: forceLocalFallback ? 1 : config.jobMaxAttempts,
+    payload: {
+      creditBucket: bucket,
+      creditSessionId,
+      isRevision: false,
+      revisionPlan: entitlement.plan,
+      aiMode,
+      pipelineAuto: true,
+      forceLocalFallback,
+      recoveryAttempt,
+    },
+  });
+  db.prepare(`
+    UPDATE chat_sessions SET workflow_state = 'GENERATING', updated_at = ?
+    WHERE document_id = ? AND owner_user_id = ?
+  `).run(now(), documentId, userId);
+  return jobId;
+}
+
+function ensureDocumentPipeline({
+  documentId,
+  userId,
+  aiMode = 'basic',
+  forceLocalFallback = false,
+  recoveryAttempt = 0,
+} = {}) {
+  const document = db.prepare(`
+    SELECT id, status, generated_at FROM documents
+    WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL
+  `).get(documentId, userId);
+  if (!document || document.generated_at || document.status === 'generated') return null;
+  const active = activeDocumentPipelineJob(documentId, userId);
+  if (active) return active.id;
+
+  if (document.status !== 'analyzed') {
+    const jobId = enqueueJob({
+      documentId,
+      userId,
+      jobType: 'analyze',
+      payload: { pipelineAuto: true, aiMode },
+    });
+    db.prepare(`
+      UPDATE chat_sessions SET workflow_state = 'GENERATING', updated_at = ?
+      WHERE document_id = ? AND owner_user_id = ?
+    `).run(now(), documentId, userId);
+    return jobId;
+  }
+
+  return queueDocumentGeneration({ documentId, userId, aiMode, forceLocalFallback, recoveryAttempt });
+}
+
+function resumePendingDocumentPipelines() {
+  const sessions = db.prepare(`
+    SELECT chat_sessions.id, chat_sessions.owner_user_id, chat_sessions.document_id,
+      chat_sessions.configuration_json
+    FROM chat_sessions
+    JOIN documents ON documents.id = chat_sessions.document_id
+    WHERE chat_sessions.archived_at IS NULL
+      AND chat_sessions.workflow_state IN ('GENERATING', 'READY_TO_GENERATE')
+      AND documents.deleted_at IS NULL
+      AND documents.generated_at IS NULL
+    ORDER BY chat_sessions.updated_at ASC
+  `).all();
+  let resumed = 0;
+  for (const session of sessions) {
+    if (activeDocumentPipelineJob(session.document_id, session.owner_user_id)) continue;
+    const latestGeneration = db.prepare(`
+      SELECT * FROM jobs
+      WHERE document_id = ? AND owner_user_id = ? AND job_type = 'generate'
+      ORDER BY created_at DESC LIMIT 1
+    `).get(session.document_id, session.owner_user_id);
+    if (latestGeneration?.status === 'failed' && jobPayload(latestGeneration).forceLocalFallback) continue;
+    try {
+      const configuration = parseJson(session.configuration_json, {});
+      const jobId = ensureDocumentPipeline({
+        documentId: session.document_id,
+        userId: session.owner_user_id,
+        aiMode: configuration.aiMode || 'basic',
+      });
+      if (jobId) resumed += 1;
+    } catch (error) {
+      createAdminAlert({
+        kind: 'document_pipeline_recovery',
+        severity: 'warning',
+        userId: session.owner_user_id,
+        documentId: session.document_id,
+        summary: 'Alur dokumen belum dapat dilanjutkan otomatis dan perlu diperiksa.',
+        errorCode: error?.code || 'PIPELINE_RECOVERY_FAILED',
+      });
+    }
+  }
+  if (resumed) console.log(`[jobs] resumed ${resumed} document pipeline(s)`);
+  return resumed;
+}
+
 function refundJobCreditSafely(job, payload) {
   if (job.job_type !== 'generate' || !payload.creditBucket) return true;
   try {
@@ -1459,6 +1613,14 @@ async function runJob(job) {
       result = await analyzeDocument(job.document_id, job.owner_user_id, update);
     } else if (job.job_type === 'generate') {
       result = await generateDocument(job.document_id, job.owner_user_id, update, payload);
+      update(96, 'Memeriksa susunan dokumen Word');
+      const preview = await buildDocumentDocxBuffer(job.document_id, job.owner_user_id, { enforceExportQuality: false });
+      if (!preview?.buffer?.length) throw new HttpError(500, 'Dokumen Word belum tersusun utuh.', 'DOCX_BUILD_INCOMPLETE');
+      db.prepare(`
+        UPDATE documents SET status = 'generated', generated_at = COALESCE(generated_at, ?), updated_at = ?
+        WHERE id = ? AND owner_user_id = ?
+      `).run(now(), now(), job.document_id, job.owner_user_id);
+      result = { ...(result || {}), docxVerified: true, docxBytes: preview.buffer.length };
     } else if (job.job_type === 'export') {
       update(20, 'Menyiapkan dokumen Word');
       const exported = await exportDocumentDocx(job.document_id, job.owner_user_id, payload.reviewMode || 'reviewed');
@@ -1505,7 +1667,13 @@ async function runJob(job) {
       UPDATE jobs SET status = 'completed', progress = 100, message = 'Selesai', result_json = ?, finished_at = ?, heartbeat_at = ?
       WHERE id = ?
     `).run(JSON.stringify(result || {}), completedAt, completedAt, job.id);
-    if (job.job_type === 'generate') {
+    if (job.job_type === 'analyze' && payload.pipelineAuto) {
+      ensureDocumentPipeline({
+        documentId: job.document_id,
+        userId: job.owner_user_id,
+        aiMode: payload.aiMode || 'basic',
+      });
+    } else if (job.job_type === 'generate') {
       db.prepare(`UPDATE chat_sessions SET workflow_state = 'DOCUMENT_PREVIEW', updated_at = ? WHERE document_id = ? AND owner_user_id = ?`)
         .run(now(), job.document_id, job.owner_user_id);
       const session = db.prepare(`
@@ -1544,8 +1712,8 @@ async function runJob(job) {
     recordJobEvent(job.id);
     const jobCopy = {
       scan: { title: 'Pemeriksaan file selesai', body: 'Cek jika ada file yang perlu kamu redaksi sebelum dibagikan.' },
-      analyze: { title: 'Analisis bahan selesai', body: 'Outline dan saran bukti sudah bisa kamu review.' },
-      generate: { title: 'Draft laporan sudah siap', body: 'Lanjutkan pemeriksaan di halaman laporan.' },
+      analyze: { title: 'Bahan selesai dibaca', body: 'Pembuatan dokumen dilanjutkan otomatis.' },
+      generate: { title: 'Dokumen Word sudah siap', body: 'Buka hasilnya untuk melakukan pemeriksaan akhir.' },
       export: { title: 'File Word sudah siap', body: 'DOCX bisa diunduh dari halaman laporan.' },
     };
     notifyUser(job.owner_user_id, {
@@ -1590,6 +1758,31 @@ async function runJob(job) {
         );
         recordJobEvent(job.id);
       } else {
+        if (job.job_type === 'generate' && payload.pipelineAuto && !payload.forceLocalFallback) {
+          refundJobCreditSafely(job, payload);
+          db.prepare(`
+            UPDATE documents SET status = 'analyzed', generated_at = NULL, updated_at = ?
+            WHERE id = ? AND owner_user_id = ?
+          `).run(now(), job.document_id, job.owner_user_id);
+          db.prepare(`
+            UPDATE jobs SET status = 'failed', message = 'Menyiapkan jalur penyelesaian', error_message = ?, finished_at = ?, heartbeat_at = ?
+            WHERE id = ?
+          `).run(error?.message || 'Penyusunan utama belum selesai.', now(), now(), job.id);
+          recordJobEvent(job.id);
+          const fallbackJobId = ensureDocumentPipeline({
+            documentId: job.document_id,
+            userId: job.owner_user_id,
+            aiMode: payload.aiMode || 'basic',
+            forceLocalFallback: true,
+            recoveryAttempt: Number(payload.recoveryAttempt || 0) + 1,
+          });
+          audit(job.owner_user_id, 'job.fallback_enqueued', 'document', job.document_id, {
+            jobId: job.id,
+            fallbackJobId,
+            jobType: job.job_type,
+          });
+          return;
+        }
         const creditRefunded = refundJobCreditSafely(job, payload);
         db.prepare(`
           UPDATE jobs SET status = 'failed', message = 'Proses gagal', error_message = ?, finished_at = ?, heartbeat_at = ?
@@ -1615,7 +1808,7 @@ async function runJob(job) {
               nanoid(),
               session.id,
               job.owner_user_id,
-              FRIENDLY_AI_RETRY_MESSAGE + ' Tekan Susun draft untuk mencoba lagi.',
+              'Dokumen belum selesai pada percobaan ini. Bahan tetap tersimpan dan Laprakin akan melanjutkan pemulihan secara otomatis.',
               JSON.stringify({
                 kind: 'generation_failed',
                 jobId: job.id,
@@ -1678,52 +1871,7 @@ function recoverInterruptedJobs() {
 }
 
 function recoverFailedGenerationSessions() {
-  const sessions = db.prepare(`
-    SELECT
-      chat_sessions.id,
-      chat_sessions.owner_user_id,
-      chat_sessions.document_id,
-      documents.generated_at,
-      jobs.id AS job_id,
-      jobs.error_message
-    FROM chat_sessions
-    JOIN documents ON documents.id = chat_sessions.document_id
-    JOIN jobs ON jobs.id = (
-      SELECT latest.id FROM jobs AS latest
-      WHERE latest.document_id = chat_sessions.document_id
-        AND latest.owner_user_id = chat_sessions.owner_user_id
-        AND latest.job_type = 'generate'
-      ORDER BY latest.created_at DESC
-      LIMIT 1
-    )
-    WHERE chat_sessions.workflow_state = 'GENERATING'
-      AND chat_sessions.archived_at IS NULL
-      AND jobs.status = 'failed'
-  `).all();
-  for (const session of sessions) {
-    db.prepare('UPDATE chat_sessions SET workflow_state = ?, updated_at = ? WHERE id = ?')
-      .run(session.generated_at ? 'DOCUMENT_PREVIEW' : 'READY_TO_GENERATE', now(), session.id);
-    const existingMessage = db.prepare(`
-      SELECT 1 FROM chat_messages
-      WHERE session_id = ? AND owner_user_id = ?
-        AND meta_json LIKE ?
-      LIMIT 1
-    `).get(session.id, session.owner_user_id, `%"jobId":"${session.job_id}"%`);
-    if (!existingMessage) {
-      db.prepare(`
-        INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
-        VALUES (?, ?, ?, 'assistant', ?, ?, ?)
-      `).run(
-        nanoid(),
-        session.id,
-        session.owner_user_id,
-        FRIENDLY_AI_RETRY_MESSAGE + ' Buka proses lalu tekan Susun draft untuk mencoba lagi.',
-        JSON.stringify({ kind: 'generation_failed', jobId: session.job_id, recovered: true }),
-        now(),
-      );
-    }
-  }
-  if (sessions.length) console.log(`[jobs] recovered ${sessions.length} failed generation session(s)`);
+  return resumePendingDocumentPipelines();
 }
 
 function normalizeSourceDeclaration(value) {
@@ -2520,7 +2668,7 @@ function chatWorkflow(session, user) {
             ? 'Jenis dokumen dan topik apa yang ingin kamu susun?'
             : 'Mata kuliah dan topik praktikum ini apa?'
       : state === 'READY_TO_GENERATE'
-        ? 'Konteksnya sudah cukup. Laprak siap disusun.'
+        ? 'Konteksnya sudah cukup. Dokumen akan dibuat otomatis.'
         : readiness.nextQuestion;
 
   return {
@@ -3381,7 +3529,10 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
 app.post('/api/chat/sessions/:id/document', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
-  if (session.document_id) return res.json({ document: exposeDocument(db.prepare('SELECT * FROM documents WHERE id = ?').get(session.document_id)) });
+  if (session.document_id) {
+    const jobId = ensureDocumentPipeline({ documentId: session.document_id, userId: req.user.id, aiMode: req.body?.aiMode || 'basic' });
+    return res.json({ document: exposeDocument(db.prepare('SELECT * FROM documents WHERE id = ?').get(session.document_id)), jobId });
+  }
   const workflow = chatWorkflow(session, req.user);
   if (!workflow.canCreateDocument) {
     throw new HttpError(422, `Konteks belum cukup untuk membuat dokumen. ${workflow.nextQuestion}`, 'CHAT_CONTEXT_INCOMPLETE');
@@ -3414,7 +3565,8 @@ app.post('/api/chat/sessions/:id/document', requireAuth, requireCsrf, asyncHandl
   seedDocumentTasks(id, req.user.id, null);
   db.prepare(`UPDATE chat_sessions SET document_id = ?, workflow_state = 'GENERATING', updated_at = ? WHERE id = ?`).run(id, now(), session.id);
   audit(req.user.id, 'chat.document_created', 'chat_session', session.id, { documentId: id, attachmentCount: attachments.length });
-  res.status(201).json({ document: exposeDocument(db.prepare('SELECT * FROM documents WHERE id = ?').get(id)), workflow });
+  const jobId = ensureDocumentPipeline({ documentId: id, userId: req.user.id, aiMode: req.body?.aiMode || 'basic' });
+  res.status(201).json({ document: exposeDocument(db.prepare('SELECT * FROM documents WHERE id = ?').get(id)), workflow, jobId });
 }));
 
 app.get('/api/support/thread', requireAuth, (req, res) => {
@@ -3811,11 +3963,10 @@ app.post('/api/documents/:id/generate', requireAuth, requireCsrf, requireDocumen
   const mappings = db.prepare('SELECT * FROM evidence_mappings WHERE document_id = ?').all(req.document.id);
   const readiness = assessDocumentGenerationReadiness({ document: req.document, user: req.user, files, mappings });
   if (!readiness.canGenerate) {
-    throw new HttpError(422, `Draft belum bisa disusun. Lengkapi: ${readiness.missingForGenerate.map((item) => item.label).join(', ')}.`, 'DOCUMENT_INPUT_INCOMPLETE');
+    throw new HttpError(422, 'Bahan laprak belum cukup untuk disusun.', 'DOCUMENT_INPUT_INCOMPLETE');
   }
   const recipe = parseJson(req.document.recipe_json, {});
-  if (!recipe.allowExternalAi) throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum menyusun draft.', 'AI_CONSENT_REQUIRED');
-  if (!isAiConfigured()) throw new HttpError(503, FRIENDLY_AI_NOT_READY_MESSAGE, 'AI_NOT_READY');
+  if (!recipe.allowExternalAi) throw new HttpError(412, 'Izin pemrosesan bahan belum aktif.', 'AI_CONSENT_REQUIRED');
   const entitlement = revisionEntitlementForUser(req.user.id);
   const isInitialDraft = !req.document.generated_at;
   const revisionCount = Number(req.document.revision_count || 0);
@@ -3852,7 +4003,7 @@ app.post('/api/documents/:id/generate', requireAuth, requireCsrf, requireDocumen
 
 app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentOwner, aiChatLimiter, asyncHandler(async (req, res) => {
   const input = revisionSchema.parse(req.body || {});
-  if (!req.document.generated_at) throw new HttpError(409, 'Susun draft pertama sebelum meminta revisi.', 'REVISION_DRAFT_REQUIRED');
+  if (!req.document.generated_at) throw new HttpError(409, 'Dokumen masih disiapkan. Revisi dapat ditulis setelah hasilnya tersedia.', 'REVISION_DRAFT_REQUIRED');
   ensureNoActiveJob(req.document.id, 'generate');
   const recipe = parseJson(req.document.recipe_json, {});
   if (!recipe.allowExternalAi) throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum merevisi draft.', 'AI_CONSENT_REQUIRED');
@@ -5497,6 +5648,7 @@ recoverFailedGenerationSessions();
 initializeAiModelRegistry().catch((error) => console.error('[ai] startup model discovery:', error?.code || error?.message || error));
 queueMicrotask(drainJobQueue);
 setInterval(() => { drainJobQueue().catch((error) => console.error('[jobs]', error)); }, config.jobPollMs).unref();
+setInterval(() => { resumePendingDocumentPipelines(); }, 30 * 1000).unref();
 setInterval(() => { cleanupExpiredResources().catch((error) => console.error('[retention]', error)); }, config.retentionSweepMinutes * 60 * 1000).unref();
 
 const server = app.listen(config.port, () => {

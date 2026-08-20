@@ -80,6 +80,65 @@ function elementText(xml = '') {
     .trim();
 }
 
+function xmlAttribute(xml = '', tagName = '', attributeName = '') {
+  const tag = new RegExp(`<${tagName}\\b[^>]*>`, 'i').exec(String(xml))?.[0]
+    || new RegExp(`<${tagName}\\b[^>]*/>`, 'i').exec(String(xml))?.[0]
+    || '';
+  return new RegExp(`\\b${attributeName}="([^"]+)"`, 'i').exec(tag)?.[1] || '';
+}
+
+function styleBlock(stylesXml = '', namePattern) {
+  return [...String(stylesXml).matchAll(/<w:style\b[^>]*>[\s\S]*?<\/w:style>/gi)]
+    .map((match) => match[0])
+    .find((block) => namePattern.test(xmlAttribute(block, 'w:name', 'w:val')) || namePattern.test(xmlAttribute(block, 'w:style', 'w:styleId')))
+    || '';
+}
+
+function runStyleTokens(xml = {}, fallback = {}) {
+  const source = String(xml || '');
+  return {
+    font: xmlAttribute(source, 'w:rFonts', 'w:ascii') || xmlAttribute(source, 'w:rFonts', 'w:hAnsi') || fallback.font || 'Times New Roman',
+    sizeHalfPoints: Number(xmlAttribute(source, 'w:sz', 'w:val') || fallback.sizeHalfPoints || 24),
+    color: xmlAttribute(source, 'w:color', 'w:val') || fallback.color || '000000',
+    bold: /<w:b(?:\s[^>]*)?\/>|<w:b\b[^>]*w:val="(?:true|1)"/i.test(source) || Boolean(fallback.bold),
+  };
+}
+
+function inspectDocumentDesign(zip, documentXml) {
+  const stylesXml = zip.readAsText('word/styles.xml') || '';
+  const defaults = runStyleTokens(/<w:docDefaults\b[^>]*>[\s\S]*?<\/w:docDefaults>/i.exec(stylesXml)?.[0] || '', {
+    font: 'Times New Roman', sizeHalfPoints: 24, color: '000000', bold: false,
+  });
+  const normal = runStyleTokens(styleBlock(stylesXml, /^normal$/i), defaults);
+  const heading1 = runStyleTokens(styleBlock(stylesXml, /^(?:heading\s*1|judul\s*1)$/i), { ...normal, sizeHalfPoints: 28, bold: true });
+  const heading2 = runStyleTokens(styleBlock(stylesXml, /^(?:heading\s*2|judul\s*2)$/i), { ...normal, bold: true });
+  const sectionXml = [...String(documentXml).matchAll(/<w:sectPr\b[^>]*>[\s\S]*?<\/w:sectPr>/gi)].at(-1)?.[0] || '';
+  const pageWidth = Number(xmlAttribute(sectionXml, 'w:pgSz', 'w:w') || 0);
+  const pageHeight = Number(xmlAttribute(sectionXml, 'w:pgSz', 'w:h') || 0);
+  const margins = {
+    top: Number(xmlAttribute(sectionXml, 'w:pgMar', 'w:top') || 0),
+    right: Number(xmlAttribute(sectionXml, 'w:pgMar', 'w:right') || 0),
+    bottom: Number(xmlAttribute(sectionXml, 'w:pgMar', 'w:bottom') || 0),
+    left: Number(xmlAttribute(sectionXml, 'w:pgMar', 'w:left') || 0),
+    header: Number(xmlAttribute(sectionXml, 'w:pgMar', 'w:header') || 0),
+    footer: Number(xmlAttribute(sectionXml, 'w:pgMar', 'w:footer') || 0),
+  };
+  return {
+    page: {
+      widthTwips: pageWidth,
+      heightTwips: pageHeight,
+      orientation: pageWidth && pageHeight && pageWidth > pageHeight ? 'landscape' : 'portrait',
+      marginsTwips: margins,
+    },
+    typography: { normal, heading1, heading2 },
+    sectionCount: Math.max(1, (String(documentXml).match(/<w:sectPr\b/gi) || []).length),
+    tableCount: (String(documentXml).match(/<w:tbl\b/gi) || []).length,
+    imageCount: (String(documentXml).match(/<w:drawing\b|<w:pict\b/gi) || []).length,
+    headerCount: zip.getEntries().filter((entry) => /^word\/header\d+\.xml$/i.test(entry.entryName)).length,
+    footerCount: zip.getEntries().filter((entry) => /^word\/footer\d+\.xml$/i.test(entry.entryName)).length,
+  };
+}
+
 function paragraphLines(xml = '') {
   return String(xml).split(BREAK_NODE).map(elementText);
 }
@@ -365,6 +424,7 @@ export function inspectTemplateDocxBuffer(buffer) {
     coverParagraphCount: elements.slice(0, coverBoundary).filter((element) => /^<w:p\b/i.test(element.trim())).length,
     bodyHeadings,
     hasCoverImage: elements.slice(0, coverBoundary).some((element) => /\br:embed="/i.test(element)),
+    designProfile: inspectDocumentDesign(zip, documentXml),
   };
 }
 

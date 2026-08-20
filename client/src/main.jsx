@@ -228,8 +228,6 @@ Object.assign(EN_UI, {
   'Siap membuat dokumen kerja?': 'Ready to create a working document?',
   'Semua bahan dan konteks chat ini akan dipakai sebagai titik awal.': 'All materials and chat context will be used as a starting point.',
   'Analisis': 'Analyze',
-  'Susun draft': 'Create draft',
-  'Susun ulang': 'Regenerate',
   'Pilih atau upgrade plan dari halaman harga. Riwayat pembayaran disimpan di Settings ini.': 'Choose or upgrade a plan from the pricing page. Payment history is stored in these settings.',
   'Lihat plan': 'View plans',
   'Memuat riwayat...': 'Loading history...',
@@ -782,7 +780,7 @@ const legalContent = {
     sections: [
       ['Penerimaan dan cakupan', 'Ketentuan ini berlaku untuk landing page, akun, workspace, chat, upload, AI, dokumen, export, pembayaran, dukungan, dan fitur lain yang disediakan Laprakin. Jika kamu tidak menyetujui bagian penting dari ketentuan ini, jangan membuat akun atau gunakan layanan.'],
       ['Akun dan informasi yang benar', 'Kamu wajib memberikan email dan informasi akun yang benar, menjaga password, dan segera memberi tahu kami bila menduga ada akses tidak sah. Satu akun tidak boleh dipindahtangankan tanpa persetujuan. Aktivitas yang dilakukan melalui akunmu dapat dianggap sebagai aktivitasmu sampai ada bukti sebaliknya.'],
-      ['Penggunaan yang diperbolehkan', 'Gunakan Laprakin untuk mengelola bahan milikmu, memahami tugas, menyusun draft, meminta revisi, menyimpan riwayat kerja, dan mengekspor dokumen akademik yang sah. Kamu tetap harus mengikuti aturan kampus, instruksi dosen, dan hukum yang berlaku.'],
+      ['Penggunaan yang diperbolehkan', 'Gunakan Laprakin untuk mengelola bahan milikmu, memahami tugas, membuat laporan, meminta revisi, menyimpan riwayat kerja, dan mengekspor dokumen akademik yang sah. Kamu tetap harus mengikuti aturan kampus, instruksi dosen, dan hukum yang berlaku.'],
       ['Integritas akademik dan larangan pemalsuan', 'Dilarang memakai Laprakin untuk memalsukan bukti, data, screenshot, hasil eksperimen, tanda tangan, identitas, sumber, kehadiran, atau hasil penelitian. Dilarang pula meminta AI mengarang hasil yang tidak ada atau menyamarkan penggunaan bantuan dengan cara menipu.'],
       ['Konten yang dilarang', 'Jangan mengunggah malware, kredensial, data kartu, pornografi ilegal, eksploitasi anak, ancaman, doxing, data orang lain tanpa izin, materi yang melanggar hak cipta, atau konten yang mendorong kekerasan dan pelanggaran hukum.'],
       ['Bahan dan hak pengguna', 'Kamu mempertahankan hak atas bahan yang kamu unggah dan bertanggung jawab atas izin, lisensi, kerahasiaan, serta keakuratannya. Kamu memberi Laprakin izin terbatas, non-eksklusif, dan hanya selama diperlukan untuk menyimpan, memproses, menampilkan, merevisi, dan mengekspor dokumen yang kamu minta.'],
@@ -846,7 +844,7 @@ function TutorialVideo({ media = {}, copy = {} }) {
 function CompareLinkedPreview({ media = {} }) {
   const url = media?.compareMediaUrl || '';
   const isPdf = media?.compareMediaType === 'pdf' || /\.pdf(?:$|\?)/i.test(url);
-  if (!url) return <div className="laprakin-window compare-document-fallback"><div className="attachment-row"><FileText size={14} /><span>modul-routing.pdf</span><Check size={13} /></div><div className="attachment-row"><FileText size={14} /><span>bukti-praktik.docx · 12 gambar</span><Check size={13} /></div><div className="doc-mini"><small>Dokumen kerja</small><b>Routing Protocol</b><div><span className="done">Analisis</span><span>Susun draft</span><span>Export Word</span></div></div></div>;
+  if (!url) return <div className="laprakin-window compare-document-fallback"><div className="attachment-row"><FileText size={14} /><span>modul-routing.pdf</span><Check size={13} /></div><div className="attachment-row"><FileText size={14} /><span>bukti-praktik.docx · 12 gambar</span><Check size={13} /></div><div className="doc-mini"><small>Dokumen kerja</small><b>Routing Protocol</b><div><span className="done">Bahan dibaca</span><span>Dokumen disusun</span><span>Word siap</span></div></div></div>;
   return <div className={`compare-linked-preview ${isPdf ? 'pdf' : 'image'}`} tabIndex="0"><div className="compare-scroll-stage">{isPdf ? <iframe src={`${url}#toolbar=0&navpanes=0&scrollbar=0`} title="Preview PDF landing" /> : <img src={url} alt={media?.compareCaption || 'Preview bahan Laprakin'} />}</div><div className="compare-scroll-hint"><span>{isPdf ? 'Preview PDF' : 'Preview WEBP / gambar'}</span><small>Hover untuk melihat bagian bawah</small></div></div>;
 }
 
@@ -1368,7 +1366,6 @@ function Workspace() {
   const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [pendingConfigRequest, setPendingConfigRequest] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
   const actionInFlightRef = useRef(false);
   const sendInFlightRef = useRef(false);
-  const autoResumeDocumentsRef = useRef(new Set());
   const tutorialAutoOpenedRef = useRef(false);
   const [productUpdate, setProductUpdate] = useState(null);
   const page = location.pathname.includes('/projects') ? 'projects' : location.pathname.includes('/documents') ? 'documents' : 'chat';
@@ -1535,13 +1532,22 @@ function Workspace() {
   useEffect(() => { localStorage.setItem('laprakin-left-collapsed', String(leftCollapsed)); }, [leftCollapsed]);
   useEffect(() => {
     let disposed = false;
+    let refreshTimer = null;
     if (!active?.document_id) { setDocumentState(null); setActiveJob(null); return undefined; }
-    api(`/documents/${active.document_id}`).then((data) => {
-      if (disposed) return;
-      setDocumentState(data);
-      setActiveJob(data.jobs?.[0] || null);
-    }).catch(() => { if (!disposed) { setDocumentState(null); setActiveJob(null); } });
-    return () => { disposed = true; };
+    const refreshDocument = async () => {
+      try {
+        const data = await api(`/documents/${active.document_id}`);
+        if (disposed) return;
+        setDocumentState(data);
+        const liveJob = data.jobs?.find((job) => ['queued', 'running', 'retry_queued'].includes(job.status));
+        setActiveJob(liveJob || data.jobs?.[0] || null);
+        if (data.status !== 'generated' || liveJob) refreshTimer = window.setTimeout(refreshDocument, 1000);
+      } catch {
+        if (!disposed) refreshTimer = window.setTimeout(refreshDocument, 2200);
+      }
+    };
+    refreshDocument();
+    return () => { disposed = true; if (refreshTimer) window.clearTimeout(refreshTimer); };
   }, [active?.document_id]);
   useEffect(() => { if (location.pathname.endsWith('/support')) { setModal('help'); navigate('/app', { replace: true }); } if (location.pathname.endsWith('/feedback')) { setModal('feedback'); navigate('/app', { replace: true }); } if (location.pathname.endsWith('/profile')) { setModal('settings'); navigate('/app', { replace: true }); } }, [location.pathname, navigate]);
   const createSession = async (openConfig = false, overrides = {}) => {
@@ -1825,45 +1831,39 @@ function Workspace() {
     } catch (err) { setNotice(err.message); }
   };
   const waitForJob = async (jobId) => { const started = Date.now(); while (Date.now() - started < 300000) { const job = await api(`/jobs/${jobId}`); setActiveJob(job); if (['completed', 'failed', 'canceled'].includes(job.status)) return job; await new Promise((resolve) => setTimeout(resolve, 650)); } throw new Error('Proses masih berjalan. Timeline akan tetap tersedia saat chat ini dibuka lagi.'); };
+  const waitForDocumentReady = async (documentId, sessionId) => {
+    const started = Date.now();
+    while (Date.now() - started < 600000) {
+      const nextDocument = await api(`/documents/${documentId}`);
+      setDocumentState(nextDocument);
+      const liveJob = nextDocument.jobs?.find((job) => ['queued', 'running', 'retry_queued'].includes(job.status));
+      setActiveJob(liveJob || nextDocument.jobs?.[0] || null);
+      const completedGeneration = nextDocument.jobs?.some((job) => job.type === 'generate' && job.status === 'completed');
+      if (nextDocument.status === 'generated' && completedGeneration && !liveJob) {
+        if (sessionId) hydrate(await api(`/chat/sessions/${sessionId}`));
+        return nextDocument;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+    return null;
+  };
   const createDocument = async (sessionOverride = null) => {
     const targetSession = sessionOverride?.id ? sessionOverride : active;
     if (!targetSession) return;
-    let stage = 'create';
     setBusy(true);
     try {
-      const out = await api(`/chat/sessions/${targetSession.id}/document`, { method: 'POST' });
+      const out = await api(`/chat/sessions/${targetSession.id}/document`, { method: 'POST', body: { aiMode } });
       setDocumentState(out.document);
+      const queuedJob = out.document.jobs?.find((job) => job.id === out.jobId)
+        || out.document.jobs?.find((job) => ['queued', 'running', 'retry_queued'].includes(job.status));
+      setActiveJob(queuedJob || (out.jobId ? { id: out.jobId, type: 'analyze', status: 'queued', progress: 0, message: 'Membaca bahan', timeline: [] } : out.document.jobs?.[0] || null));
       const refreshed = await api(`/chat/sessions/${targetSession.id}`);
       hydrate(refreshed);
-      stage = 'analyze';
-      const analysis = await api(`/documents/${out.document.id}/analyze`, { method: 'POST' });
-      setActiveJob({ id: analysis.jobId, type: 'analyze', status: 'queued', progress: 0, message: 'Membaca bahan', timeline: [] });
-      const analysisJob = await waitForJob(analysis.jobId);
-      if (analysisJob.status !== 'completed') throw new Error(analysisJob.errorMessage || 'Bahan belum berhasil dianalisis.');
-      stage = 'generate';
-      const generation = await api(`/documents/${out.document.id}/generate`, { method: 'POST' });
-      setActiveJob({ id: generation.jobId, type: 'generate', status: 'queued', progress: 0, message: 'Menyusun laporan', timeline: [] });
-      const generationJob = await waitForJob(generation.jobId);
-      if (generationJob.status !== 'completed') throw new Error(generationJob.errorMessage || 'Draft belum berhasil disusun.');
-      const nextDocument = await api(`/documents/${out.document.id}`);
-      setDocumentState(nextDocument);
-      setActiveJob(nextDocument.jobs?.find((item) => item.id === generationJob.id) || generationJob);
-      const readyState = await api(`/chat/sessions/${targetSession.id}/actions`, {
-        method: 'POST',
-        body: {
-          idempotencyKey: `document-ready-${out.document.id}-${generationJob.id}`,
-          type: 'DOCUMENT_READY',
-          payload: {},
-        },
-      });
-      hydrate(readyState);
+      await waitForDocumentReady(out.document.id, targetSession.id);
       await loadDocuments();
     } catch (err) {
-      if (stage === 'generate' && targetSession?.id) {
-        try { hydrate(await api(`/chat/sessions/${targetSession.id}`)); } catch (innerErr) { appendAssistantMessage(innerErr.message || err.message); }
-      } else {
-        appendAssistantMessage(err.message);
-      }
+      try { hydrate(await api(`/chat/sessions/${targetSession.id}`)); } catch {}
+      setNotice('Dokumen tetap diproses otomatis. Kamu boleh meninggalkan chat ini dan kembali lagi nanti.');
     } finally {
       setBusy(false);
     }
@@ -1910,7 +1910,7 @@ function Workspace() {
   };
   const documentAction = async (action, payload = {}) => {
     if (!active?.document_id) return;
-    // Tanpa dialog konfirmasi: pengingat memeriksa draft sudah tampil permanen
+    // Tanpa dialog konfirmasi: pengingat memeriksa dokumen sudah tampil permanen
     // di panel dokumen, dan quiz pemahaman tetap menjadi gerbang sebelum unduh.
     setBusy(true);
     try {
@@ -1934,7 +1934,7 @@ function Workspace() {
       setDocumentState(nextDocument);
       setActiveJob(nextDocument.jobs?.find((item) => item.id === job.id) || job);
       if (['generate', 'revise'].includes(action) && active?.id) hydrate(await api(`/chat/sessions/${active.id}`));
-      if (action === 'analyze') appendAssistantMessage('Bahan selesai dibaca. Struktur dokumen kerja sudah diperbarui dan siap disusun.');
+      if (action === 'analyze') appendAssistantMessage('Bahan selesai dibaca. Laprakin melanjutkan pembuatan dokumen secara otomatis.');
       if (action === 'export') setNotice('DOCX siap diunduh.');
       return true;
     } catch (err) {
@@ -1946,14 +1946,6 @@ function Workspace() {
       return false;
     } finally { setBusy(false); }
   };
-  useEffect(() => {
-    const documentId = active?.document_id;
-    const latestJob = activeJob || documentState?.jobs?.[0] || null;
-    const liveJob = ['queued', 'running', 'retry_queued'].includes(latestJob?.status);
-    if (!documentId || documentState?.status !== 'analyzed' || busy || liveJob || autoResumeDocumentsRef.current.has(documentId)) return;
-    autoResumeDocumentsRef.current.add(documentId);
-    documentAction('generate');
-  }, [active?.document_id, activeJob?.id, activeJob?.status, busy, documentState?.status]);
   const restoreDocumentVersion = async (versionId) => {
     if (!active?.document_id || !versionId) return false;
     const confirmed = await showDialog({
@@ -2500,7 +2492,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
   });
   const assignedAttachmentIds = new Set(Array.from(attachmentBuckets.values()).flat().map((file) => file.id));
   const orphanAttachments = attachments.filter((file) => !assignedAttachmentIds.has(file.id));
-  const liveJob = ['queued', 'running', 'retry_queued'].includes(activeJob?.status);
+  const documentProcessing = Boolean(active?.document_id && (documentState?.status !== 'generated' || ['queued', 'running', 'retry_queued'].includes(activeJob?.status)));
   const hasDocumentReadyMessage = visibleMessages.some((message) => message.meta?.kind === 'document_ready');
   const hasEmbeddedPlan = visibleMessages.some((message) => message.role === 'assistant' && message.meta?.workPlan?.steps?.length);
   const jobForMessage = (message) => {
@@ -2530,8 +2522,9 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
         {message.role === 'user' && attachmentBuckets.get(message.id)?.length ? <SourceBar compact attachments={attachmentBuckets.get(message.id)} onOpen={setPreviewFile} /> : null}
         {message.role === 'assistant' && !message.meta?.isClarification && message.meta?.workPlan?.steps?.length ? <WorkPlanRail
           plan={message.meta.workPlan}
-          job={jobForMessage(message)}
-          completed
+          job={jobForMessage(message) || (message.meta?.kind === 'document_ready' ? null : activeJob)}
+          documentState={documentState}
+          completed={message.meta?.kind === 'document_ready'}
           startedAt={message.meta.thinkingStartedAt}
           finishedAt={message.meta.thinkingFinishedAt || message.created_at}
         /> : null}
@@ -2543,7 +2536,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
       {contextOpen && <InlineContext config={config} updateConfig={updateConfig} onClose={() => setContextOpen(false)} />}
       {orphanAttachments.length > 0 && <SourceBar compact attachments={orphanAttachments} onOpen={setPreviewFile} />}
       {active?.document_id
-        ? <>{busy && !liveJob && <ThinkingRail />}{liveJob && <WorkPlanRail workflow={workflow} job={activeJob || documentState?.jobs?.[0] || null} documentState={documentState} />}{!liveJob && !hasDocumentReadyMessage && <DocumentCard documentState={documentState} activeJob={activeJob} onOpen={onOpenDocument} />}</>
+        ? <>{documentProcessing && !hasEmbeddedPlan && <WorkPlanRail workflow={workflow} job={activeJob || documentState?.jobs?.[0] || null} documentState={documentState} />}{!documentProcessing && !hasDocumentReadyMessage && <DocumentCard documentState={documentState} activeJob={activeJob} onOpen={onOpenDocument} />}</>
         : !hasEmbeddedPlan && <WorkflowPanel workflow={workflow} busy={busy} onCreate={createDocument} onAction={onWorkflowAction} aiMode={aiMode} />}
       {busy && !active?.document_id && !['queued', 'running', 'retry_queued'].includes(activeJob?.status) && <ThinkingRail />}
     </div>}</div>
@@ -2782,13 +2775,19 @@ function ThinkingRail() {
 
 function WorkPlanRail({ workflow, job = null, documentState = null, plan: planOverride = null, completed = false, startedAt: startedAtOverride = '', finishedAt: finishedAtOverride = '' }) {
   const plan = planOverride || workflow?.workPlan || {};
-  const steps = Array.isArray(plan.steps) ? plan.steps : [];
+  const steps = Array.isArray(plan.steps) && plan.steps.length ? plan.steps : (documentState || job ? [
+    { id: 'read', title: 'Membaca seluruh bahan', detail: 'Mengambil struktur, instruksi, data, dan bukti yang tersedia.' },
+    { id: 'structure', title: 'Mempelajari susunan dokumen', detail: 'Mengikuti urutan bagian dan gaya dari template yang dipakai.' },
+    { id: 'write', title: 'Menyusun isi laprak', detail: 'Menghubungkan langkah, bukti, hasil, dan pembahasan.' },
+    { id: 'layout', title: 'Menata dokumen Word', detail: 'Memeriksa judul, paragraf, gambar, caption, dan pergantian halaman.' },
+    { id: 'finish', title: 'Menyiapkan hasil akhir', detail: 'Menyimpan dokumen agar siap dibuka dan diperiksa.' },
+  ] : []);
   const jobLive = ['queued', 'running', 'retry_queued'].includes(job?.status);
   const generated = completed || !jobLive && (documentState?.status === 'generated' || job?.status === 'completed' && job?.type === 'generate');
   const [expanded, setExpanded] = useState(!generated);
   useEffect(() => { if (generated) setExpanded(false); }, [generated]);
   if (!steps.length) return null;
-  const failed = ['failed', 'canceled'].includes(job?.status);
+  const failed = ['failed', 'canceled'].includes(job?.status) && generated;
   const progress = Math.max(0, Math.min(100, Number(job?.progress || 0)));
   const foundationCount = Math.min(2, steps.length);
   let completedCount = 1;
@@ -2816,7 +2815,7 @@ function WorkPlanRail({ workflow, job = null, documentState = null, plan: planOv
         <div><b>{step.title}</b><small>{current && job?.message ? job.message : step.detail}</small></div>
       </li>;
     })}</ol>}
-    {expanded && failed && job?.errorMessage && <p className="work-plan-error">{job.errorMessage}</p>}
+    {expanded && failed && <p className="work-plan-error">Dokumen tetap tersimpan dan sedang disiapkan kembali.</p>}
   </section>;
 }
 
@@ -3028,7 +3027,7 @@ function DocumentCard({ documentState, activeJob, version = null, onOpen }) {
   const liveJob = ['queued', 'running', 'retry_queued'].includes(latestJob?.status);
   return <article className={`document-card document-slim-card ${isGenerated ? 'document-is-ready' : 'document-is-processing'}`}>
     <span className="document-card-icon"><FileText size={20} /></span>
-    <div className="document-card-copy"><b>{documentState.title}</b><small>{liveJob ? latestJob.message || 'Sedang menyusun' : isGenerated ? `Dokumen Word · Versi ${Number(version || Number(documentState.revision_count || 0) + 1)}` : 'Dokumen kerja'}</small></div>
+    <div className="document-card-copy"><b>{documentState.title}</b><small>{isGenerated ? `Dokumen Word · Versi ${Number(version || Number(documentState.revision_count || 0) + 1)}` : liveJob ? latestJob.message || 'Sedang menyiapkan dokumen' : 'Menyiapkan tahap berikutnya secara otomatis'}</small></div>
     <button type="button" className="document-open-button" onClick={onOpen}>{isGenerated ? 'Buka' : 'Lihat proses'}</button>
   </article>;
 }
@@ -3094,7 +3093,6 @@ function DocumentSidePanel({ documentState, activeJob, workflow, busy, user, onC
   if (!documentState) return <div className="document-side-shell"><header><div><b>Dokumen</b><small>Memuat hasil laprak</small></div><IconButton label="Tutup dokumen" onClick={onClose}><X size={17} /></IconButton></header><div className="document-side-loading"><LoaderCircle className="spin" size={18} />Memuat dokumen kerja...</div></div>;
   const exported = documentState.exports?.find((item) => item.status === 'ready' && item.content_signature === documentState.quizAccess?.contentSignature);
   const latestJob = activeJob || documentState.jobs?.[0] || null;
-  const liveJob = ['queued', 'running', 'retry_queued'].includes(latestJob?.status);
   const isGenerated = documentState.status === 'generated';
   const canDownload = Boolean(documentState.quizAccess?.canDownload ?? documentState.quizAccess?.passed);
   const versionOptions = [
@@ -3120,7 +3118,7 @@ function DocumentSidePanel({ documentState, activeJob, workflow, busy, user, onC
         <span><small>Versi dokumen</small><b>{versionOptions.find((option) => option.value === selectedVersion)?.label || versionOptions[0].label}</b></span>
         <CustomSelect className="document-version-select" value={selectedVersion} onChange={chooseVersion} ariaLabel="Pilih versi dokumen" options={versionOptions} />
       </div>
-      {!isGenerated && !liveJob && !busy && <div className="document-recovery"><p>Proses belum selesai. Lanjutkan dari tahap terakhir.</p><button disabled={busy} onClick={() => onAction(documentState.status === 'analyzed' ? 'generate' : 'analyze')}>{documentState.status === 'analyzed' ? 'Susun draft' : 'Baca ulang bahan'}</button></div>}
+      {!isGenerated && <div className="document-recovery"><p>Laprakin sedang menyiapkan dokumen ini secara otomatis. Kamu boleh menutup panel atau berpindah chat; proses akan tetap berjalan.</p><WorkPlanRail workflow={workflow} job={latestJob} documentState={documentState} /></div>}
       {isGenerated && <>
         <RenderedDocxPreview documentId={documentState.id} revision={documentState.revision_count || 0} />
         <div className="revision-chat-note"><MessageCircle size={16} /><div><b>Sudah lengkap atau perlu revisi?</b><p>Tulis perubahan di chat utama. Bagian lain akan tetap dipertahankan.</p></div></div>
@@ -3129,7 +3127,7 @@ function DocumentSidePanel({ documentState, activeJob, workflow, busy, user, onC
   </div>;
 }
 
-function DocumentLibrary({ documents, onRefresh, onOpen }) { const [query, setQuery] = useState(''); const visible = documents.filter((doc) => `${doc.title} ${doc.course_name} ${doc.module_title}`.toLowerCase().includes(query.toLowerCase())); return <section className="library-page"><header><div><h1>Dokumen</h1><p>Laprak yang dibuat dari percakapanmu.</p></div><button onClick={onRefresh}>Refresh</button></header><label className="search-field"><FolderOpen size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari judul, mata kuliah, atau modul" /></label><div className="library-list">{visible.length ? visible.map((doc) => <article key={doc.id}><div><span className="doc-file"><FileText size={16} /></span><div><b>{doc.title}</b><small>{doc.course_name || 'Mata kuliah belum diisi'} · {doc.status === 'generated' ? 'Draft siap cek' : doc.status === 'analyzed' ? 'Siap disusun' : 'Menunggu analisis'}</small></div></div><button onClick={() => onOpen(doc)}>Buka chat <ArrowRight size={13} /></button></article>) : <div className="empty-library"><FolderOpen size={22} /><b>Belum ada dokumen.</b><p>Buat chat laprak, lalu pilih “Buat laprak” saat konteksnya sudah cukup.</p></div>}</div></section>; }
+function DocumentLibrary({ documents, onRefresh, onOpen }) { const [query, setQuery] = useState(''); const visible = documents.filter((doc) => `${doc.title} ${doc.course_name} ${doc.module_title}`.toLowerCase().includes(query.toLowerCase())); return <section className="library-page"><header><div><h1>Dokumen</h1><p>Laprak yang dibuat dari percakapanmu.</p></div><button onClick={onRefresh}>Refresh</button></header><label className="search-field"><FolderOpen size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari judul, mata kuliah, atau modul" /></label><div className="library-list">{visible.length ? visible.map((doc) => <article key={doc.id}><div><span className="doc-file"><FileText size={16} /></span><div><b>{doc.title}</b><small>{doc.course_name || 'Mata kuliah belum diisi'} · {doc.status === 'generated' ? 'Dokumen siap diperiksa' : 'Dokumen sedang dibuat'}</small></div></div><button onClick={() => onOpen(doc)}>Buka chat <ArrowRight size={13} /></button></article>) : <div className="empty-library"><FolderOpen size={22} /><b>Belum ada dokumen.</b><p>Buat chat laprak, lalu pilih “Buat laprak” saat konteksnya sudah cukup.</p></div>}</div></section>; }
 
 function ProjectsPage({ projects, selectedProject, documents, onOpenProject, onBack, onCreate, onNewChat, onOpenSession, onPinProject, onNotice }) {
   const [query, setQuery] = useState('');

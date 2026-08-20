@@ -291,6 +291,17 @@ try {
   const workingDocument = await request(`/chat/sessions/${briefChat.session.id}/document`, { method: 'POST', body: '{}' }, 201);
   assert.equal(workingDocument.document.course_name, 'Jaringan Komputer');
   assert.equal(workingDocument.document.module_title, 'Static Routing');
+  assert.ok(workingDocument.jobId, 'Pembuatan dokumen wajib langsung membuat pekerjaan analisis di server.');
+  let automaticDocument = workingDocument.document;
+  const automaticStarted = Date.now();
+  while (!(automaticDocument.status === 'generated' && automaticDocument.jobs.some((job) => job.type === 'generate' && job.status === 'completed')) && Date.now() - automaticStarted < 30000) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    automaticDocument = await request(`/documents/${workingDocument.document.id}`);
+  }
+  assert.equal(automaticDocument.status, 'generated', 'Server wajib melanjutkan analisis ke penyusunan tanpa tindakan tambahan dari browser.');
+  assert.ok(automaticDocument.sections.length >= 3, 'Dokumen otomatis wajib memiliki setidaknya tiga bagian substantif.');
+  assert.ok(automaticDocument.jobs.some((job) => job.type === 'analyze' && job.status === 'completed'));
+  assert.ok(automaticDocument.jobs.some((job) => job.type === 'generate' && job.status === 'completed'));
   assert.equal((await request('/wallet')).balances.total, 20);
 
   const genericChat = await request('/chat/sessions', {
@@ -442,6 +453,7 @@ try {
       id, document_id, position, section_type, title, content, source, review_status, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, 'test', 'reviewed', ?, ?)
   `);
+  testDb.prepare('DELETE FROM report_sections WHERE document_id = ?').run(workingDocument.document.id);
   reportSections.forEach((section, index) => insertSection.run(
     randomUUID(),
     workingDocument.document.id,

@@ -19,6 +19,16 @@ const evidence = inspectTemplateDocxBuffer(templateBuffer);
 assert.equal(evidence.coverBoundary, 18);
 assert.equal(evidence.hasCoverImage, true);
 assert.ok(evidence.bodyHeadings.includes('1. Penamaan Interface'));
+assert.ok(evidence.designProfile.page.widthTwips > 0);
+assert.ok(evidence.designProfile.page.heightTwips > 0);
+assert.equal(evidence.designProfile.page.orientation, 'portrait');
+assert.ok(evidence.designProfile.page.marginsTwips.left > 0);
+assert.ok(evidence.designProfile.typography.normal.font);
+assert.ok(evidence.designProfile.typography.normal.sizeHalfPoints >= 18);
+assert.ok(evidence.designProfile.sectionCount >= 1);
+assert.ok(evidence.designProfile.imageCount >= 1);
+assert.ok(evidence.designProfile.headerCount >= 1);
+assert.ok(evidence.designProfile.footerCount >= 1);
 
 const reportBuffer = await Packer.toBuffer(new Document({
   sections: [{
