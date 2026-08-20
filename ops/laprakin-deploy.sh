@@ -97,19 +97,21 @@ ensure_build_space() {
 # Selama deploy key belum didaftarkan di GitHub, kondisi ini tidak dianggap
 # kegagalan: timer berjalan tiap lima menit, dan mengirim notifikasi setiap kali
 # hanya akan membanjiri inbox operator saat setup belum tuntas.
-if [[ ! -s "$SSH_KEY" ]]; then
-  echo "deploy: deploy key belum ada di $SSH_KEY; dilewati"
-  exit 0
-fi
-# Output ditangkap lebih dulu, bukan disalurkan langsung ke grep: `ssh -T` ke
-# GitHub selalu keluar dengan kode 1 karena tidak ada shell, dan dengan pipefail
-# aktif exit code itu menutupi hasil grep sehingga otentikasi yang berhasil pun
-# terbaca sebagai gagal.
-AUTH_OUTPUT="$(ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
-  -o BatchMode=yes -o ConnectTimeout=15 -T git@github.com 2>&1 || true)"
-if ! printf '%s' "$AUTH_OUTPUT" | grep -q 'successfully authenticated'; then
-  echo "deploy: deploy key belum diotorisasi di GitHub; dilewati" >&2
-  exit 0
+if [[ "$REPO_URL" == git@github.com:* ]]; then
+  if [[ ! -s "$SSH_KEY" ]]; then
+    echo "deploy: deploy key belum ada di $SSH_KEY; dilewati"
+    exit 0
+  fi
+  # Output ditangkap lebih dulu, bukan disalurkan langsung ke grep: `ssh -T` ke
+  # GitHub selalu keluar dengan kode 1 karena tidak ada shell, dan dengan pipefail
+  # aktif exit code itu menutupi hasil grep sehingga otentikasi yang berhasil pun
+  # terbaca sebagai gagal.
+  AUTH_OUTPUT="$(ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+    -o BatchMode=yes -o ConnectTimeout=15 -T git@github.com 2>&1 || true)"
+  if ! printf '%s' "$AUTH_OUTPUT" | grep -q 'successfully authenticated'; then
+    echo "deploy: deploy key belum diotorisasi di GitHub; dilewati" >&2
+    exit 0
+  fi
 fi
 
 # Branch release baru terbentuk setelah workflow CI pertama selesai. Sampai saat
