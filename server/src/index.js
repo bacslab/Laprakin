@@ -1684,26 +1684,36 @@ async function runJob(job) {
       if (session) {
         const liveJob = db.prepare('SELECT started_at FROM jobs WHERE id = ?').get(job.id);
         const documentVersion = db.prepare('SELECT revision_count FROM documents WHERE id = ?').get(job.document_id);
-        db.prepare(`
-          INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
-          VALUES (?, ?, ?, 'assistant', ?, ?, ?)
-        `).run(
-          nanoid(),
-          session.id,
-          job.owner_user_id,
-          completionSummary?.text || 'Dokumen sudah selesai disusun. Buka hasilnya untuk melakukan pemeriksaan akhir.',
-          JSON.stringify({
-            kind: 'document_ready',
-            jobId: job.id,
-            isRevision: Boolean(payload.isRevision),
-            model: completionSummary?.model || 'local-summary',
-            workPlan: parseJson(session.work_plan_json, {}),
-            thinkingStartedAt: liveJob?.started_at || job.created_at,
-            thinkingFinishedAt: completedAt,
-            documentVersion: Number(documentVersion?.revision_count || 0) + 1,
-          }),
-          completedAt,
-        );
+        const versionNumber = Number(documentVersion?.revision_count || 0) + 1;
+        const readyContent = completionSummary?.text || 'Dokumen sudah selesai disusun. Buka hasilnya untuk melakukan pemeriksaan akhir.';
+        const readyMeta = JSON.stringify({
+          kind: 'document_ready',
+          jobId: job.id,
+          isRevision: Boolean(payload.isRevision),
+          model: completionSummary?.model || 'local-summary',
+          workPlan: parseJson(session.work_plan_json, {}),
+          thinkingStartedAt: liveJob?.started_at || job.created_at,
+          thinkingFinishedAt: completedAt,
+          documentVersion: versionNumber,
+        });
+        const existingReadyMessage = db.prepare(`
+          SELECT id FROM chat_messages
+          WHERE session_id = ? AND role = 'assistant'
+            AND json_extract(meta_json, '$.kind') = 'document_ready'
+            AND CAST(json_extract(meta_json, '$.documentVersion') AS INTEGER) = ?
+          ORDER BY created_at DESC
+          LIMIT 1
+        `).get(session.id, versionNumber);
+        if (existingReadyMessage) {
+          db.prepare(`
+            UPDATE chat_messages SET content = ?, meta_json = ?, created_at = ? WHERE id = ?
+          `).run(readyContent, readyMeta, completedAt, existingReadyMessage.id);
+        } else {
+          db.prepare(`
+            INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+            VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+          `).run(nanoid(), session.id, job.owner_user_id, readyContent, readyMeta, completedAt);
+        }
       }
     } else if (job.job_type === 'export') {
       db.prepare(`UPDATE chat_sessions SET workflow_state = 'FINAL', updated_at = ? WHERE document_id = ? AND owner_user_id = ?`)

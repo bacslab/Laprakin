@@ -3664,6 +3664,92 @@ export function displaySectionTitle(title, sectionIndex = 0) {
   return /^\d+(?:\.\d+)*[.)]?\s+/.test(cleanTitle) ? cleanTitle : `${sectionIndex + 1}. ${cleanTitle}`;
 }
 
+function canonicalEvidenceToken(token = '') {
+  const value = String(token).toLocaleLowerCase('id-ID');
+  if (/^(?:config|konfigur)/.test(value)) return 'konfigurasi';
+  if (/^(?:verif|valid)/.test(value)) return 'verifikasi';
+  if (/^(?:identit|identity)/.test(value)) return 'identitas';
+  if (/^(?:address|alamat)/.test(value)) return 'alamat';
+  if (/^(?:network|jaring)/.test(value)) return 'jaringan';
+  if (/^(?:route|routing|rute)/.test(value)) return 'rute';
+  if (/^(?:static|statik|statis)/.test(value)) return 'statis';
+  if (/^(?:table|tabel)/.test(value)) return 'tabel';
+  if (/^(?:connect|konektiv)/.test(value)) return 'konektivitas';
+  if (/^(?:test|testing|uji|pengujian)/.test(value)) return 'uji';
+  if (/^(?:lease|leases)/.test(value)) return 'lease';
+  if (/^(?:scope|pool)/.test(value)) return 'pool';
+  return value;
+}
+
+function evidenceTokens(value = '') {
+  const ignored = new Set(['yang', 'dengan', 'pada', 'untuk', 'dari', 'hasil', 'aktif', 'beberapa', 'menampilkan', 'menunjukkan', 'daftar', 'dialog', 'jendela', 'output', 'perintah']);
+  return new Set(String(value || '')
+    .toLocaleLowerCase('id-ID')
+    .replace(/^\d+(?:\.\d+)*[.)]?\s*/, '')
+    .replace(/[^\p{L}\p{N}./-]+/gu, ' ')
+    .split(/\s+/)
+    .map(canonicalEvidenceToken)
+    .filter((token) => token.length >= 2 && !ignored.has(token)));
+}
+
+function evidenceSectionScore(mapping, section) {
+  const mappingTokens = evidenceTokens(`${mapping.step_title || ''} ${mapping.caption || ''}`);
+  const sectionTokens = evidenceTokens(section.title || '');
+  let score = 0;
+  for (const token of sectionTokens) {
+    if (!mappingTokens.has(token)) continue;
+    score += ['konfigurasi', 'verifikasi', 'uji'].includes(token) ? 1 : 4;
+  }
+  if (mapping.section_type && mapping.section_type === section.section_type) score += 0.5;
+  return score;
+}
+
+export function distributeEvidenceMappings(sections = [], mappings = []) {
+  const distribution = new Map(sections.map((section) => [section.id, []]));
+  if (!sections.length) return distribution;
+  const assignments = new Map();
+  const availableSections = new Set(sections.map((_, index) => index));
+  const availableMappings = new Set(mappings.map((_, index) => index));
+  const pairs = [];
+  mappings.forEach((mapping, mappingIndex) => {
+    sections.forEach((section, sectionIndex) => {
+      pairs.push({ mappingIndex, sectionIndex, score: evidenceSectionScore(mapping, section) });
+    });
+  });
+  pairs.sort((left, right) => right.score - left.score
+    || Number(mappings[left.mappingIndex]?.display_order || left.mappingIndex) - Number(mappings[right.mappingIndex]?.display_order || right.mappingIndex)
+    || left.sectionIndex - right.sectionIndex);
+
+  for (const pair of pairs) {
+    if (pair.score <= 0 || !availableMappings.has(pair.mappingIndex) || !availableSections.has(pair.sectionIndex)) continue;
+    assignments.set(pair.mappingIndex, pair.sectionIndex);
+    availableMappings.delete(pair.mappingIndex);
+    availableSections.delete(pair.sectionIndex);
+  }
+
+  for (const mappingIndex of availableMappings) {
+    const mapping = mappings[mappingIndex];
+    const ranked = sections.map((section, sectionIndex) => ({ sectionIndex, score: evidenceSectionScore(mapping, section) }))
+      .sort((left, right) => right.score - left.score || left.sectionIndex - right.sectionIndex);
+    if (ranked[0]?.score > 0) {
+      assignments.set(mappingIndex, ranked[0].sectionIndex);
+      continue;
+    }
+    const sameType = sections.map((section, sectionIndex) => ({ section, sectionIndex }))
+      .filter((item) => item.section.section_type === mapping.section_type);
+    const fallback = sameType.length ? sameType : sections.map((section, sectionIndex) => ({ section, sectionIndex }));
+    assignments.set(mappingIndex, fallback[Math.max(0, Number(mapping.step_number || mapping.display_order || mappingIndex + 1) - 1) % fallback.length].sectionIndex);
+  }
+
+  for (const [mappingIndex, sectionIndex] of assignments) {
+    distribution.get(sections[sectionIndex].id).push(mappings[mappingIndex]);
+  }
+  for (const sectionMappings of distribution.values()) {
+    sectionMappings.sort((left, right) => Number(left.display_order || 0) - Number(right.display_order || 0));
+  }
+  return distribution;
+}
+
 export async function buildDocumentDocxBuffer(documentId, userId, { enforceExportQuality = true } = {}) {
   const document = db.prepare(`
     SELECT * FROM documents WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL
@@ -3736,13 +3822,7 @@ export async function buildDocumentDocxBuffer(documentId, userId, { enforceExpor
     }),
   ];
 
-  const mappingsBySectionId = new Map(sections.map((section) => [section.id, []]));
-  mappings.forEach((mapping, index) => {
-    const candidates = sections.filter((section) => section.section_type === mapping.section_type);
-    if (!candidates.length) return;
-    const targetIndex = Math.max(0, Number(mapping.step_number || mapping.display_order || index + 1) - 1) % candidates.length;
-    mappingsBySectionId.get(candidates[targetIndex].id).push(mapping);
-  });
+  const mappingsBySectionId = distributeEvidenceMappings(sections, mappings);
 
   let visualIndex = 1;
   const renderedFileIds = new Set();
