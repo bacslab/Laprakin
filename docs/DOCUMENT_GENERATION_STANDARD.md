@@ -46,6 +46,7 @@ Identitas mahasiswa, NIM/NPM, kelas, program studi, jurusan, dosen, dan tahun ak
 - Gambar ditempatkan setelah narasi yang dibuktikannya dan tidak boleh melewati lebar area tulis.
 - Rasio gambar wajib dipertahankan; gambar tidak boleh gepeng, terpotong, pecah karena diperbesar, atau bertumpuk dengan teks.
 - Caption memakai format `Gambar N. Judul spesifik`, urut tanpa loncatan, dan berada bersama gambarnya.
+- Caption dan penjelasan gambar wajib memakai Bahasa Indonesia baku; istilah produk, menu, protokol, dan command pada bukti boleh dipertahankan sebagaimana tampilannya.
 - Setelah gambar terdapat penjelasan faktual mengenai hubungan gambar dengan langkah atau hasil. Penjelasan tidak boleh menebak isi yang tidak terbaca.
 - Logo, dekorasi template, gambar duplikat, dan media yang hanya mengatur format tidak boleh dimasukkan sebagai bukti praktikum.
 

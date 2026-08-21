@@ -94,6 +94,39 @@ test('singkatan akademik tetap dianggap konteks dokumen yang valid', () => {
   assert.deepEqual(readiness.missingForGenerate, []);
 });
 
+test('bukti yang sengaja diabaikan tetap dihitung sudah dipetakan', () => {
+  const readiness = assessDocumentGenerationReadiness({
+    document: {
+      title: 'Routing Statis',
+      course_name: 'Manajemen Internetworking',
+      module_title: 'Routing Protocol',
+      recipe_json: JSON.stringify({ allowExternalAi: true }),
+    },
+    user: {
+      full_name: 'Mahasiswa Uji',
+      nim: '2300001',
+      class_name: 'TI-3A',
+      institution_name: 'Politeknik Uji',
+      institution_logo_url: '/logo.png',
+      faculty_name: 'Teknik',
+      study_program_name: 'Teknik Informatika',
+    },
+    files: [
+      { category: 'module', mime_type: 'application/pdf' },
+      { category: 'evidence', mime_type: 'image/png' },
+      { category: 'evidence', mime_type: 'image/png' },
+    ],
+    mappings: [
+      { status: 'confirmed' },
+      { status: 'ignored' },
+    ],
+    sections: validSections(),
+  });
+
+  assert.equal(readiness.checks.find((check) => check.key === 'mapping')?.ready, true);
+  assert.equal(readiness.canExport, true);
+});
+
 test('reportSectionIssues meloloskan draft yang sudah lengkap', () => {
   assert.deepEqual(reportSectionIssues(validSections()), []);
 });

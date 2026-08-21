@@ -2579,6 +2579,7 @@ Aturan:
 - relevant=false untuk logo, gambar dekoratif, duplikat, gambar tidak terbaca, atau gambar yang tidak membantu laporan.
 - caption harus spesifik, tanpa awalan "Gambar N", maksimal 12 kata.
 - description berisi 2-4 kalimat yang diletakkan setelah gambar: jelaskan apa yang tampak, arti nilai/status/komponen yang terbaca, lalu kaitannya dengan langkah atau hasil praktikum.
+- Seluruh stepTitle, caption, dan description wajib menggunakan Bahasa Indonesia baku. Istilah produk, menu, protokol, dan command yang tampil pada gambar boleh dipertahankan apa adanya.
 - Hindari deskripsi seperti "gambar di atas menunjukkan" tanpa menyebut fakta visual yang spesifik.
 - Satu gambar wajib memiliki penjelasan sendiri. Jangan memakai deskripsi yang sama untuk gambar berbeda. Kosongkan bila relevant=false.
 - sectionOrder menunjukkan urutan relatif gambar di dalam jenis bagian yang dipilih.
@@ -3671,13 +3672,14 @@ export async function buildDocumentDocxBuffer(documentId, userId, { enforceExpor
   const sections = db.prepare(`
     SELECT * FROM report_sections WHERE document_id = ? ORDER BY position
   `).all(documentId);
-  const mappings = db.prepare(`
+  const allMappings = db.prepare(`
     SELECT mapping.*, file.original_name, file.mime_type, file.storage_path, file.sha256
     FROM evidence_mappings mapping
     JOIN document_files file ON file.id = mapping.file_id
-    WHERE mapping.document_id = ? AND file.deleted_at IS NULL AND mapping.status != 'ignored'
+    WHERE mapping.document_id = ? AND file.deleted_at IS NULL
     ORDER BY mapping.display_order
   `).all(documentId);
+  const mappings = allMappings.filter((mapping) => mapping.status !== 'ignored');
   const files = db.prepare('SELECT * FROM document_files WHERE document_id = ? AND deleted_at IS NULL ORDER BY created_at').all(documentId);
   const parameters = listDocumentParameters(documentId, userId);
 
@@ -3686,7 +3688,7 @@ export async function buildDocumentDocxBuffer(documentId, userId, { enforceExpor
     if (mappings.some((mapping) => String(mapping.mime_type || '').startsWith('image/') && String(mapping.description || '').trim().length < 40)) {
       throw new HttpError(422, 'Setiap gambar relevan harus memiliki penjelasan faktual setelah gambar.', 'DOCUMENT_IMAGE_EXPLANATION_REQUIRED');
     }
-    const quality = assessDocumentGenerationReadiness({ document, user, files, mappings, sections, parameters });
+    const quality = assessDocumentGenerationReadiness({ document, user, files, mappings: allMappings, sections, parameters });
     if (!quality.canExport) {
       const missing = quality.missingForExport.map((item) => item.label).concat(quality.sectionIssues);
       throw new HttpError(422, `Dokumen belum lolos quality gate: ${missing.join(', ')}.`, 'DOCUMENT_QUALITY_INCOMPLETE');
