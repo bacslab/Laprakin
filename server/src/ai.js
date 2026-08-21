@@ -164,11 +164,18 @@ function preferredModel(route, models) {
   return patterns.map((pattern) => models.find((model) => pattern.test(model.model))).find(Boolean)?.model || '';
 }
 
+export function modelEligibleForRoute(model, { visual = false, requiresStructuredOutput = false, route = 'chat' } = {}) {
+  // JSON tetap bisa dijaga melalui instruksi skema ketika provider belum
+  // mengiklankan dukungan response_format. Dukungan visual tidak bisa dipalsukan.
+  void requiresStructuredOutput;
+  void route;
+  return !visual || model?.supportsVision === true;
+}
+
 export function selectAiRoute({ purpose = 'chat', mode = 'basic', requiresVision = false, requiresStructuredOutput = false, contents = [] } = {}) {
   const visual = isVisionRequest({ purpose, mode, requiresVision, contents });
   const route = visual ? 'vision' : /review|repair|difficult|hard/i.test(`${purpose} ${mode}`) ? 'reviewer' : isDocumentPurpose(purpose) || /workplan|quiz/i.test(purpose) ? 'document' : 'chat';
-  const eligible = modelRegistry.filter((model) => (!visual || model.supportsVision)
-    && (!requiresStructuredOutput || model.supportsStructuredOutput || route !== 'vision'));
+  const eligible = modelRegistry.filter((model) => modelEligibleForRoute(model, { visual, requiresStructuredOutput, route }));
   const selected = preferredModel(route, eligible) || eligible[0]?.model || '';
   const fallbackOrder = route === 'document'
     ? [/mistral.*large/i, /mistral/i, /text|qwen|llama/i]

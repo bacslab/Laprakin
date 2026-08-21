@@ -2469,6 +2469,30 @@ export function promptSafeLabel(value = '', maxLength = 120) {
     .slice(0, maxLength);
 }
 
+export async function prepareEvidenceImageForAi(binary, mimeType = 'image/png') {
+  try {
+    const normalized = await sharp(binary, { failOn: 'none', animated: false })
+      .rotate()
+      .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+      .flatten({ background: '#ffffff' })
+      .jpeg({ quality: 84, chromaSubsampling: '4:4:4', mozjpeg: true })
+      .toBuffer();
+    return { binary: normalized, mimeType: 'image/jpeg' };
+  } catch {
+    return { binary, mimeType: mimeType || 'image/png' };
+  }
+}
+
+function evidenceMappingNeedsAnalysis(mapping) {
+  const caption = String(mapping?.caption || '').trim();
+  const description = String(mapping?.description || '').trim();
+  return mapping?.status !== 'confirmed'
+    || Number(mapping?.confidence || 0) < 0.8
+    || description.length < 40
+    || /bukti visual .*ditempatkan pada bagian/i.test(description)
+    || /^(?:image|img|screenshot|capture|bukti)\s*\d*$/i.test(caption);
+}
+
 async function analyzeEvidenceImages({ document, user, images, mappings, progress = () => {} }) {
   const mappingByFileId = new Map(mappings.map((mapping) => [mapping.file_id, mapping]));
   const uniqueImages = [];
@@ -2504,17 +2528,13 @@ async function analyzeEvidenceImages({ document, user, images, mappings, progres
   `).all(document.id);
   const pending = uniqueImages
     .filter((image) => mappingByFileId.has(image.id))
-    .filter((image) => {
-      const mapping = mappingByFileId.get(image.id);
-      return mapping.status !== 'confirmed' || !String(mapping.description || '').trim();
-    })
+    .filter((image) => evidenceMappingNeedsAnalysis(mappingByFileId.get(image.id)))
     .slice(0, 24);
   if (!pending.length) return refreshMappings();
 
-  // Empat gambar per permintaan, bukan enam: setiap entri membawa deskripsi 2-4
-  // kalimat dan mode thinking ikut memakan budget output, sehingga batch besar
-  // rutin terpotong di tengah JSON.
-  const batchSize = 4;
+  // Gambar diperkecil lebih dahulu dan dikirim per tiga agar tangkapan layar
+  // tetap terbaca tanpa melewati batas ukuran permintaan model visual.
+  const batchSize = 3;
   let processed = 0;
   for (let offset = 0; offset < pending.length; offset += batchSize) {
     const batch = pending.slice(offset, offset + batchSize);
@@ -2567,8 +2587,9 @@ Aturan:
     }];
     for (const image of batch) {
       const binary = await fs.readFile(image.storage_path);
+      const prepared = await prepareEvidenceImageForAi(binary, image.mime_type);
       requestParts.push({ text: `FILE_ID: ${image.id}\nNAMA_SUMBER: ${promptSafeLabel(image.original_name)}` });
-      requestParts.push({ inlineData: { mimeType: image.mime_type, data: binary.toString('base64') } });
+      requestParts.push({ inlineData: { mimeType: prepared.mimeType, data: prepared.binary.toString('base64') } });
     }
     const result = await generateAiContent({
       userId: user.id,
@@ -2623,18 +2644,20 @@ Aturan:
 
 function preserveEvidenceForDocument({ document, images, mappings }) {
   const byFileId = new Map(mappings.map((mapping) => [mapping.file_id, mapping]));
+  const outline = parseJson(document.outline_json, [])
+    .map((item) => String(item?.title || '').replace(/^\d+(?:\.\d+)*[.)]?\s*/, '').trim())
+    .filter((title) => title.length >= 8 && !/^\d+(?:[./-]\d+)+$/.test(title));
+  const documentTopic = String(document.module_title || document.title || 'praktikum').trim();
   for (const [index, image] of images.entries()) {
     const mapping = byFileId.get(image.id);
     if (!mapping || ['format_only', 'template_allowed'].includes(image.source_declaration)) continue;
-    if (mapping.status === 'confirmed' && String(mapping.description || '').trim().length >= 40) continue;
-    const label = String(image.original_name || `Bukti ${index + 1}`)
-      .replace(/\.[a-z0-9]{2,5}$/i, '')
-      .replace(/^Ekstrak\s+\d+\s*-\s*/i, '')
-      .replace(/[_-]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 100) || `Bukti ${index + 1}`;
-    const stepTitle = String(mapping.step_title || `Langkah ${mapping.step_number || index + 1}`).trim().slice(0, 120);
+    if (!evidenceMappingNeedsAnalysis(mapping)) continue;
+    const existingStep = String(mapping.step_title || '').trim();
+    const stepTitle = (!existingStep || /^(?:bukti praktikum|langkah\s+\d+)$/i.test(existingStep)
+      ? outline[index % Math.max(1, outline.length)] || `Tahap ${index + 1} ${documentTopic}`
+      : existingStep).slice(0, 120);
+    const conciseStep = stepTitle.replace(/^\d+(?:\.\d+)*[.)]?\s*/, '').replace(/\s+/g, ' ').trim();
+    const caption = `Bukti ${conciseStep}`.split(/\s+/).slice(0, 12).join(' ').slice(0, 100);
     db.prepare(`
       UPDATE evidence_mappings SET
         step_title = ?, caption = ?, description = ?, display_order = ?,
@@ -2642,8 +2665,8 @@ function preserveEvidenceForDocument({ document, images, mappings }) {
       WHERE document_id = ? AND file_id = ?
     `).run(
       stepTitle,
-      label,
-      `Bukti visual ${label} ditempatkan pada bagian ${stepTitle} sesuai urutan bahan yang diunggah pengguna.`,
+      caption,
+      `Bukti visual ini mendukung tahap ${conciseStep} pada materi ${documentTopic}. Gambar dipertahankan sesuai bahan asli dan ditempatkan mengikuti urutan kegiatan praktikum.`,
       index + 1,
       0.5,
       now(),
@@ -3635,6 +3658,11 @@ function paragraphFromText(text, typography = {}) {
   });
 }
 
+export function displaySectionTitle(title, sectionIndex = 0) {
+  const cleanTitle = String(title || '').trim() || `Bagian ${sectionIndex + 1}`;
+  return /^\d+(?:\.\d+)*[.)]?\s+/.test(cleanTitle) ? cleanTitle : `${sectionIndex + 1}. ${cleanTitle}`;
+}
+
 export async function buildDocumentDocxBuffer(documentId, userId, { enforceExportQuality = true } = {}) {
   const document = db.prepare(`
     SELECT * FROM documents WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL
@@ -3719,7 +3747,7 @@ export async function buildDocumentDocxBuffer(documentId, userId, { enforceExpor
   const renderedImageHashes = new Set();
   for (const [sectionIndex, section] of sections.entries()) {
     children.push(new Paragraph({
-      text: /^\d+[.)]\s+/.test(section.title) ? section.title : `${sectionIndex + 1}. ${section.title}`,
+      text: displaySectionTitle(section.title, sectionIndex),
       heading: HeadingLevel.HEADING_1,
       spacing: { before: 260, after: 180 },
     }));
