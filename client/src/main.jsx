@@ -16,7 +16,6 @@ import '@fontsource-variable/plus-jakarta-sans';
 import '@fontsource/dm-mono/400.css';
 import '@fontsource/dm-mono/500.css';
 import './styles.css';
-import './claude-parity.css';
 import LandingPage from './Landing';
 import { FeatureUpdatesAdmin, ProductUpdatePopup } from './FeatureUpdates';
 import { renderAsync as renderDocx } from 'docx-preview';
@@ -517,8 +516,8 @@ function useResolvedTheme(theme = 'system') {
 }
 
 const defaultPrefs = {
-  theme: 'system', language: 'id', compact: false, reducedMotion: false, enterToSend: true,
-  tone: 'formal', perspective: 'saya', profile: 'langkah', customInstructions: '', accent: 'orange', productUpdates: true, allowExternalAi: true,
+  theme: 'system', language: 'id', compact: true, reducedMotion: false, enterToSend: true,
+  tone: 'formal', perspective: 'saya', profile: 'langkah', customInstructions: '', accent: 'lime', productUpdates: true, allowExternalAi: true,
 };
 const workspaceAccents = [
   { key: 'lime', label: 'Lime', color: '#c2ff33', contrast: '#101506', lightInk: '#4d7000' },
@@ -636,7 +635,7 @@ function HeroFileChip({ file, index, onRemove }) {
 }
 
 function readPrefs() {
-  try { return { ...defaultPrefs, ...JSON.parse(localStorage.getItem('laprakin-preferences') || '{}'), compact: false, accent: 'orange' }; }
+  try { return { ...defaultPrefs, ...JSON.parse(localStorage.getItem('laprakin-preferences') || '{}') }; }
   catch { return defaultPrefs; }
 }
 
@@ -1369,13 +1368,7 @@ function Workspace() {
   const sendInFlightRef = useRef(false);
   const tutorialAutoOpenedRef = useRef(false);
   const [productUpdate, setProductUpdate] = useState(null);
-  const page = location.pathname.includes('/projects')
-    ? 'projects'
-    : location.pathname.includes('/documents')
-      ? 'documents'
-      : location.pathname.includes('/chats')
-        ? 'chats'
-        : 'chat';
+  const page = location.pathname.includes('/projects') ? 'projects' : location.pathname.includes('/documents') ? 'documents' : 'chat';
   useEffect(() => {
     if (prefs.productUpdates === false || productUpdate) return undefined;
     let disposed = false;
@@ -2064,8 +2057,7 @@ function Workspace() {
     return session;
   };
   const navItems = [
-    { key: 'new-chat', label: 'Chat baru', icon: Pencil },
-    { key: 'chats', label: 'Chats', icon: MessageCircle },
+    { key: 'chat', label: 'Chats', icon: MessageCircle },
     { key: 'projects', label: 'Projects', icon: FolderKanban },
     { key: 'documents', label: 'Dokumen', icon: FolderOpen },
   ];
@@ -2120,7 +2112,7 @@ function Workspace() {
         <Link to="/app" className="workspace-brand"><BrandMark /><b>Laprakin</b></Link>
         <IconButton className="sidebar-collapse-button" label={leftCollapsed ? 'Buka sidebar' : 'Minimalkan sidebar'} onClick={() => setLeftCollapsed(!leftCollapsed)}>{leftCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</IconButton>
       </div>
-      <nav className="workspace-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={(key === 'new-chat' ? page === 'chat' && !active : page === key) ? 'active' : ''} onClick={() => key === 'new-chat' ? startNewChat() : setRoute(key)} title={label}><Icon size={16} /><span>{label}</span></button>)}</nav>
+      <nav className="workspace-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={page === key ? 'active' : ''} onClick={() => key === 'chat' ? startNewChat() : setRoute(key)} title={label}><Icon size={16} /><span>{label}</span></button>)}</nav>
       <div className="sidebar-session-scroll">
         {pinnedProjects.length || pinnedSessions.length ? <div className="pinned-session-block">
           <div className="session-section-title"><span>Pinned</span></div>
@@ -2150,7 +2142,6 @@ function Workspace() {
         <ChatSurface active={active} messages={messages} attachments={attachments} documentState={documentState} workflow={workflow} activeJob={activeJob} user={user} input={input} setInput={setInput} busy={busy || actionBusy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} removeAttachment={removeAttachment} updateAttachmentCategory={updateAttachmentCategory} createDocument={createDocument} onWorkflowAction={performChatAction} contextOpen={contextOpen} setContextOpen={setContextOpen} config={config} updateConfig={updateConfig} pendingFiles={pendingLandingFiles} onPasteImages={pasteImagesIntoChat} onAddPendingFiles={addPendingFiles} onRemovePending={(index) => setPendingLandingFiles((items) => items.filter((_, itemIndex) => itemIndex !== index))} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={() => navigate('/pricing')} onOpenDocument={() => { setRightOpen(false); setDocumentOpen(true); }} quizMode={quizMode} onCloseQuiz={() => setQuizMode(false)} onStartQuiz={startDocumentQuiz} onSubmitQuiz={submitDocumentQuiz} />
       </>}
       {page === 'documents' && <DocumentLibrary documents={documents} onRefresh={loadDocuments} onOpen={(doc) => { const session = sessions.find((item) => item.document_id === doc.id); if (session) openSession(session.id); else setNotice('Dokumen ini belum memiliki ruang chat yang bisa dibuka.'); }} />}
-      {page === 'chats' && <ChatsPage sessions={orderedSessions} onOpen={openSession} onNew={startNewChat} />}
     {page === 'projects' && <ProjectsPage
       projects={projectEntries}
       selectedProject={projectParam}
@@ -2479,7 +2470,6 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
   const [previewFile, setPreviewFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const greetingName = userGreetingName(user);
-  const greetingDay = new Intl.DateTimeFormat('id-ID', { weekday: 'long' }).format(new Date());
   const greetingClass = greetingName.length > 17 ? 'greeting-name-very-long' : greetingName.length > 12 ? 'greeting-name-long' : '';
   const visibleMessages = messages
     .filter((message) => message.meta?.kind !== 'attachments')
@@ -2527,7 +2517,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
   >
     {dragActive && <div className="workspace-drop-hint" aria-hidden="true"><UploadCloud size={22} /><b>Lepas file untuk melampirkan</b><small>File tetap menunggu sampai kamu menekan Enter.</small></div>}
     <div className="chat-thread">
-      {quizMode && documentState ? <div className="quiz-workspace-panel"><header><div><small>Cek pemahaman</small><h2>Quiz laprak</h2></div><button type="button" onClick={onCloseQuiz}><ArrowLeft size={14}/>Kembali</button></header><DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} /></div> : blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}><span className="greeting-spark" aria-hidden="true">✦</span> Selamat hari {greetingDay}, {greetingName}</h1></div> : <div className="thread-content">
+      {quizMode && documentState ? <div className="quiz-workspace-panel"><header><div><small>Cek pemahaman</small><h2>Quiz laprak</h2></div><button type="button" onClick={onCloseQuiz}><ArrowLeft size={14}/>Kembali</button></header><DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} /></div> : blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}>mau <em>laprakin</em> apa hari ini, {greetingName}?</h1></div> : <div className="thread-content">
       {visibleMessages.map((message) => <div className={`message-turn message-turn-${message.role}`} key={message.id}>
         {message.role === 'user' && attachmentBuckets.get(message.id)?.length ? <SourceBar compact attachments={attachmentBuckets.get(message.id)} onOpen={setPreviewFile} /> : null}
         {message.role === 'assistant' && !message.meta?.isClarification && message.meta?.workPlan?.steps?.length ? <WorkPlanRail
@@ -3137,18 +3127,6 @@ function DocumentSidePanel({ documentState, activeJob, workflow, busy, user, onC
   </div>;
 }
 
-function ChatsPage({ sessions, onOpen, onNew }) {
-  const [query, setQuery] = useState('');
-  const cleanQuery = query.trim().toLocaleLowerCase();
-  const visible = sessions.filter((session) => `${session.title || 'Chat baru'} ${session.course_group || session.configuration?.courseName || ''}`.toLocaleLowerCase().includes(cleanQuery));
-  return <section className="chats-page">
-    <header><div><h1>Chats</h1><p>Semua percakapan dan pekerjaan laprakmu.</p></div><Button onClick={onNew}><Pencil size={15}/>Chat baru</Button></header>
-    <label className="chats-search"><Search size={15}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari chat" /></label>
-    <div className="chats-list-head"><span>Nama</span><span>Project</span><span>Diperbarui</span></div>
-    <div className="chats-list">{visible.length ? visible.map((session) => <button type="button" key={session.id} onClick={() => onOpen(session.id)}><span className="chats-list-icon"><MessageCircle size={16}/></span><span className="chats-list-copy"><b>{session.title || 'Chat baru'}</b><small>{session.document_id ? 'Dokumen kerja tersambung' : 'Percakapan'}</small></span><span className="chats-list-project">{session.course_group || session.configuration?.courseName || 'Tanpa project'}</span><time>{formatDate(session.updated_at || session.updatedAt || session.created_at || session.createdAt)}</time><ArrowRight size={15}/></button>) : <div className="chats-empty"><MessageCircle size={23}/><b>{cleanQuery ? 'Chat tidak ditemukan.' : 'Belum ada chat.'}</b><p>{cleanQuery ? 'Coba kata kunci lain.' : 'Mulai chat baru untuk menyusun laprak pertamamu.'}</p>{!cleanQuery && <Button onClick={onNew}><Pencil size={14}/>Chat baru</Button>}</div>}</div>
-  </section>;
-}
-
 function DocumentLibrary({ documents, onRefresh, onOpen }) { const [query, setQuery] = useState(''); const visible = documents.filter((doc) => `${doc.title} ${doc.course_name} ${doc.module_title}`.toLowerCase().includes(query.toLowerCase())); return <section className="library-page"><header><div><h1>Dokumen</h1><p>Laprak yang dibuat dari percakapanmu.</p></div><button onClick={onRefresh}>Refresh</button></header><label className="search-field"><FolderOpen size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari judul, mata kuliah, atau modul" /></label><div className="library-list">{visible.length ? visible.map((doc) => <article key={doc.id}><div><span className="doc-file"><FileText size={16} /></span><div><b>{doc.title}</b><small>{doc.course_name || 'Mata kuliah belum diisi'} · {doc.status === 'generated' ? 'Dokumen siap diperiksa' : 'Dokumen sedang dibuat'}</small></div></div><button onClick={() => onOpen(doc)}>Buka chat <ArrowRight size={13} /></button></article>) : <div className="empty-library"><FolderOpen size={22} /><b>Belum ada dokumen.</b><p>Buat chat laprak, lalu pilih “Buat laprak” saat konteksnya sudah cukup.</p></div>}</div></section>; }
 
 function ProjectsPage({ projects, selectedProject, documents, onOpenProject, onBack, onCreate, onNewChat, onOpenSession, onPinProject, onNotice }) {
@@ -3558,6 +3536,29 @@ function BillingPage() {
   </div>;
 }
 
+function AccentPicker({ value, onChange, resolvedTheme = 'dark' }) {
+  const lightMode = resolvedTheme === 'light';
+  return <div className="accent-picker" role="radiogroup" aria-label="Warna aksen workspace">
+    {workspaceAccents.map((accent) => {
+      const unavailable = lightMode && DARK_ONLY_ACCENTS.has(accent.key);
+      return <button
+        key={accent.key}
+        type="button"
+        role="radio"
+        aria-label={unavailable ? `${accent.label} (hanya tersedia pada tema gelap)` : accent.label}
+        title={unavailable ? `${accent.label} tidak terbaca pada tema terang. Tersedia kembali di tema gelap.` : accent.label}
+        aria-checked={value === accent.key}
+        disabled={unavailable}
+        className={`${value === accent.key ? 'selected' : ''}${unavailable ? ' accent-unavailable' : ''}`.trim()}
+        onClick={() => onChange(accent.key)}
+        style={{ '--accent-swatch': accent.color }}
+      >
+        <span className="accent-swatch">{value === accent.key && !unavailable && <Check size={13} />}</span>
+      </button>;
+    })}
+  </div>;
+}
+
 function ThemePicker({ value, onChange }) {
   const themes = [
     { key: 'system', label: 'Ikuti sistem', icon: Monitor },
@@ -3575,6 +3576,7 @@ function SettingsPaneHeader({ eyebrow, title, description }) {
 
 function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, prefs, setPrefs, initialTab = 'general' }) {
   const { user, setNotice, refreshSession, showDialog } = useApp();
+  const settingsTheme = useResolvedTheme(prefs?.theme || 'system');
   const [tab, setTab] = useState(initialTab);
   const [form, setForm] = useState({ nickname: user.nickname || '', fullName: user.fullName || '', nim: user.nim || '', className: user.className || '', institutionName: user.institutionName || '', institutionLogoUrl: user.institutionLogoUrl || '', facultyName: user.facultyName || '', studyProgramName: user.studyProgramName || '', lecturerName: user.lecturerName || '', lecturerNip: user.lecturerNip || '', departmentKey: user.departmentKey || '', studyProgramKey: user.studyProgramKey || '' });
   const [storage, setStorage] = useState(null);
@@ -3637,7 +3639,7 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
   };
   const deleteAccount = async () => { if (deleteConfirm !== user.email) return setNotice('Masukkan email akun dengan tepat untuk melanjutkan.'); setBusy(true); try { await api('/me', { method: 'DELETE', body: { confirmation: deleteConfirm } }); clearCsrfToken(); await refreshSession(); onClose(); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
   const tabs = [
-    { key: 'general', label: 'Umum', icon: Settings2, title: 'Tampilan workspace', description: 'Atur tema, kepadatan, dan bahasa workspace.' },
+    { key: 'general', label: 'Umum', icon: Settings2, title: 'Tampilan workspace', description: 'Atur tema, kepadatan, bahasa, dan warna aksen.' },
     { key: 'notifications', label: 'Notifikasi', icon: BellRing, title: 'Notifikasi yang berguna', description: 'Pilih kabar yang benar-benar perlu muncul.' },
     { key: 'personalization', label: 'Personalisasi', icon: Sliders, title: 'Cara Laprakin menulis', description: 'Jadikan preferensi ini sebagai titik awal untuk chat baru.' },
     { key: 'billing', label: 'Billing', icon: CreditCard, title: 'Plan dan transaksi', description: 'Lihat status plan, credit, dan histori pembayaran.' },
@@ -3667,6 +3669,8 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
         <SettingsPaneHeader eyebrow={activeTab.label} title={activeTab.title} description={activeTab.description} />
         {tab === 'general' && <div className="settings-pane">
           <section className="settings-group"><div className="settings-group-heading"><b>Appearance</b><small>Perubahan diterapkan langsung.</small></div><Row title="Tema" className="theme-settings-row"><ThemePicker value={prefs.theme || 'system'} onChange={(value) => updatePrefs({ theme: value })} /></Row><Row title="Kontras"><CustomSelect value={prefs.contrast || 'default'} onChange={(value) => updatePrefs({ contrast: value })} options={[{ value: 'default', label: 'Default' }, { value: 'high', label: 'Tinggi' }]} /></Row><Row title="Bahasa"><CustomSelect value={prefs.language || 'id'} onChange={(value) => updatePrefs({ language: value })} options={[{ value: 'id', label: 'Bahasa Indonesia' }, { value: 'en', label: 'English' }]} /></Row></section>
+          <section className="settings-group accent-settings-group"><div className="settings-group-heading"><b>Warna aksen</b><small>Dipakai untuk tombol utama dan status aktif—bukan seluruh hover.</small></div><AccentPicker value={prefs.accent || 'lime'} onChange={(accent) => updatePrefs({ accent })} resolvedTheme={settingsTheme} /></section>
+          <Toggle checked={prefs.compact} onChange={(checked) => updatePrefs({ compact: checked })} title="Workspace ringkas" description="Rapatkan sidebar, toolbar, dan area percakapan." />
         </div>}
         {tab === 'notifications' && <div className="settings-pane"><section className="settings-group"><Toggle checked={prefs.jobNotifications !== false} onChange={(checked) => updatePrefs({ jobNotifications: checked })} title="Proses dokumen" description="Beritahu saat analisis, draft, atau export selesai." /><Toggle checked={prefs.deadlineNotifications !== false} onChange={(checked) => updatePrefs({ deadlineNotifications: checked })} title="Deadline tugas" description="Pengingat ringan untuk dokumen yang memiliki tenggat." /><Toggle checked={prefs.productUpdates !== false} onChange={(checked) => updatePrefs({ productUpdates: checked })} title="Update produk" description="Hanya perubahan fitur beta yang penting." /></section></div>}
         {tab === 'personalization' && <div className="settings-pane"><section className="settings-group nickname-settings"><div className="settings-group-heading"><b>Nama panggilan</b><small>Dipakai hanya untuk menyapamu di halaman chat. Kosongkan untuk memakai nama depan.</small></div><div className="nickname-settings-control"><label aria-label="Sapaan"><input value={form.nickname} maxLength={20} autoComplete="nickname" onChange={(event) => setForm({ ...form, nickname: event.target.value })} placeholder={userGreetingName({ ...user, nickname: '' })} /></label><small>{form.nickname.length}/20</small><Button type="button" variant="secondary" onClick={saveNickname} disabled={busy}><Save size={14}/>Simpan</Button></div></section><section className="settings-group"><Row title="Gaya bahasa"><CustomSelect value={prefs.tone || 'formal'} onChange={(value) => updatePrefs({ tone: value })} options={[{ value: 'formal', label: 'Formal' }, { value: 'semi-formal', label: 'Semi-formal' }]} /></Row><Row title="Sudut pandang"><CustomSelect value={prefs.perspective || 'saya'} onChange={(value) => updatePrefs({ perspective: value })} options={[{ value: 'saya', label: 'Saya' }, { value: 'kita', label: 'Kita' }, { value: 'impersonal', label: 'Impersonal' }]} /></Row><Row title="Struktur awal"><CustomSelect value={prefs.profile || 'langkah'} onChange={(value) => updatePrefs({ profile: value })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></Row></section><label className="settings-textarea"><span>Instruksi tambahan</span><small>Selalu dikirim sebagai acuan AI untuk chat dan generate laprak.</small><textarea value={prefs.customInstructions || ''} onChange={(event) => updatePrefs({ customInstructions: event.target.value })} placeholder="Contoh: gunakan bahasa teknis yang ringkas." /></label></div>}
