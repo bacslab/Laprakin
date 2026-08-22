@@ -1,0 +1,7 @@
+# Generated bundle; its authored sources remain in the Semgrep scan.
+ops/laprakin-email-renderer.mjs
+
+# Local dependency and build output are not CI source inputs.
+node_modules/
+client/node_modules/
+client/dist/
