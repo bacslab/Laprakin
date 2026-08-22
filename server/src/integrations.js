@@ -60,8 +60,8 @@ export async function verifyGoogleOidcIntegration() {
 export async function verifyAzureBlobIntegration() {
   if (!config.azureStorageConnectionString) return { ok: false, code: 'AZURE_BLOB_NOT_CONFIGURED', containerName: config.azureBlobContainerName };
   try {
-    const { isAzureBlobConfigured } = await import('./azure-blob.js');
-    return { ok: isAzureBlobConfigured(), containerName: config.azureBlobContainerName };
+    const { verifyPrivateBlobContainer } = await import('./azure-blob.js');
+    return verifyPrivateBlobContainer();
   } catch (error) {
     return { ok: false, code: 'AZURE_BLOB_ERROR', error: error.message };
   }
