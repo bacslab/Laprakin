@@ -76,7 +76,8 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
   deviceSecret: process.env.DEVICE_HMAC_SECRET || 'dev-device-secret-change-me',
   tokenSecret: process.env.TOKEN_HMAC_SECRET || process.env.JWT_SECRET || 'dev-token-secret-change-me',
-  adminEmail: (process.env.ADMIN_EMAIL || 'hilmimubarok2006@gmail.com').trim().toLowerCase(),
+  // Admin promotion must always be an explicit deployment decision.
+  adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
   naraRouterApiKey: process.env.NARAROUTER_API_KEY || '',
   naraRouterBaseUrl: (process.env.NARAROUTER_BASE_URL || 'https://router.bynara.id/v1').replace(/\/$/, ''),
   naraRouterMaxRpm: boundedInt(process.env.NARAROUTER_MAX_RPM, 8, 1, 10),
@@ -110,8 +111,9 @@ export const config = {
   maxUploadBytes: positiveInt(process.env.MAX_UPLOAD_MB, 20) * 1024 * 1024,
   maxFilesPerUpload: positiveInt(process.env.MAX_FILES_PER_UPLOAD, 12),
   maxFilesPerDocument: positiveInt(process.env.MAX_FILES_PER_DOCUMENT, 40),
-  // Persistent session: diperpanjang saat user aktif, tetap dapat dicabut lewat logout/reset password.
+  // User sessions remain persistent; privileged admin sessions use a shorter window.
   sessionDays: positiveInt(process.env.SESSION_DAYS, 30),
+  adminSessionHours: boundedInt(process.env.ADMIN_SESSION_HOURS, 8, 1, 12),
   trustProxyHops: Math.max(0, Math.min(5, Number(process.env.TRUST_PROXY_HOPS || 0) || 0)),
   jobPollMs: positiveInt(process.env.JOB_POLL_MS, 750),
   jobMaxAttempts: positiveInt(process.env.JOB_MAX_ATTEMPTS, 2),
