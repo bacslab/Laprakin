@@ -32,7 +32,7 @@ import {
   inferChatContext,
   isPlausibleAcademicContext,
 } from './report-quality.js';
-import { addDays, asyncHandler, hmac, HttpError, now, parseJson, randomToken, sanitizeFilename, sha256, detectBufferType } from './utils.js';
+import { addDays, asyncHandler, hmac, HttpError, now, opaqueStorageName, parseJson, randomToken, sanitizeFilename, sha256, detectBufferType } from './utils.js';
 import {
   activateSandboxSubscription,
   analyzeDocument,
@@ -1921,7 +1921,7 @@ const uploadStorage = multer.diskStorage({
     }
   },
   filename: (_req, file, callback) => {
-    callback(null, `${nanoid()}-${sanitizeFilename(file.originalname)}`);
+    callback(null, opaqueStorageName(file.originalname));
   },
 });
 
@@ -2807,7 +2807,7 @@ function copyChatAttachmentToDocument(documentId, ownerUserId, attachment) {
   if (existing) return existing.id;
   const targetDir = path.join(config.uploadDir, ownerUserId, documentId, 'source');
   fs.mkdirSync(targetDir, { recursive: true });
-  const storageName = `${nanoid()}-${sanitizeFilename(attachment.original_name)}`;
+  const storageName = opaqueStorageName(attachment.original_name);
   const storagePath = path.join(targetDir, storageName);
   fs.copyFileSync(attachment.storage_path, storagePath);
   const id = nanoid();
@@ -2850,6 +2850,11 @@ function sendPrivateFile(res, storagePath) {
   return res.sendFile(target);
 }
 
+function sendPrivateDownload(res, storagePath, originalName) {
+  res.attachment(sanitizeFilename(originalName));
+  return sendPrivateFile(res, storagePath);
+}
+
 const featureUpdateMediaUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
@@ -2880,7 +2885,7 @@ const chatUploadStorage = multer.diskStorage({
       callback(error);
     }
   },
-  filename: (_req, file, callback) => callback(null, `${nanoid()}-${sanitizeFilename(file.originalname)}`),
+  filename: (_req, file, callback) => callback(null, opaqueStorageName(file.originalname)),
 });
 
 const chatUpload = multer({
@@ -3945,7 +3950,7 @@ app.get('/api/files/:id/download', requireAuth, (req, res) => {
   `).get(req.params.id, req.user.id);
   if (!file) throw new HttpError(404, 'File tidak ditemukan.', 'FILE_NOT_FOUND');
   res.type(file.mime_type);
-  res.download(file.storage_path, file.original_name);
+  sendPrivateDownload(res, file.storage_path, file.original_name);
 });
 
 app.get('/api/files/:id/preview', requireAuth, (req, res) => {
@@ -4488,7 +4493,8 @@ app.get('/api/exports/:id/download', requireAuth, (req, res) => {
   if (!output.content_signature || output.content_signature !== quizAccess.contentSignature) {
     throw new HttpError(409, 'File ini berasal dari versi laporan lama. Buat file Word baru dari draft terbaru.', 'EXPORT_VERSION_OUTDATED');
   }
-  res.download(output.storage_path, output.file_name);
+  res.type('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  sendPrivateDownload(res, output.storage_path, output.file_name);
 });
 
 app.get('/api/referral', requireAuth, (req, res) => {
@@ -4547,6 +4553,7 @@ app.delete('/api/me', requireAuth, requireCsrf, (req, res) => {
     db.prepare('UPDATE users SET deleted_at = ?, updated_at = ? WHERE id = ?').run(now(), now(), req.user.id);
     db.prepare('UPDATE documents SET deleted_at = ?, updated_at = ? WHERE owner_user_id = ?').run(now(), now(), req.user.id);
     db.prepare('UPDATE document_files SET deleted_at = ? WHERE owner_user_id = ? AND deleted_at IS NULL').run(now(), req.user.id);
+    db.prepare('UPDATE chat_attachments SET deleted_at = ? WHERE owner_user_id = ? AND deleted_at IS NULL').run(now(), req.user.id);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');

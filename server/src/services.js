@@ -58,6 +58,7 @@ import {
   isExpired,
   isFuture,
   now,
+  opaqueStorageName,
   parseJson,
   randomToken,
   sanitizeFilename,
@@ -651,17 +652,22 @@ export function setSession(res, user) {
   }
   const csrfToken = randomToken(24);
   const row = db.prepare('SELECT session_version FROM users WHERE id = ?').get(user.id);
+  const isAdmin = user.role === 'admin';
+  const expiresIn = isAdmin ? `${config.adminSessionHours}h` : `${config.sessionDays}d`;
+  const maxAge = isAdmin
+    ? config.adminSessionHours * 60 * 60 * 1000
+    : config.sessionDays * 24 * 60 * 60 * 1000;
   const token = jwt.sign(
     { sub: user.id, role: user.role, csrf: csrfToken, sv: Number(row?.session_version || 1) },
     config.jwtSecret,
-    { expiresIn: `${config.sessionDays}d` },
+    { expiresIn },
   );
 
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: config.isProd,
-    maxAge: config.sessionDays * 24 * 60 * 60 * 1000,
+    maxAge,
     path: '/',
   });
 
@@ -1932,7 +1938,7 @@ export async function extractDocxImages(file) {
     if (existingHashes.has(digest)) continue;
     existingHashes.add(digest);
 
-    const storageName = `${nanoid()}-${sanitizeFilename(originalName)}`;
+    const storageName = opaqueStorageName(originalName);
     const target = path.join(outputDir, storageName);
     const id = nanoid();
     const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
@@ -4017,7 +4023,7 @@ export async function exportDocumentDocx(documentId, userId, reviewMode = 'revie
   await fs.mkdir(exportDirectory, { recursive: true });
   const base = sanitizeFilename(document.title || 'laporan');
   const fileName = `${base}.docx`;
-  const storagePath = path.join(exportDirectory, `${nanoid()}-${fileName}`);
+  const storagePath = path.join(exportDirectory, opaqueStorageName(fileName));
   const exportId = nanoid();
 
   await fs.writeFile(storagePath, buffer);
@@ -4307,6 +4313,7 @@ export async function cleanupExpiredResources() {
   const result = {
     expiredExports: 0,
     purgedFiles: 0,
+    purgedChatAttachments: 0,
     purgedDocuments: 0,
     purgedOauthStates: 0,
     purgedPasswordResetTokens: 0,
@@ -4331,6 +4338,16 @@ export async function cleanupExpiredResources() {
   }
 
   const purgeBefore = addDays(-7);
+  const chatAttachments = db.prepare(`
+    SELECT * FROM chat_attachments
+    WHERE deleted_at IS NOT NULL AND deleted_at <= ?
+  `).all(purgeBefore);
+  for (const attachment of chatAttachments) {
+    try { await fs.unlink(attachment.storage_path); } catch { /* best effort cleanup */ }
+    db.prepare('DELETE FROM chat_attachments WHERE id = ?').run(attachment.id);
+    result.purgedChatAttachments += 1;
+  }
+
   const files = db.prepare(`
     SELECT * FROM document_files
     WHERE deleted_at IS NOT NULL AND deleted_at <= ?
@@ -4365,10 +4382,13 @@ export async function cleanupExpiredResources() {
       db.prepare('DELETE FROM document_versions WHERE document_id = ?').run(document.id);
       db.prepare('DELETE FROM review_checks WHERE document_id = ?').run(document.id);
       db.prepare('DELETE FROM document_parameters WHERE document_id = ?').run(document.id);
+      db.prepare('DELETE FROM document_tasks WHERE document_id = ?').run(document.id);
+      db.prepare('DELETE FROM document_notes WHERE document_id = ?').run(document.id);
       db.prepare('DELETE FROM support_access WHERE document_id = ?').run(document.id);
       db.prepare('DELETE FROM exports WHERE document_id = ?').run(document.id);
       db.prepare('DELETE FROM jobs WHERE document_id = ?').run(document.id);
       db.prepare('DELETE FROM document_files WHERE document_id = ?').run(document.id);
+      db.prepare('UPDATE chat_sessions SET document_id = NULL WHERE document_id = ?').run(document.id);
       db.prepare('DELETE FROM documents WHERE id = ?').run(document.id);
       db.exec('COMMIT');
       result.purgedDocuments += 1;

@@ -56,6 +56,7 @@ MAX_UPLOAD_MB=20
 MAX_FILES_PER_UPLOAD=12
 MAX_FILES_PER_DOCUMENT=40
 SESSION_DAYS=30
+ADMIN_SESSION_HOURS=8
 JOB_POLL_MS=750
 JOB_MAX_ATTEMPTS=2
 RETENTION_SWEEP_MINUTES=60
@@ -120,8 +121,11 @@ Catatan: deployment production aktif saat ini bukan Render. Render blueprint tet
 - [ ] Endpoint admin credit grant diuji dengan target satu user, semua user, dan user paid.
 - [ ] Contract test template DOCX lulus setelah template default atau logic export diubah.
 - [ ] Quiz/download gate diuji untuk user Free, credit satuan, dan subscription.
-- [ ] `ADMIN_EMAIL` memakai akun khusus admin dan password manager; jangan memakai akun harian.
-- [ ] MFA admin atau identity-aware proxy aktif sebelum akses admin dibuka ke internet.
+- [ ] `ADMIN_EMAIL` memakai akun khusus admin dan password manager; jangan memakai akun harian atau mengandalkan fallback aplikasi.
+- [ ] `ADMIN_SESSION_HOURS` bernilai 8 atau lebih singkat (rentang yang diterima 1–12 jam).
+- [ ] MFA admin atau identity-aware proxy aktif sebelum akses admin dibuka ke internet; ikuti [`ADMIN_SECURITY.md`](ADMIN_SECURITY.md).
+- [ ] Volume upload hanya di-mount ke container aplikasi dan tidak dilayani sebagai static directory.
+- [ ] Jika Azure Blob diaktifkan, integration check mengembalikan `privateAccess: true`; ikuti [`STORAGE_SECURITY.md`](STORAGE_SECURITY.md).
 - [ ] Antivirus/malware scanner untuk upload aktif sebelum menerima file publik berskala besar.
 
 ## 4. Keterbatasan arsitektur saat ini
