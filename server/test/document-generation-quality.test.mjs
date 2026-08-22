@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import sharp from 'sharp';
 
-import { displaySectionTitle, distributeEvidenceMappings, prepareEvidenceImageForAi } from '../src/services.js';
+import { buildFallbackReportSections, displaySectionTitle, distributeEvidenceMappings, prepareEvidenceImageForAi } from '../src/services.js';
+import { reportParameterIssues, reportSectionIssues } from '../src/report-quality.js';
 
 test('displaySectionTitle mempertahankan nomor bertingkat tanpa menggandakannya', () => {
   assert.equal(displaySectionTitle('1.1 Konfigurasi Dasar', 0), '1.1 Konfigurasi Dasar');
@@ -58,4 +59,24 @@ test('distributeEvidenceMappings menempatkan bukti pada bagian yang membahas fak
   assert.equal(distribution.get('section-7')[0]?.caption, 'Tabel rute aktif');
   assert.equal(distribution.get('section-9')[0]?.caption, 'Ping ke beberapa alamat IP');
   assert.equal(distribution.get('section-10')[0]?.caption, 'Ping ke DNS dan domain');
+});
+
+test('buildFallbackReportSections menghasilkan draft lokal yang lolos quality gate', () => {
+  const sections = buildFallbackReportSections({
+    document: {
+      title: 'Routing Dasar',
+      course_name: 'Jaringan Komputer',
+      module_title: 'Konfigurasi Router',
+      module_text: 'Atur interface router. Tetapkan alamat IP. Uji konektivitas dengan ping.',
+      outline_json: '[]',
+    },
+    recipe: { instructions: 'Jelaskan langkah konfigurasi dan hubungan command dengan output pengujian.' },
+    mappings: [{ status: 'confirmed', caption: 'Ping menuju host tujuan menerima empat balasan.' }],
+    parameters: [{ label: 'IP router', value: '192.168.1.1', includeInDraft: true, isRequired: true }],
+  });
+
+  assert.deepEqual([
+    ...reportSectionIssues(sections),
+    ...reportParameterIssues(sections, [{ label: 'IP router', value: '192.168.1.1', isRequired: true }]),
+  ], []);
 });

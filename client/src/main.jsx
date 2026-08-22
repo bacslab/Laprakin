@@ -1623,8 +1623,7 @@ function Workspace() {
       setNotice('Konfigurasi chat disimpan.');
       if (queued?.session?.id === data.session.id) {
         const next = { ...queued, session: data.session };
-        if (!identityComplete) setIdentityIntake(next);
-        else await dispatchChatMessage(next);
+        await dispatchChatMessage(next);
       }
     } catch (err) { setNotice(err.message); }
     finally { setBusy(false); }
@@ -1786,10 +1785,6 @@ function Workspace() {
     const files = landingFiles;
     setInput('');
     setPendingLandingFiles([]);
-    if (!identityComplete) {
-      setIdentityIntake({ session: current, content, files, kind: attachmentKind });
-      return;
-    }
     await dispatchChatMessage({ session: current, content, files, kind: attachmentKind });
     } finally {
       sendInFlightRef.current = false;

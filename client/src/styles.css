@@ -1156,6 +1156,16 @@ body { overflow-x:hidden; }
 .workspace .account-row > button > svg { margin-left:auto; flex:0 0 auto; }
 .workspace.left-collapsed .session-list > p { display:none !important; }
 
+/* The configuration rail must remain inside the viewport on compact desktop widths. */
+.workspace { grid-template-columns:minmax(0,var(--left)) minmax(0,1fr) minmax(0,var(--right)); }
+.workspace.right-open { --right:clamp(252px,22vw,304px); }
+.workspace .right-config { width:100%; max-width:100%; min-width:0; }
+.workspace .config-inner { width:100%; max-width:100%; min-width:0; }
+.workspace .right-head > div:first-child { min-width:0; overflow:hidden; }
+.workspace .right-head > div:first-child b,
+.workspace .right-head > div:first-child small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.workspace .right-head > .icon-button { flex:0 0 auto; }
+
 /* A compact sidebar shows the Laprakin mark first and the expand control only on hover. */
 .sidebar-collapse-button { display:grid !important; place-items:center; overflow:hidden; }
 .sidebar-collapse-logo { display:none; width:24px; height:24px; place-items:center; border-radius:6px; background:var(--workspace-text); color:var(--workspace-panel); font-size:.65rem; font-weight:800; }

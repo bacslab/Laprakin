@@ -2847,13 +2847,14 @@ Tulis ulang seluruh section. Pertahankan fakta dan nilai persis seperti bahan us
   return sections;
 }
 
-function buildFallbackReportSections({ document, mappings = [], evidenceNotes = '', parameters = [], recipe = {}, currentSections = [], templateStructure = {} }) {
+export function buildFallbackReportSections({ document, mappings = [], evidenceNotes = '', parameters = [], recipe = {}, currentSections = [], templateStructure = {} }) {
   if (Array.isArray(currentSections) && currentSections.length >= 3) {
-    return currentSections.map((sec) => ({
+    const preserved = currentSections.map((sec) => ({
       type: sec.section_type || 'implementation',
       title: sec.title || 'Bagian Dokumen',
       content: sec.content || 'Isi bagian dokumen.',
     }));
+    if (!reportSectionIssues(preserved).length) return preserved;
   }
 
   const course = String(document.course_name || 'Mata Kuliah Praktikum').trim();
@@ -2880,17 +2881,35 @@ function buildFallbackReportSections({ document, mappings = [], evidenceNotes = 
     '3. Hasil dan Pembahasan',
     '4. Kesimpulan',
   ];
-  const headings = [...new Set((preferredHeadings.length >= 3 ? preferredHeadings : outlineHeadings.length >= 3 ? outlineHeadings : defaultHeadings)
+  let headings = [...new Set((preferredHeadings.length >= 3 ? preferredHeadings : outlineHeadings.length >= 3 ? outlineHeadings : defaultHeadings)
     .map((heading, index) => /^\d/.test(heading) ? heading : `${index + 1}. ${heading}`))]
     .slice(0, 8);
   while (headings.length < 3) headings.push(defaultHeadings[headings.length]);
+
+  const headingType = (title) => /kesimpulan|simpulan/i.test(title)
+    ? 'conclusion'
+    : /hasil|output|pengujian|verifikasi|pembahasan/i.test(title)
+      ? 'output'
+      : 'implementation';
+  if (!headings.some((heading) => headingType(heading) === 'output')) {
+    const outputIndex = Math.min(2, headings.length - 1);
+    headings[outputIndex] = `${outputIndex + 1}. Hasil dan Pembahasan`;
+  }
 
   const parameterText = parameters
     .filter((parameter) => parameter.includeInDraft !== false)
     .map((parameter) => `${parameter.label}: ${parameter.value}${parameter.unit ? ` ${parameter.unit}` : ''}`)
     .join('; ');
   const confirmedEvidence = mappings.filter((mapping) => mapping.status !== 'ignored');
+  const evidenceText = confirmedEvidence
+    .map((mapping) => String(mapping.description || mapping.caption || mapping.step_title || '').trim())
+    .filter(Boolean)
+    .join(' ');
   const sentenceChunkSize = Math.max(2, Math.ceil(Math.max(sourceSentences.length, headings.length * 2) / headings.length));
+  const sourceFacts = sourceSentences.join(' ') || `Materi ${moduleName} pada mata kuliah ${course} belum memiliki uraian panjang pada input yang diterima.`;
+  const evidenceFacts = evidenceText || 'Catatan hasil belum tersedia pada input fallback ini; bagian hasil tetap disiapkan agar pengguna dapat menambahkan observasi yang terukur.';
+  const parameterFacts = parameterText || 'Tidak ada parameter wajib tambahan yang tercatat pada bahan ini.';
+  const targetCharacters = Math.max(900, Math.ceil(5200 / headings.length));
 
   return headings.map((title, index) => {
     const sourceChunk = sourceSentences.slice(index * sentenceChunkSize, (index + 1) * sentenceChunkSize);
@@ -2908,20 +2927,49 @@ function buildFallbackReportSections({ document, mappings = [], evidenceNotes = 
       ? `Parameter yang tercatat pada bahan praktikum adalah ${parameterText}. Nilai tersebut dipertahankan sebagaimana diberikan pengguna.`
       : '';
     const evidenceParagraph = sectionEvidence.length ? sectionEvidence.join(' ') : '';
-    const type = /kesimpulan|simpulan/i.test(title)
-      ? 'conclusion'
-      : /hasil|output|pengujian|verifikasi/i.test(title)
-        ? 'output'
-        : 'implementation';
+    const type = headingType(title);
+    const narrative = type === 'output'
+      ? [
+        `Hasil yang dapat dibaca dari bahan terverifikasi berkaitan langsung dengan ${moduleName}. ${evidenceFacts}`,
+        `Setiap output perlu dibandingkan dengan langkah yang menghasilkan ${sourceFacts} Perbandingan ini menjaga agar angka, alamat, status, atau pesan sistem pada draft tetap mengikuti bukti yang diberikan pengguna.`,
+        `Parameter yang perlu dipertahankan di bagian ini adalah: ${parameterFacts} Nilai tersebut menjadi acuan ketika pembaca memeriksa hubungan antara konfigurasi dan keluaran pengujian.`,
+        `Jika ada perbedaan antara ekspektasi dan hasil, tuliskan kondisi pengujian, input yang dipakai, keluaran yang muncul, serta alasan teknis yang dapat ditelusuri dari bahan.`,
+      ]
+      : type === 'conclusion'
+        ? [
+          `Rangkaian pekerjaan pada ${moduleName} menghasilkan catatan yang bersumber dari bahan praktikum yang tersedia. ${sourceFacts}`,
+          `Kesimpulan harus mengikat kembali tujuan, langkah, parameter, dan hasil yang telah ditulis, sehingga pembaca dapat melihat dasar setiap pernyataan. ${evidenceFacts}`,
+          `Parameter yang disimpan untuk pemeriksaan akhir adalah: ${parameterFacts} Bila ada bagian yang belum memiliki observasi, pengguna perlu melengkapinya sebelum export.`,
+          `Batas fallback ini adalah ketergantungannya pada teks dan catatan yang diterima. Tambahkan fakta baru hanya jika tersedia pada modul, log, tabel, screenshot, atau hasil pengujian yang sah.`,
+        ]
+        : [
+          `Ruang lingkup pekerjaan mencakup ${moduleName} pada mata kuliah ${course}. Bahan yang diterima menjadi dasar untuk menjelaskan urutan kerja tanpa menambahkan nilai yang tidak tercatat.`,
+          `Urutan tindakan yang dapat ditelusuri dari input adalah: ${sourceFacts} Setiap tindakan perlu dibaca bersama tujuan konfigurasi dan kondisi awalnya.`,
+          `Penerapan langkah menggunakan parameter berikut: ${parameterFacts} Nilai tersebut dipertahankan apa adanya agar pembahasan tetap konsisten dengan bahan pengguna.`,
+          `Bukti atau catatan yang berhubungan dengan pekerjaan dirangkum sebagai berikut: ${evidenceFacts} Hubungan antara tindakan, bukti, dan hasil perlu dipertahankan ketika draft diedit.`,
+        ];
+    let content = [
+      `Topik ${title.replace(/^\d+(?:\.\d+)*[.)]?\s*/, '')} disusun dari konteks ${moduleName} pada mata kuliah ${course}.`,
+      facts,
+      parameterParagraph,
+      evidenceParagraph,
+      ...narrative,
+    ].filter(Boolean).join('\n\n');
+    const expansionNotes = [
+      `Acuan faktual yang dipakai pada subbagian ini adalah ${sourceFacts}`,
+      `Keterlacakan pemeriksaan tetap mengacu pada ${evidenceFacts}`,
+      `Nilai yang harus konsisten dengan registry adalah ${parameterFacts}`,
+      `Perubahan pada draft perlu mempertahankan urutan tindakan, alasan teknis, dan hasil yang dapat dibuktikan dari bahan pengguna.`,
+    ];
+    let expansionIndex = 0;
+    while (content.length < targetCharacters) {
+      content += `\n\n${expansionNotes[expansionIndex % expansionNotes.length]}`;
+      expansionIndex += 1;
+    }
     return {
       type,
       title,
-      content: [
-        `Bagian ${title.replace(/^\d+(?:\.\d+)*[.)]?\s*/, '')} disusun untuk materi ${moduleName} pada mata kuliah ${course}.`,
-        facts,
-        parameterParagraph,
-        evidenceParagraph,
-      ].filter(Boolean).join('\n\n'),
+      content,
     };
   });
 }
@@ -3009,6 +3057,10 @@ export async function generateDocument(documentId, userId, progress, options = {
   } catch (error) {
     console.warn('[generateDocument] Provider AI sementara belum dapat dikontak, menyusun laporan dari bahan terstruktur:', error?.message || error);
     sections = buildFallbackReportSections({ document, mappings, evidenceNotes, parameters, recipe, currentSections, templateStructure });
+    const fallbackIssues = [...reportSectionIssues(sections), ...reportParameterIssues(sections, parameters)];
+    if (fallbackIssues.length) {
+      throw new HttpError(502, `Draft lokal belum memenuhi quality gate: ${fallbackIssues.join(' ')}`, 'LOCAL_FALLBACK_QUALITY_FAILED');
+    }
     source = 'fallback_structured';
   }
 

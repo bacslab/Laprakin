@@ -75,25 +75,9 @@ with sync_playwright() as playwright:
 
     page.locator(".composer textarea").fill("Gunakan bahan ini untuk laprak saya.")
     page.locator(".composer textarea").press("Enter")
-    page.locator(".identity-intake-modal").wait_for()
-    assert page.get_by_text("Lengkapi identitas laprakmu").is_visible()
-
-    page.get_by_label("Nama lengkap").fill("Asep Saputra")
-    page.get_by_label("NPM / NIM").fill("2300001")
-    page.get_by_label("Kelas").fill("TI-2A")
-    department_field = page.locator(".identity-intake-grid label").filter(
-        has_text="Jurusan / fakultas"
-    )
-    department_field.locator(".select-trigger").click()
-    page.get_by_role("button", name="Jurusan Komputer dan Bisnis").click()
-    program_field = page.locator(".identity-intake-grid label").filter(
-        has_text="Program studi"
-    )
-    program_field.locator(".select-trigger").click()
-    page.get_by_role("button", name="D3 Teknik Informatika").click()
-    page.get_by_role("button", name="Simpan & lanjutkan").click()
-
     page.locator(".identity-intake-modal").wait_for(state="detached")
+    page.locator(".message.user").wait_for()
+    assert page.get_by_text("Lengkapi identitas laprakmu").count() == 0
     page.locator(".workspace-tutorial").wait_for()
     assert page.get_by_text("Langkah 1 dari 4").is_visible()
     assert page.locator(".workspace-tutorial video").count() == 1
