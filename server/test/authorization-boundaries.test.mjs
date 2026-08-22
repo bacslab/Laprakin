@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,6 +22,7 @@ async function availablePort() {
 function createClient(base, device) {
   const cookies = new Map();
   let csrf = '';
+  let latestSetCookies = [];
 
   function headers(extra = {}, includeCsrf = true) {
     return {
@@ -42,6 +43,7 @@ function createClient(base, device) {
       }, !skipCsrf),
     });
     const setCookies = response.headers.getSetCookie?.() || [response.headers.get('set-cookie')].filter(Boolean);
+    if (setCookies.length) latestSetCookies = setCookies;
     for (const setCookie of setCookies) {
       const [nameValue] = setCookie.split(';');
       const separator = nameValue.indexOf('=');
@@ -70,6 +72,7 @@ function createClient(base, device) {
   return {
     raw,
     request,
+    sessionCookies: () => [...latestSetCookies],
     async registerAndVerify(email) {
       const registration = await request('/auth/register', {
         method: 'POST',
@@ -138,6 +141,8 @@ test('authorization boundaries isolate two users, admin routes, and CSRF mutatio
       JWT_SECRET: 'authorization-test-jwt-secret-2026-unique',
       DEVICE_HMAC_SECRET: 'authorization-test-device-secret-2026-unique',
       TOKEN_HMAC_SECRET: 'authorization-test-token-secret-2026-unique',
+      SESSION_DAYS: '30',
+      ADMIN_SESSION_HOURS: '8',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -170,6 +175,8 @@ test('authorization boundaries isolate two users, admin routes, and CSRF mutatio
     assert.equal(userA.role, 'student');
     assert.equal(userB.role, 'student');
     assert.equal(admin.role, 'admin');
+    assert.match(userAClient.sessionCookies().join('\n'), /Max-Age=2592000/i);
+    assert.match(adminClient.sessionCookies().join('\n'), /Max-Age=28800/i);
 
     const documentPayload = {
       title: 'Dokumen privat User A',
@@ -352,6 +359,38 @@ test('authorization boundaries isolate two users, admin routes, and CSRF mutatio
       const declaration = serverSource.slice(route.index, declarationEnd === -1 ? undefined : declarationEnd);
       assert.match(declaration, /requireAdmin/, `${route[1]} wajib memakai requireAdmin`);
     }
+
+    const adminMutations = [...serverSource.matchAll(/app\.(?:post|put|patch|delete)\(\s*['"](\/api\/admin[^'"]*)['"]/g)];
+    for (const route of adminMutations) {
+      const nextRoute = serverSource.indexOf('\napp.', route.index + 1);
+      const handler = serverSource.slice(route.index, nextRoute === -1 ? undefined : nextRoute);
+      assert.match(handler, /requireCsrf/, `${route[1]} wajib memakai requireCsrf`);
+      assert.match(handler, /\baudit\(/, `${route[1]} wajib mencatat perubahan pada audit log`);
+    }
+
+    const configSource = await readFile(path.join(root, 'server/src/config.js'), 'utf8');
+    assert.match(configSource, /adminEmail:\s*\(process\.env\.ADMIN_EMAIL \|\| ''\)/);
+    assert.doesNotMatch(configSource, /adminEmail:[^\n]+@[a-z0-9.-]+/i);
+
+    await userAClient.request('/me', {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation: userA.email }),
+    }, 204);
+    assert.ok(testDb.prepare('SELECT deleted_at FROM document_files WHERE id = ?').get(fileId)?.deleted_at);
+    assert.ok(testDb.prepare('SELECT deleted_at FROM chat_attachments WHERE id = ?').get(attachmentId)?.deleted_at);
+
+    const expiredDeletion = '2000-01-01T00:00:00.000Z';
+    testDb.prepare('UPDATE documents SET deleted_at = ? WHERE owner_user_id = ?').run(expiredDeletion, userA.id);
+    testDb.prepare('UPDATE document_files SET deleted_at = ? WHERE owner_user_id = ?').run(expiredDeletion, userA.id);
+    testDb.prepare('UPDATE chat_attachments SET deleted_at = ? WHERE owner_user_id = ?').run(expiredDeletion, userA.id);
+    const cleanupResponse = await adminClient.raw('/admin/retention/run', { method: 'POST', body: '{}' });
+    assert.equal(cleanupResponse.status, 200, `${JSON.stringify(cleanupResponse.payload)}\n${logs}`);
+    const cleanup = cleanupResponse.payload;
+    assert.ok(cleanup.purgedFiles >= 1);
+    assert.ok(cleanup.purgedChatAttachments >= 1);
+    await assert.rejects(access(filePath), { code: 'ENOENT' });
+    await assert.rejects(access(attachmentPath), { code: 'ENOENT' });
+    await assert.rejects(access(exportPath), { code: 'ENOENT' });
 
     const workflow = await readFile(path.join(root, '.github/workflows/test.yml'), 'utf8');
     const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
