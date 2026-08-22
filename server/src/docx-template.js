@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import AdmZip from 'adm-zip';
+import { openSafeZip } from './archive-safety.js';
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const defaultLaprakTemplatePath = path.resolve(moduleDirectory, '../assets/templates/default-laprak.docx');
@@ -409,7 +409,7 @@ function mergeBodyRelationships(templateZip, reportZip, bodyXml) {
 }
 
 export function inspectTemplateDocxBuffer(buffer) {
-  const zip = new AdmZip(buffer);
+  const zip = openSafeZip(buffer);
   const documentXml = zip.readAsText('word/document.xml');
   const { body } = documentBodyParts(documentXml);
   const elements = splitTopLevelElements(body);
@@ -429,8 +429,8 @@ export function inspectTemplateDocxBuffer(buffer) {
 }
 
 export function mergeReportWithTemplate({ reportBuffer, templateBuffer, slots }) {
-  const templateZip = new AdmZip(templateBuffer);
-  const reportZip = new AdmZip(reportBuffer);
+  const templateZip = openSafeZip(templateBuffer);
+  const reportZip = openSafeZip(reportBuffer);
   const templateXml = templateZip.readAsText('word/document.xml');
   const reportXml = reportZip.readAsText('word/document.xml');
   const templateParts = documentBodyParts(templateXml);

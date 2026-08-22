@@ -6,7 +6,6 @@ import { promisify } from 'node:util';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import mammoth from 'mammoth';
-import AdmZip from 'adm-zip';
 import nodemailer from 'nodemailer';
 import { render } from 'react-email';
 import { Resend } from 'resend';
@@ -24,6 +23,7 @@ import {
   TextRun,
 } from 'docx';
 import { config } from './config.js';
+import { ArchiveSafetyError, openSafeZip } from './archive-safety.js';
 import { generateAiContent, isAiConfigured } from './ai.js';
 import { audit, db, notify, toUser } from './db.js';
 import { planBenefits } from './pricing-config.js';
@@ -64,6 +64,12 @@ import {
 } from './utils.js';
 
 const execFileAsync = promisify(execFile);
+export const PDFTOTEXT_OPTIONS = Object.freeze({
+  timeout: 15_000,
+  killSignal: 'SIGKILL',
+  maxBuffer: 8 * 1024 * 1024,
+  windowsHide: true,
+});
 const COOKIE_NAME = 'laprakin_session';
 const EXTERNAL_AI_CONSENT_KEY = 'allowExternalAi';
 
@@ -1245,7 +1251,7 @@ export async function extractText(file) {
   }
   if (ext === '.xlsx') {
     try {
-      const zip = new AdmZip(file.storage_path);
+      const zip = openSafeZip(file.storage_path);
       const decodeXml = (value = '') => String(value)
         .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
         .replace(/&quot;/g, '"').replace(/&#39;/g, "'");
@@ -1271,16 +1277,18 @@ export async function extractText(file) {
         }
         return `Sheet ${index + 1}\n${rows.join('\n').slice(0, 12000)}`;
       }).join('\n\n');
-    } catch {
+    } catch (error) {
+      if (error instanceof ArchiveSafetyError) throw error;
       return '';
     }
   }
   if (ext === '.docx') {
+    openSafeZip(file.storage_path);
     return (await mammoth.extractRawText({ path: file.storage_path })).value || '';
   }
   if (ext === '.pdf') {
     try {
-      return (await execFileAsync('pdftotext', ['-layout', file.storage_path, '-'])).stdout || '';
+      return (await execFileAsync('pdftotext', ['-layout', file.storage_path, '-'], PDFTOTEXT_OPTIONS)).stdout || '';
     } catch {
       return '';
     }
@@ -1861,7 +1869,7 @@ export function buildOutline(text) {
 export async function extractDocxImages(file) {
   if (path.extname(file.original_name).toLowerCase() !== '.docx') return [];
 
-  const zip = new AdmZip(file.storage_path);
+  const zip = openSafeZip(file.storage_path);
   const mediaEntries = zip
     .getEntries()
     .filter((entry) => entry.entryName.startsWith('word/media/') && !entry.isDirectory);
@@ -2248,7 +2256,7 @@ export async function inspectDocumentTemplates(documentId, userId, progress = ()
       status = 'needs_review';
     } else {
       try {
-        const zip = new AdmZip(file.storage_path);
+        const zip = openSafeZip(file.storage_path);
         const styles = zip.readAsText('word/styles.xml') || '';
         const documentXml = zip.readAsText('word/document.xml') || '';
         const raw = (await mammoth.extractRawText({ path: file.storage_path })).value || '';
