@@ -52,6 +52,11 @@ export function sanitizeFilename(value = 'file') {
     .slice(0, 100) || 'file';
 }
 
+export function opaqueStorageName(value = '') {
+  const extension = String(value).toLowerCase().match(/\.[a-z0-9]{1,10}$/)?.[0] || '';
+  return `${crypto.randomUUID()}${extension}`;
+}
+
 export function isFuture(value) {
   return Boolean(value) && new Date(value).getTime() > Date.now();
 }
