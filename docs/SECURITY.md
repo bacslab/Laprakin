@@ -23,6 +23,13 @@
 - Admin alert realtime dibuat untuk kegagalan generate/export dan kasus credit recovery.
 - Dependency production diaudit dengan `npm audit --omit=dev`; hasil verifikasi terakhir 0 vulnerability.
 - Routing frontend memakai router internal yang hanya menerima path lokal.
+- Identitas admin hanya berasal dari `ADMIN_EMAIL` yang dikonfigurasi eksplisit; tidak ada email admin fallback di source code.
+- Sesi admin dibatasi 8 jam secara default, terpisah dari sesi user biasa.
+- Seluruh mutation `/api/admin/*` memakai role guard, CSRF, dan audit log yang dijaga regression test.
+- File user memakai nama storage opaque, hanya dilayani melalui authorization layer, dan dipurge setelah masa tenggang penghapusan.
+
+Kebijakan operasional akun admin, MFA/step-up, dan respons insiden ada di [`ADMIN_SECURITY.md`](ADMIN_SECURITY.md).
+Model storage privat, Azure Blob ACL, serta retensi file dijelaskan di [`STORAGE_SECURITY.md`](STORAGE_SECURITY.md).
 
 ## Batas yang perlu dipahami
 
