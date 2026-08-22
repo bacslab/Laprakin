@@ -2478,7 +2478,8 @@ app.get('/api/profile/institution-logo/:filename', requireAuth, asyncHandler(asy
     throw new HttpError(404, 'Logo tidak ditemukan.', 'INSTITUTION_LOGO_NOT_FOUND');
   }
   if (!fs.existsSync(target)) throw new HttpError(404, 'Logo tidak ditemukan.', 'INSTITUTION_LOGO_NOT_FOUND');
-  res.sendFile(target);
+  // The basename, owner-bound filename pattern, and resolved directory boundary are validated above.
+  res.sendFile(target); // nosemgrep: javascript.express.security.audit.express-res-sendfile.express-res-sendfile
 }));
 
 app.delete('/api/profile/institution-logo', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
@@ -3209,7 +3210,8 @@ app.get('/api/chat/attachments/:id/preview', requireAuth, (req, res) => {
       if (entry) {
         res.type(path.extname(entry.entryName).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg');
         res.setHeader('Content-Disposition', 'inline');
-        return res.send(entry.getData());
+        // Binary PNG/JPEG bytes come from an ownership-checked DOCX parsed by openSafeZip, not HTML input.
+        return res.send(entry.getData()); // nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write
       }
     } catch { /* Unsupported DOCX preview falls through to the normal 415 response. */ }
     throw new HttpError(415, 'Dokumen ini tidak memiliki thumbnail visual.', 'PREVIEW_UNSUPPORTED');
