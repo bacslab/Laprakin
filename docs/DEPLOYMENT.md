@@ -180,12 +180,29 @@ Model **tarik**, bukan dorong. VM yang memeriksa GitHub, karena port 22 dibatasi
 ### Alur
 
 1. Commit masuk ke `main`.
-2. Workflow `test.yml` menjalankan unit test dan `npm audit`.
-3. Job `release` memajukan branch `release` ke commit tersebut **hanya bila keduanya lulus**.
+2. Workflow `test.yml` menjalankan unit test, audit dependency, pemindaian secret
+   dengan Gitleaks, SAST dengan Semgrep CE, dan pemindaian vulnerability filesystem
+   dengan Trivy untuk severity `HIGH` dan `CRITICAL` yang sudah memiliki perbaikan.
+3. Job `release` memajukan branch `release` ke commit tersebut **hanya bila kelima
+   gate lulus**. Hasil setiap gate tetap terlihat pada GitHub Actions.
 4. `laprakin-deploy.timer` di VM memeriksa `release` setiap lima menit.
 5. Bila ada revisi baru: backup → `git archive` ke `/opt/laprakin` → build `laprakin-laprakin:candidate` → jalankan container **canary** terisolasi di port 4555 dengan data sementara → tunggu `/api/health/ready` → baru promosikan ke `latest` dan restart produksi.
 
-Commit yang gagal test tidak pernah mencapai `release`. Image yang gagal boot tidak pernah dipromosikan; produksi tetap melayani image lama. Bila produksi ternyata tidak sehat setelah promosi, skrip mengembalikan `laprakin-laprakin:previous` tanpa menunggu operator.
+Commit yang gagal salah satu gate tidak pernah mencapai `release`. Image yang gagal boot tidak pernah dipromosikan; produksi tetap melayani image lama. Bila produksi ternyata tidak sehat setelah promosi, skrip mengembalikan `laprakin-laprakin:previous` tanpa menunggu operator.
+
+### Checklist repository sebelum publik
+
+- Dependency graph dan Dependabot alerts aktif.
+- Branch `main` menolak penghapusan dan force push melalui branch protection atau
+  ruleset yang benar-benar diberlakukan oleh paket GitHub repository.
+- GitHub Code Scanning aktif. Repository private memerlukan GitHub Code Security;
+  bila fitur tersebut belum tersedia, pertahankan repository tetap private dan
+  gunakan gate Semgrep di Actions sampai lisensi diaktifkan atau visibility
+  sengaja diubah.
+- Gitleaks memindai seluruh riwayat Git dan run terakhir harus lulus.
+- `SECURITY.md` tersedia di root repository dan jalur pelaporan privat sudah diuji.
+- Pemilik repository menetapkan license yang sesuai sebelum pihak lain diberi hak
+  memakai, memodifikasi, atau mendistribusikan source code.
 
 Canary bukan formalitas: deploy 26 Juli 2026 sempat membuat produksi crash-loop karena sebuah rute memakai `const` multer yang dideklarasikan ratusan baris di bawahnya. `node --check` meloloskannya karena sintaksnya sah. Hanya menjalankan modulnya yang menangkap kelas kesalahan ini.
 
