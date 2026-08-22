@@ -6,10 +6,10 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import mime from 'mime-types';
-import AdmZip from 'adm-zip';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { config, validateProductionConfig } from './config.js';
+import { openSafeZip, validateArchiveFile } from './archive-safety.js';
 import { audit, db, toUser } from './db.js';
 import {
   AccountRestrictionEmail,
@@ -1899,8 +1899,14 @@ function isSignatureCompatible(extension, detectedType) {
 }
 
 function removeUploadedFiles(files = []) {
+  const stagedDirectories = new Set();
   for (const file of files) {
     try { fs.unlinkSync(file.path); } catch { /* best effort cleanup */ }
+    const directory = path.dirname(file.path || '');
+    if (path.basename(directory) === 'staged') stagedDirectories.add(directory);
+  }
+  for (const directory of stagedDirectories) {
+    try { fs.rmdirSync(directory); } catch { /* Keep a non-empty directory or clean it on the next failure. */ }
   }
 }
 
@@ -3114,6 +3120,7 @@ app.post('/api/chat/sessions/:id/attachments', requireAuth, requireCsrf, chatUpl
         fs.unlinkSync(file.path);
         throw new HttpError(400, `Format ${file.originalname} tidak sesuai dengan isi file.`, 'FILE_SIGNATURE_MISMATCH');
       }
+      if (extension === '.docx' || extension === '.xlsx') validateArchiveFile(file.path);
       const id = nanoid();
       const kind = input.kind || inferAttachmentKind(file.originalname);
       db.prepare(`INSERT INTO chat_attachments (id, session_id, owner_user_id, kind, original_name, storage_name, storage_path, mime_type, detected_mime, size_bytes, sha256, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -3136,7 +3143,7 @@ app.post('/api/chat/sessions/:id/attachments', requireAuth, requireCsrf, chatUpl
       db.prepare('UPDATE chat_sessions SET updated_at = ? WHERE id = ?').run(now(), session.id);
     }
   } catch (error) {
-    if (!(error instanceof HttpError)) removeUploadedFiles(req.files);
+    removeUploadedFiles(req.files);
     throw error;
   }
   if (records.length) evaluateUploadBurstRisk(req.user.id);
@@ -3197,7 +3204,7 @@ app.get('/api/chat/attachments/:id/preview', requireAuth, (req, res) => {
   if (!attachment) throw new HttpError(404, 'Lampiran tidak ditemukan.', 'ATTACHMENT_NOT_FOUND');
   if (path.extname(attachment.original_name).toLowerCase() === '.docx') {
     try {
-      const entry = new AdmZip(attachment.storage_path).getEntries()
+      const entry = openSafeZip(attachment.storage_path).getEntries()
         .find((item) => item.entryName.startsWith('word/media/') && /\.(?:png|jpe?g)$/i.test(item.entryName) && !item.isDirectory);
       if (entry) {
         res.type(path.extname(entry.entryName).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg');
@@ -3864,6 +3871,14 @@ app.post(
         if (!isSignatureCompatible(extension, detectedMime)) {
           removeUploadedFiles(req.files);
           throw new HttpError(400, `Isi file ${sanitizeFilename(file.originalname)} tidak sesuai dengan ekstensi file.`, 'FILE_SIGNATURE_MISMATCH');
+        }
+        if (extension === '.docx' || extension === '.xlsx') {
+          try {
+            validateArchiveFile(file.path);
+          } catch (error) {
+            removeUploadedFiles(req.files);
+            throw error;
+          }
         }
         const digest = sha256(bytes);
         const duplicate = db.prepare(`
