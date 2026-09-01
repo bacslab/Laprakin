@@ -2,6 +2,11 @@
 
 - Mengekstrak formatter umum dan utilitas normalisasi akademik ke modul client yang dapat diuji secara langsung.
 - Mengekstrak `BrandMark`, `Button`, `IconButton`, dan `CustomSelect` dari monolith client tanpa mengubah props atau semantik DOM.
+- Menambahkan batas konteks state untuk chat, dokumen, dan UI, serta modul halaman auth, landing, workspace, dan admin sebagai boundary migrasi bertahap.
+- Menambahkan lazy loading berbasis route dengan fallback loading yang dapat diumumkan screen reader, plus chunk terpisah untuk halaman utama.
+- Menambahkan navigasi keyboard, focus trap, focus return, dan atribut ARIA pada dropdown serta dialog yang disentuh pada fase ini.
+- Menambahkan fondasi locale Indonesia/Inggris dengan fallback ke Bahasa Indonesia tanpa menghapus copy utama aplikasi.
+- Menambahkan parser SSE dan fallback JSON untuk transport chat, redaksi audit admin dengan hash IP, helper TOTP opsional, serta checker metadata release semver.
 
 ## 21.0.5 - 2026-09-02
 

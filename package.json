@@ -1,6 +1,6 @@
 {
   "name": "laprakin-fullstack",
-  "version": "21.0.0-qris",
+  "version": "21.0.6",
   "private": true,
   "type": "module",
   "workspaces": [
