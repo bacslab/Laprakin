@@ -23,7 +23,10 @@ test('administrator MFA is opt-in and verifies the generated TOTP secret', () =>
 
 test('security middleware keeps explicit origin and baseline hardening headers', async () => {
   const source = await readFile(new URL('../src/index.js', import.meta.url), 'utf8');
-  assert.match(source, /Access-Control-Allow-Origin/);
+  assert.match(source, /import helmet from 'helmet'/);
+  assert.match(source, /import cors from 'cors'/);
+  assert.match(source, /app\.use\(helmet\(/);
+  assert.match(source, /app\.use\(cors\(/);
   assert.match(source, /X-Content-Type-Options/);
   assert.match(source, /X-Frame-Options/);
   assert.match(source, /config\.allowedOrigins\.includes\(origin\)/);

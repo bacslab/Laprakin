@@ -144,3 +144,6 @@ auth, workspace/tutorial, and admin/monitoring. The available browser control
 surface did not expose viewport resizing, so mobile and tablet screenshots are
 not claimed as completed evidence. The build still reports a large global CSS
 chunk and large vendor chunks; these remain follow-up work.
+
+The security middleware runtime smoke check returned `200` with the configured
+origin and Helmet headers, and `403` for an unlisted origin.

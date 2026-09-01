@@ -3,6 +3,8 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
+import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import mime from 'mime-types';
@@ -157,6 +159,36 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', config.trustProxyHops || false);
 const logger = createLogger({ level: config.logLevel });
+
+const securityCspDirectives = {
+  defaultSrc: ["'self'"],
+  baseUri: ["'self'"],
+  objectSrc: ["'none'"],
+  frameAncestors: ["'none'"],
+  formAction: ["'self'"],
+  scriptSrc: ["'self'", 'https://*.midtrans.com', 'https://*.veritrans.co.id', 'https://*.mixpanel.com', 'https://*.google-analytics.com'],
+  styleSrc: ["'self'", "'unsafe-inline'"],
+  imgSrc: ["'self'", 'data:', 'blob:', 'https://*.cloudfront.net', 'https://*.midtrans.com', 'https://*.veritrans.co.id', 'https://*.mixpanel.com', 'https://*.google-analytics.com'],
+  mediaSrc: ["'self'", 'blob:'],
+  fontSrc: ["'self'", 'data:'],
+  connectSrc: ["'self'", 'https://*.midtrans.com', 'https://*.veritrans.co.id', 'https://*.mixpanel.com', 'https://*.google-analytics.com'],
+  frameSrc: ['https://*.midtrans.com', 'https://*.veritrans.co.id'],
+};
+
+app.use(helmet({
+  contentSecurityPolicy: { directives: securityCspDirectives },
+  frameguard: { action: 'deny' },
+  crossOriginOpenerPolicy: { policy: 'same-origin' },
+  crossOriginResourcePolicy: { policy: 'same-site' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  hsts: config.isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+}));
+app.use(cors({
+  origin(origin, callback) { callback(null, !origin || config.allowedOrigins.includes(origin)); },
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'X-Laprakin-Device', 'X-Laprakin-Client-Profile', 'X-Laprakin-CSRF'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+}));
 
 const departments = [
   { key: 'jkb', label: 'Jurusan Komputer dan Bisnis' },
@@ -1130,37 +1162,15 @@ function securityHeaders(req, res, next) {
     return res.status(403).json({ error: { message: 'Origin request tidak diizinkan.', code: 'ORIGIN_DENIED' } });
   }
 
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Vary', 'Origin');
-  }
-
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('Content-Security-Policy', [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "frame-ancestors 'none'",
-    "form-action 'self'",
-    "script-src 'self' https://*.midtrans.com https://*.veritrans.co.id https://*.mixpanel.com https://*.google-analytics.com",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://*.cloudfront.net https://*.midtrans.com https://*.veritrans.co.id https://*.mixpanel.com https://*.google-analytics.com",
-    "media-src 'self' blob:",
-    "font-src 'self' data:",
-    "connect-src 'self' https://*.midtrans.com https://*.veritrans.co.id https://*.mixpanel.com https://*.google-analytics.com",
-    "frame-src https://*.midtrans.com https://*.veritrans.co.id",
-  ].join('; '));
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Laprakin-Device, X-Laprakin-Client-Profile, X-Laprakin-CSRF');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     return res.status(204).end();
   }
 
