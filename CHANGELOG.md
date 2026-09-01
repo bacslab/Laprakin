@@ -1,3 +1,9 @@
+## 21.0.4 - 2026-09-02
+
+- Menambahkan log JSON terstruktur dengan redaksi field rahasia, isi dokumen, dan durasi request.
+- Menambahkan adapter pelaporan exception ke Sentry yang hanya aktif saat `SENTRY_DSN` tersedia.
+- Menambahkan endpoint liveness publik `/api/status` tanpa mengubah kontrak `/api/health`, beserta panduan monitoring dan respons insiden.
+
 ## 21.0.3 - 2026-09-02
 
 - Menambahkan batas safety aplikasi untuk mendeteksi permintaan pengungkapan kredensial, penyebaran malware, dan konten seksual terlarang berisiko tinggi.

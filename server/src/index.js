@@ -25,6 +25,7 @@ import { verifyProductionIntegrations } from './integrations.js';
 import { getAiReadiness, initializeAiModelRegistry, isAiConfigured } from './ai.js';
 import { buildRevisionPlan, RevisionError, validateRevisionRequest } from './chat-revisions.js';
 import { moderationMessage, moderateText } from './content-safety.js';
+import { createLogger, reportException, statusSnapshot } from './observability.js';
 import {
   analyzeChatRequest,
   assessChatReadiness,
@@ -124,6 +125,11 @@ function friendlyErrorCode(error) {
   return isTechnicalAiError(error) ? 'REQUEST_NOT_COMPLETED' : (error?.code || 'INTERNAL_ERROR');
 }
 
+function actorClass(req) {
+  if (req.user?.role === 'admin') return 'admin';
+  return req.user ? 'user' : 'anonymous';
+}
+
 function enforceContentPolicy({ text, userId, sessionId, direction = 'input', targetType = 'chat_session' }) {
   const decision = moderateText(text, direction);
   if (decision.action === 'allow') return decision;
@@ -148,6 +154,7 @@ validateProductionConfig();
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', config.trustProxyHops || false);
+const logger = createLogger({ level: config.logLevel });
 
 const departments = [
   { key: 'jkb', label: 'Jurusan Komputer dan Bisnis' },
@@ -1162,8 +1169,21 @@ app.use(securityHeaders);
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(deviceCookieMiddleware);
-app.use((req, _res, next) => {
+app.use((req, res, next) => {
   req.requestId = nanoid(10);
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    const requestLogger = logger.child({
+      requestId: req.requestId,
+      method: req.method,
+      route: req.route?.path || req.path || req.originalUrl,
+    });
+    requestLogger.info({
+      status: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      actorClass: actorClass(req),
+    }, 'request completed');
+  });
   next();
 });
 
@@ -1339,7 +1359,7 @@ function createAdminAlert({
       text: adminSecurityAlertText(emailProps),
       react: AdminSecurityAlertEmail(emailProps),
     }).catch((error) => {
-      console.error('[admin-alert-email]', { code: error?.code || 'EMAIL_FAILED' });
+      logger.warn({ code: error?.code || 'EMAIL_FAILED' }, 'admin alert email failed');
     });
   }
   return id;
@@ -1582,7 +1602,7 @@ function resumePendingDocumentPipelines() {
       });
     }
   }
-  if (resumed) console.log(`[jobs] resumed ${resumed} document pipeline(s)`);
+  if (resumed) logger.info({ resumed }, 'document pipelines resumed');
   return resumed;
 }
 
@@ -1904,7 +1924,7 @@ function recoverInterruptedJobs() {
     UPDATE jobs SET status = 'queued', message = 'Dilanjutkan setelah server aktif kembali', run_after = NULL
     WHERE status = 'running'
   `).run();
-  if (result.changes) console.log(`[jobs] recovered ${result.changes} interrupted job(s)`);
+  if (result.changes) logger.info({ recovered: result.changes }, 'interrupted jobs recovered');
 }
 
 function recoverFailedGenerationSessions() {
@@ -1968,6 +1988,22 @@ const institutionLogoUpload = multer({
     if (file.mimetype !== 'image/png') return callback(new HttpError(400, 'Logo institusi wajib berformat PNG.', 'INSTITUTION_LOGO_TYPE'));
     return callback(null, true);
   },
+});
+
+app.get('/api/status', (_req, res) => {
+  let database = true;
+  try {
+    db.prepare('SELECT 1').get();
+  } catch {
+    database = false;
+  }
+  const aiReadiness = getAiReadiness();
+  return res.status(200).json(statusSnapshot({
+    aiConfigured: isAiConfigured(),
+    aiReady: aiReadiness.textReady,
+    database,
+    worker: { status: workerBusy ? 'busy' : 'idle' },
+  }));
 });
 
 app.get('/api/health', (_req, res) => {
@@ -2052,9 +2088,14 @@ app.get('/api/auth/google/callback', async (req, res) => {
     setSession(res, completed.user);
     return res.redirect(`${config.appUrl}${completed.redirectPath.startsWith('/app') ? completed.redirectPath : '/app'}?welcome=google`);
   } catch (error) {
-    console.error('[google-auth]', {
+    logger.warn({
       requestId: req.requestId,
       code: error?.code || 'GOOGLE_LOGIN_FAILED',
+      status: Number(error?.status || 500),
+    }, 'google authentication failed');
+    if (Number(error?.status || 500) >= 500) reportException(error, {
+      requestId: req.requestId,
+      purpose: 'google_authentication',
       status: Number(error?.status || 500),
     });
     return res.redirect(`${config.appUrl}/auth?google=${error?.code === 'ACCOUNT_RESTRICTED' ? 'restricted' : 'failed'}`);
@@ -5812,6 +5853,21 @@ if ((config.isProd || config.serveStatic) && fs.existsSync(config.staticClientDi
 
 app.use((err, req, res, _next) => {
   const status = err.status || 500;
+  const route = req.route?.path || req.path || 'unknown';
+  const requestLogger = logger.child({
+    requestId: req.requestId,
+    method: req.method,
+    route,
+    actorClass: actorClass(req),
+  });
+  requestLogger.error({ status, errorCode: err.code || 'INTERNAL_ERROR' }, 'request failed');
+  if (status >= 500) reportException(err, {
+    requestId: req.requestId,
+    method: req.method,
+    route,
+    status,
+    actorClass: actorClass(req),
+  });
   if (err instanceof z.ZodError) {
     return res.status(400).json({
       error: {
@@ -5845,7 +5901,6 @@ app.use((err, req, res, _next) => {
     });
   }
 
-  if (status >= 500) console.error(`[${req.requestId}]`, err);
   return res.status(status).json({
     error: {
       message: friendlyErrorMessage(err, status),
@@ -5858,18 +5913,31 @@ app.use((err, req, res, _next) => {
 
 recoverInterruptedJobs();
 recoverFailedGenerationSessions();
-initializeAiModelRegistry().catch((error) => console.error('[ai] startup model discovery:', error?.code || error?.message || error));
+initializeAiModelRegistry().catch((error) => {
+  logger.error({ code: error?.code || 'AI_STARTUP_FAILED' }, 'AI model discovery failed');
+  reportException(error, { purpose: 'ai_model_discovery' });
+});
 queueMicrotask(drainJobQueue);
-setInterval(() => { drainJobQueue().catch((error) => console.error('[jobs]', error)); }, config.jobPollMs).unref();
+setInterval(() => {
+  drainJobQueue().catch((error) => {
+    logger.error({ code: error?.code || 'JOB_DRAIN_FAILED' }, 'job queue drain failed');
+    reportException(error, { purpose: 'job_queue_drain' });
+  });
+}, config.jobPollMs).unref();
 setInterval(() => { resumePendingDocumentPipelines(); }, 30 * 1000).unref();
-setInterval(() => { cleanupExpiredResources().catch((error) => console.error('[retention]', error)); }, config.retentionSweepMinutes * 60 * 1000).unref();
+setInterval(() => {
+  cleanupExpiredResources().catch((error) => {
+    logger.error({ code: error?.code || 'RETENTION_SWEEP_FAILED' }, 'retention sweep failed');
+    reportException(error, { purpose: 'retention_sweep' });
+  });
+}, config.retentionSweepMinutes * 60 * 1000).unref();
 
 const server = app.listen(config.port, () => {
-  console.log(`Laprakin API berjalan pada http://localhost:${config.port}`);
+  logger.info({ port: config.port, version: config.appVersion }, 'Laprakin API started');
 });
 
 function shutdown(signal) {
-  console.log(`${signal} diterima. Menutup Laprakin API dengan aman...`);
+  logger.info({ signal }, 'Laprakin API shutting down');
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 8000).unref();
 }

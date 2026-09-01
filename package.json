@@ -51,7 +51,9 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "@sentry/node": "^10.73.0",
     "gsap": "^3.12.5",
-    "lenis": "^1.1.18"
+    "lenis": "^1.1.18",
+    "pino": "^10.3.1"
   }
 }
