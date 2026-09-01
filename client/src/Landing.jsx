@@ -4,7 +4,6 @@ import { gsap, ScrollTrigger } from 'gsap/all';
 import Lenis from 'lenis';
 import 'lenis/dist/lenis.css';
 import { api } from './api';
-import './landing.css';
 
 gsap.registerPlugin(ScrollTrigger);
 

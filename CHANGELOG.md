@@ -1,3 +1,8 @@
+## 21.0.5 - 2026-09-02
+
+- Menambahkan fondasi design token untuk accent, tema charcoal, panel, teks, spacing, radius, shadow, font, dan breakpoint.
+- Menambahkan deklarasi cascade layer terurut serta stylesheet landing terisolasi tanpa mengubah markup halaman.
+
 ## 21.0.4 - 2026-09-02
 
 - Menambahkan log JSON terstruktur dengan redaksi field rahasia, isi dokumen, dan durasi request.

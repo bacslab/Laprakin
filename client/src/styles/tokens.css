@@ -1,0 +1,71 @@
+@layer tokens {
+  :root {
+    --accent: #c2ff33;
+    --accent-strong: #79aa00;
+    --accent-soft: #f1ffd0;
+    --charcoal: #211d19;
+    --line: #e7e0d8;
+    --panel: #ffffff;
+    --text: #211d19;
+    --muted: #746b63;
+    --canvas: #f8f6f3;
+    --workspace-bg: #f8f8f6;
+    --workspace-panel: #efeee9;
+    --workspace-card: #ffffff;
+    --workspace-line: #d7d6d0;
+    --workspace-text: #1f1f1c;
+    --workspace-muted: #65635c;
+    --workspace-hover: #e5e4df;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --spacing-1: var(--space-1);
+    --spacing-2: var(--space-2);
+    --spacing-3: var(--space-3);
+    --spacing-4: var(--space-4);
+    --spacing-5: var(--space-5);
+    --spacing-6: var(--space-6);
+    --spacing-7: var(--space-7);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 18px;
+    --radius-pill: 999px;
+    --shadow-sm: 0 2px 12px rgb(35 28 22 / 8%);
+    --shadow-md: 0 14px 35px rgb(88 57 39 / 10%);
+    --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-mono: 'DM Mono', ui-monospace, monospace;
+    --breakpoint-mobile: 700px;
+    --breakpoint-tablet: 920px;
+    --breakpoint-wide: 1200px;
+    --landing-bg: #f4f0e9;
+    --landing-surface: #fffdf9;
+    --landing-text: #1d1a18;
+    --landing-muted: #6f655e;
+    --landing-line: rgb(44 38 33 / 15%);
+  }
+
+  [data-theme="dark"],
+  .theme-dark {
+    --line: #37302a;
+    --panel: #1d1916;
+    --text: #f5eee8;
+    --muted: #b6aaa0;
+    --canvas: #171411;
+    --workspace-bg: #20201e;
+    --workspace-panel: #191918;
+    --workspace-card: #2b2b28;
+    --workspace-line: #3a3a36;
+    --workspace-text: #f1f0ea;
+    --workspace-muted: #a5a39b;
+    --workspace-hover: #30302d;
+    --landing-bg: #211d1a;
+    --landing-surface: #2b2621;
+    --landing-text: #fff8f0;
+    --landing-muted: #c6b8ac;
+    --landing-line: rgb(255 248 240 / 18%);
+  }
+}
