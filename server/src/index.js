@@ -24,6 +24,7 @@ import { capitalizeInitial } from './emails/text.js';
 import { verifyProductionIntegrations } from './integrations.js';
 import { getAiReadiness, initializeAiModelRegistry, isAiConfigured } from './ai.js';
 import { buildRevisionPlan, RevisionError, validateRevisionRequest } from './chat-revisions.js';
+import { moderationMessage, moderateText } from './content-safety.js';
 import {
   analyzeChatRequest,
   assessChatReadiness,
@@ -121,6 +122,13 @@ function friendlyErrorMessage(error, status) {
 
 function friendlyErrorCode(error) {
   return isTechnicalAiError(error) ? 'REQUEST_NOT_COMPLETED' : (error?.code || 'INTERNAL_ERROR');
+}
+
+function enforceContentPolicy({ text, userId, sessionId, direction = 'input', targetType = 'chat_session' }) {
+  const decision = moderateText(text, direction);
+  if (decision.action === 'allow') return decision;
+  audit(userId, 'content_policy.blocked', targetType, sessionId, { direction, code: decision.code });
+  throw new HttpError(422, moderationMessage(decision.code, direction), 'CONTENT_POLICY_BLOCKED');
 }
 import {
   buildOrderQuote,
@@ -3276,6 +3284,14 @@ app.post('/api/chat/sessions/:id/actions', requireAuth, requireCsrf, asyncHandle
   const input = chatActionSchema.parse(req.body || {});
   let session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  if (input.type === 'SUBMIT_CLARIFICATION') {
+    enforceContentPolicy({
+      text: [input.payload.courseName, input.payload.practiceTopic, input.payload.answer].filter(Boolean).join(' - '),
+      userId: req.user.id,
+      sessionId: session.id,
+      direction: 'input',
+    });
+  }
   const existing = db.prepare(`
     SELECT id FROM chat_session_actions
     WHERE session_id = ? AND owner_user_id = ? AND idempotency_key = ?
@@ -3395,6 +3411,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   const input = chatMessageSchema.parse(req.body || {});
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  enforceContentPolicy({ text: input.content, userId: req.user.id, sessionId: session.id, direction: 'input' });
   const userConfiguration = parseJson(session.configuration_json, {});
   if (!input.allowExternalAi) {
     throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum memakai chat.', 'AI_CONSENT_REQUIRED');
@@ -3454,6 +3471,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
       throw error;
     }
+    enforceContentPolicy({ text: assistant.text, userId: req.user.id, sessionId: session.id, direction: 'output' });
     const analysis = analyzeChatRequest({
       session: refreshed,
       messages: listChatMessages(refreshed.id, req.user.id),
@@ -3537,6 +3555,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
     throw error;
   }
+  enforceContentPolicy({ text: assistant.text, userId: req.user.id, sessionId: session.id, direction: 'output' });
   const timestamp = now();
   persistChatExchange({
     sessionId: session.id,
@@ -3593,6 +3612,7 @@ app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requi
   } catch (error) {
     throw revisionHttpError(error);
   }
+  enforceContentPolicy({ text: revisionPlan.userContent, userId: req.user.id, sessionId: session.id, direction: 'input' });
 
   const sourceAiMode = String(revisionPlan.source.meta?.aiMode || 'basic');
   const aiModes = aiModeAccessForUser(req.user.id);
@@ -3641,6 +3661,7 @@ app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requi
     if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
     throw error;
   }
+  enforceContentPolicy({ text: assistant.text, userId: req.user.id, sessionId: session.id, direction: 'output' });
 
   const timestamp = now();
   const links = Array.from(revisionPlan.userContent.matchAll(/https?:\/\/[^\s)]+/g)).map((match) => match[0]).slice(0, 8);
@@ -3765,7 +3786,9 @@ app.post('/api/support/message', requireAuth, requireCsrf, supportLimiter, async
     thread = { id: nanoid(), owner_user_id: req.user.id, created_at: now(), updated_at: now() };
     db.prepare('INSERT INTO support_threads (id, owner_user_id, created_at, updated_at) VALUES (?, ?, ?, ?)').run(thread.id, req.user.id, thread.created_at, thread.updated_at);
   }
+  enforceContentPolicy({ text: input.content, userId: req.user.id, sessionId: thread.id, direction: 'input', targetType: 'support_thread' });
   const decision = await answerScopedSupportMessage(input.content, req.user.id);
+  enforceContentPolicy({ text: decision.answer, userId: req.user.id, sessionId: thread.id, direction: 'output', targetType: 'support_thread' });
   db.prepare(`INSERT INTO support_messages (id, thread_id, owner_user_id, role, content, scope_status, created_at) VALUES (?, ?, ?, 'user', ?, ?, ?)`)
     .run(nanoid(), thread.id, req.user.id, input.content, decision.scopeStatus, now());
   db.prepare(`INSERT INTO support_messages (id, thread_id, owner_user_id, role, content, scope_status, created_at) VALUES (?, ?, ?, 'assistant', ?, ?, ?)`)
@@ -4190,6 +4213,7 @@ app.post('/api/documents/:id/generate', requireAuth, requireCsrf, requireDocumen
 
 app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentOwner, aiChatLimiter, asyncHandler(async (req, res) => {
   const input = revisionSchema.parse(req.body || {});
+  enforceContentPolicy({ text: input.instruction, userId: req.user.id, sessionId: req.document.id, direction: 'input', targetType: 'document' });
   if (!req.document.generated_at) throw new HttpError(409, 'Dokumen masih disiapkan. Revisi dapat ditulis setelah hasilnya tersedia.', 'REVISION_DRAFT_REQUIRED');
   ensureNoActiveJob(req.document.id, 'generate');
   const recipe = parseJson(req.document.recipe_json, {});

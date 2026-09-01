@@ -25,6 +25,7 @@ import {
 import { config } from './config.js';
 import { ArchiveSafetyError, openSafeZip } from './archive-safety.js';
 import { generateAiContent, isAiConfigured } from './ai.js';
+import { moderationMessage, moderateText, sanitizeUntrustedDocumentText, wrapUntrustedDocumentText } from './content-safety.js';
 import { audit, db, notify, toUser } from './db.js';
 import { planBenefits } from './pricing-config.js';
 import {
@@ -1336,11 +1337,12 @@ async function buildChatAttachmentContext(files) {
     }
     if (textCharacters >= config.aiAttachmentCharacters || textBlocks.length >= 6) continue;
     try {
-      const extracted = String(await extractText(file)).replace(/\u0000/g, '').trim();
+      const extracted = String(await extractText(file)).trim();
       if (!extracted) continue;
       const remaining = config.aiAttachmentCharacters - textCharacters;
-      const content = extracted.slice(0, remaining);
-      textBlocks.push(`--- MULAI LAMPIRAN TIDAK TEPERCAYA: ${String(file.original_name).slice(0, 120)} ---\n${content}\n--- AKHIR LAMPIRAN ---`);
+      const content = sanitizeUntrustedDocumentText(extracted, { maxLength: remaining });
+      if (!content) continue;
+      textBlocks.push(wrapUntrustedDocumentText(content, file.original_name));
       textCharacters += content.length;
     } catch { /* format yang tidak dapat diekstrak tetap tersedia sebagai metadata */ }
   }
@@ -2581,11 +2583,7 @@ export function currentAcademicYear(reference = new Date()) {
 }
 
 export function promptSafeLabel(value = '', maxLength = 120) {
-  return String(value ?? '')
-    .replace(/\s+/g, ' ')
-    .replace(/[`${}]/g, '')
-    .trim()
-    .slice(0, maxLength);
+  return sanitizeUntrustedDocumentText(value, { maxLength });
 }
 
 export async function prepareEvidenceImageForAi(binary, mimeType = 'image/png') {
@@ -2851,13 +2849,13 @@ Permintaan revisi: ${revisionInstruction || '-'}
 Draft saat ini yang harus dipertahankan kecuali bagian terkait revisi:
 ${currentSections.length ? JSON.stringify(currentSections.map((section) => ({ type: section.section_type, title: section.title, content: section.content }))) : '- Belum ada draft'}
 Teks modul:
-${document.module_text.slice(0, 12000)}
+${wrapUntrustedDocumentText(String(document.module_text || '').slice(0, 12000), 'teks modul')}
 
 Pemetaan bukti visual yang sudah dibaca AI:
 ${mappings.filter((mapping) => mapping.status !== 'ignored').map((mapping) => `- ${mapping.caption}; ${mapping.description}; section ${mapping.section_type}; langkah ${mapping.step_title}`).join('\n') || '- Tidak ada bukti visual relevan'}
 
 Bukti teks atau log:
-${evidenceNotes || '- Tidak ada bukti teks atau log'}
+${evidenceNotes ? wrapUntrustedDocumentText(evidenceNotes, 'bukti teks atau log') : '- Tidak ada bukti teks atau log'}
 
 Parameter yang diberikan user (tulis hanya jika relevan dan jangan ubah nilainya):
 ${parameters.filter((parameter) => parameter.includeInDraft).map((parameter) => `- ${parameter.label}: ${parameter.value}${parameter.unit ? ` ${parameter.unit}` : ''}`).join('\n') || '- Tidak ada parameter tambahan'}
@@ -3174,6 +3172,7 @@ export async function generateDocument(documentId, userId, progress, options = {
       progress,
     });
   } catch (error) {
+    if (error?.code === 'CONTENT_POLICY_BLOCKED') throw error;
     console.warn('[generateDocument] Provider AI sementara belum dapat dikontak, menyusun laporan dari bahan terstruktur:', error?.message || error);
     sections = buildFallbackReportSections({ document, mappings, evidenceNotes, parameters, recipe, currentSections, templateStructure });
     const fallbackIssues = [...reportSectionIssues(sections), ...reportParameterIssues(sections, parameters)];
@@ -3181,6 +3180,12 @@ export async function generateDocument(documentId, userId, progress, options = {
       throw new HttpError(502, `Draft lokal belum memenuhi quality gate: ${fallbackIssues.join(' ')}`, 'LOCAL_FALLBACK_QUALITY_FAILED');
     }
     source = 'fallback_structured';
+  }
+
+  const outputPolicy = moderateText(sections.map((section) => `${section.title}\n${section.content}`).join('\n\n'), 'output');
+  if (outputPolicy.action !== 'allow') {
+    audit(userId, 'content_policy.blocked', 'document', document.id, { direction: 'output', code: outputPolicy.code });
+    throw new HttpError(422, moderationMessage('OUTPUT_POLICY_BLOCKED', 'output'), 'CONTENT_POLICY_BLOCKED');
   }
 
   progress(88, 'Menata struktur laporan');

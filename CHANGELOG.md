@@ -1,3 +1,9 @@
+## 21.0.3 - 2026-09-02
+
+- Menambahkan batas safety aplikasi untuk mendeteksi permintaan pengungkapan kredensial, penyebaran malware, dan konten seksual terlarang berisiko tinggi.
+- Menormalkan serta membungkus teks lampiran sebagai sumber tidak tepercaya sebelum masuk ke prompt AI, termasuk batas panjang dan pembersihan karakter kontrol.
+- Memeriksa output AI sebelum disimpan ke chat atau draft dokumen, dengan respons aman dan audit code tanpa menyimpan isi sensitif.
+
 ## 21.0.2 - 2026-09-02
 
 - Menambahkan kontrol `Ubah pesan` pada pesan user untuk mengirim revisi dari titik percakapan yang dipilih.

@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { config } from './config.js';
-import { db } from './db.js';
+import { audit, db } from './db.js';
+import { moderationMessage, moderateText } from './content-safety.js';
 import { HttpError, now } from './utils.js';
 
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
@@ -362,6 +363,14 @@ function responseText(payload) { return String(payload?.choices?.[0]?.message?.c
 function finishReason(payload) { return String(payload?.choices?.[0]?.finish_reason || '').trim(); }
 function isTruncated(payload, maxOutputTokens) { return finishReason(payload) === 'length' || Number(payload?.usage?.completion_tokens || 0) >= Number(maxOutputTokens || 0); }
 
+function assertOutputAllowed(text) {
+  const decision = moderateText(text, 'output');
+  if (decision.action === 'allow') return;
+  const error = new HttpError(422, moderationMessage('OUTPUT_POLICY_BLOCKED', 'output'), 'CONTENT_POLICY_BLOCKED');
+  error.policyCode = decision.code;
+  throw error;
+}
+
 async function requestOpenAiCompatible({ provider, model, messages, maxOutputTokens, responseJsonSchema, supportsStructuredOutput, reasoningEffort, timeoutMs, priority = 0 }) {
   const isCloudflare = provider === 'cloudflare';
   const baseUrl = isCloudflare ? `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/ai/v1` : config.naraRouterBaseUrl;
@@ -417,6 +426,7 @@ export async function generateAiContent({ userId = null, contextType = '', conte
         const safety = SAFETY_FINISH_REASONS.has(finishReason(payload).toLowerCase());
         if (safety) throw new AiProviderError('Permintaan tidak dapat diproses karena kebijakan keamanan AI.', { code: 'AI_SAFETY_BLOCKED', status: 422 });
         if (!text) throw new AiProviderError('Provider AI tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502, retryable: true });
+        assertOutputAllowed(text);
         if (structured) {
           let parsed;
           const extractedText = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]?.trim()
@@ -433,18 +443,24 @@ export async function generateAiContent({ userId = null, contextType = '', conte
         recordCircuitFailure(model);
         fallbackCount += 1;
         fallbackReason = error?.code || 'provider_failure';
-        if (error?.code === 'AI_SAFETY_BLOCKED') throw error;
+        if (error?.code === 'AI_SAFETY_BLOCKED' || error?.code === 'CONTENT_POLICY_BLOCKED') throw error;
       }
     }
     if (!visual && config.cloudflareAiEnabled && config.cloudflareAccountId && config.cloudflareAiToken) {
       const payload = await requestOpenAiCompatible({ provider: 'cloudflare', model: config.cloudflareAiModel, messages: toOpenAiMessages(contents, systemInstruction), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: false, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs });
       const text = responseText(payload);
       if (!text) throw new AiProviderError('Emergency provider tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502 });
+      assertOutputAllowed(text);
       finishUsage(usageEventId, { status: 'success', usage: payload.usage, latencyMs: Date.now() - startedAt, provider: 'cloudflare', model: config.cloudflareAiModel, fallbackCount, fallbackReason: 'nararouter_exhausted' });
       return { text, provider: 'cloudflare', model: config.cloudflareAiModel, usage: payload.usage || {}, finishReason: finishReason(payload), latencyMs: Date.now() - startedAt, fallbackCount };
     }
     throw lastError || new AiProviderError(visual ? 'Kapasitas AI visual sedang tidak tersedia.' : 'Kapasitas AI sedang tidak tersedia.', { code: visual ? 'AI_VISION_UNAVAILABLE' : 'AI_CAPACITY_UNAVAILABLE', status: 503, retryable: true });
   } catch (error) {
+    if (error?.code === 'CONTENT_POLICY_BLOCKED' && error.policyCode) {
+      try {
+        audit(userId, 'content_policy.blocked', contextType || 'ai', contextId || null, { direction: 'output', code: error.policyCode, purpose });
+      } catch { /* safety logging must not replace the policy response */ }
+    }
     finishUsage(usageEventId, { status: 'error', latencyMs: Date.now() - startedAt, errorCode: error?.code || 'AI_PROVIDER_ERROR', fallbackCount, fallbackReason });
     throw error;
   }
