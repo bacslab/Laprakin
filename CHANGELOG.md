@@ -1,3 +1,8 @@
+## 21.0.6 - 2026-09-02
+
+- Mengekstrak formatter umum dan utilitas normalisasi akademik ke modul client yang dapat diuji secara langsung.
+- Mengekstrak `BrandMark`, `Button`, `IconButton`, dan `CustomSelect` dari monolith client tanpa mengubah props atau semantik DOM.
+
 ## 21.0.5 - 2026-09-02
 
 - Menambahkan fondasi design token untuk accent, tema charcoal, panel, teks, spacing, radius, shadow, font, dan breakpoint.

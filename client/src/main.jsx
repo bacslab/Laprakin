@@ -12,7 +12,13 @@ import {
 } from 'lucide-react';
 import { api, clearCsrfToken, download, setCsrfToken } from './api';
 import { buildRevisionRequest, getEditableMessage, getRegenerationTarget } from './lib/chat-message-actions';
+import { canonicalCourseLabel, courseAcronym, courseTokens, editDistance, normalizedCourseKey } from './lib/academic';
+import { formatBytes, formatCurrency, formatDate } from './lib/formatters';
 import { departments, programs } from './data';
+import { BrandMark } from './components/BrandMark';
+import { Button } from './components/Button';
+import { CustomSelect } from './components/CustomSelect';
+import { IconButton } from './components/IconButton';
 import '@fontsource-variable/plus-jakarta-sans';
 import '@fontsource/dm-mono/400.css';
 import '@fontsource/dm-mono/500.css';
@@ -649,16 +655,6 @@ function useApp() {
   return value;
 }
 
-function BrandMark({ className = '', alt = 'Laprakin' }) {
-  return <img className={`brand-mark ${className}`.trim()} src="/brand/laprakin-mark.png" alt={alt} />;
-}
-
-function Button({ children, to, variant = 'primary', className = '', type = 'button', onClick, disabled, title }) {
-  const classes = `button button-${variant} ${className}`.trim();
-  if (to) return <Link className={classes} to={to} title={title}>{children}</Link>;
-  return <button className={classes} type={type} onClick={onClick} disabled={disabled} title={title}>{children}</button>;
-}
-
 function GoogleLogo() {
   return <svg className="google-logo" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -668,33 +664,9 @@ function GoogleLogo() {
   </svg>;
 }
 
-function IconButton({ label, children, className = '', onClick, disabled = false, type = 'button' }) {
-  return <button type={type} className={`icon-button ${className}`} title={label} aria-label={label} onClick={onClick} disabled={disabled}>{children}</button>;
-}
-
-function CustomSelect({ value, onChange, options, className = '', disabled = false, ariaLabel = 'Pilih opsi' }) {
-  const [open, setOpen] = useState(false);
-  const current = options.find((item) => item.value === value) || options[0];
-  return <div className={`select-menu ${className}`}>
-    <button type="button" className="select-trigger" disabled={disabled} aria-label={ariaLabel} aria-expanded={open} onClick={() => setOpen(!open)}>
-      <span>{current?.label || 'Pilih'}</span><ChevronDown size={14} />
-    </button>
-    {open && <div className="select-options">{options.map((item) => <button key={item.value} type="button" className={item.value === value ? 'selected' : ''} onClick={() => { onChange(item.value); setOpen(false); }}><span>{item.label}</span>{item.value === value && <Check size={13} />}</button>)}</div>}
-  </div>;
-}
-
 function Toggle({ checked, onChange, title, description }) {
   return <label className="toggle-control"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><span className="toggle-dot" /><span><b>{title}</b>{description && <small>{description}</small>}</span></label>;
 }
-
-function formatCurrency(value = 0) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value); }
-function formatBytes(value = 0) {
-  if (!value) return '0 MB';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
-  return `${(value / (1024 ** index)).toFixed(index ? 1 : 0)} ${units[index]}`;
-}
-function formatDate(value) { const locale = document.documentElement.lang === 'en' ? 'en-US' : 'id-ID'; return value ? new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value)) : '—'; }
 
 function AppProvider({ children }) {
   const location = useLocation();
@@ -1271,64 +1243,6 @@ function ProtectedBilling() {
 }
 function PricingRedirect() { const location = useLocation(); return <Navigate to={`/pricing${location.search || ''}`} replace />; }
 function ProtectedAdmin() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role !== 'admin') return <Navigate to="/app" replace />; return <AdminWorkspace />; }
-
-function canonicalCourseLabel(value = '') {
-  const clean = String(value || '')
-    .replace(/^\s*laprak\s+/i, '')
-    .replace(/\s+\d+\s*chat\b.*$/i, '')
-    .replace(/\s*[|·]\s*project pribadi\b.*$/i, '')
-    .replace(/\s+project pribadi\b.*$/i, '')
-    .replace(/\bmanajemen\s+(?:intra|inter)networkin(?:g)?\b/i, 'Manajemen Internetworking')
-    .replace(/\bsecurity\b/gi, 'Security')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (/^(?:mana(?:nya)?|halo|hai|hello|kok|kenapa|gimana|bagaimana|sudah|udah|belum|lanjut|oke|ok|iya|ya|tidak|nggak|gak|ga|terserah)[?!.]*$/i.test(clean)) {
-    return 'Belum dikelompokkan';
-  }
-  return clean || 'Belum dikelompokkan';
-}
-
-function normalizedCourseKey(value = '') {
-  return canonicalCourseLabel(value)
-    .normalize('NFKD')
-    .toLocaleLowerCase('id-ID')
-    .replace(/\b(?:intra|inter)networkin(?:g)?\b/g, 'internetworking')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim() || 'belum dikelompokkan';
-}
-
-function courseTokens(value = '') {
-  return normalizedCourseKey(value)
-    .split(' ')
-    .filter((token) => token && !['dan', 'and', 'mata', 'kuliah', 'mk'].includes(token));
-}
-
-function courseAcronym(value = '') {
-  const tokens = courseTokens(value);
-  if (tokens.length === 1 && tokens[0].length <= 6) return tokens[0];
-  return tokens.map((token) => token[0]).join('');
-}
-
-function editDistance(left = '', right = '') {
-  const a = String(left);
-  const b = String(right);
-  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i += 1) {
-    let previous = row[0];
-    row[0] = i;
-    for (let j = 1; j <= b.length; j += 1) {
-      const current = row[j];
-      row[j] = Math.min(
-        row[j] + 1,
-        row[j - 1] + 1,
-        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-      previous = current;
-    }
-  }
-  return row[b.length];
-}
 
 function courseLabelsMatch(left, right) {
   const a = normalizedCourseKey(left);
