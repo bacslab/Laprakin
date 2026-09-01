@@ -28,7 +28,7 @@ import { getAiReadiness, initializeAiModelRegistry, isAiConfigured } from './ai.
 import { buildRevisionPlan, RevisionError, validateRevisionRequest } from './chat-revisions.js';
 import { moderationMessage, moderateText } from './content-safety.js';
 import { createLogger, reportException, statusSnapshot } from './observability.js';
-import { writeSseResponse } from './chat-stream.js';
+import { createSseChannel } from './chat-stream.js';
 import { recordAdminAudit } from './admin-audit.js';
 import {
   analyzeChatRequest,
@@ -3463,7 +3463,20 @@ app.post('/api/chat/sessions/:id/actions', requireAuth, requireCsrf, asyncHandle
 app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimiter, asyncHandler(async (req, res) => {
   const input = chatMessageSchema.parse(req.body || {});
   const wantsStream = String(req.headers.accept || '').includes('text/event-stream');
-  const respond = (payload, text) => wantsStream ? writeSseResponse(res, payload, text) : res.json(payload);
+  const sseChannel = wantsStream ? createSseChannel(res) : null;
+  if (sseChannel) res.locals.sseChannel = sseChannel;
+  let streamedText = false;
+  const onDelta = sseChannel
+    ? (text) => {
+      streamedText = true;
+      sseChannel.writeDelta(text);
+    }
+    : null;
+  const respond = (payload, text) => {
+    if (!sseChannel) return res.json(payload);
+    if (!streamedText && text) sseChannel.writeDelta(text);
+    return sseChannel.finish(payload);
+  };
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
   enforceContentPolicy({ text: input.content, userId: req.user.id, sessionId: session.id, direction: 'input' });
@@ -3520,7 +3533,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     let assistant;
     try {
       assistant = isAiConfigured()
-        ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode })
+        ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode, onDelta, signal: sseChannel?.signal })
         : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
     } catch (error) {
       if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
@@ -3604,7 +3617,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   let assistant;
   try {
     assistant = isAiConfigured()
-      ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode })
+      ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode, onDelta, signal: sseChannel?.signal })
       : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
   } catch (error) {
     if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
@@ -5889,6 +5902,11 @@ app.use((err, req, res, _next) => {
     status,
     actorClass: actorClass(req),
   });
+  if (res.headersSent) {
+    res.locals.sseChannel?.fail(friendlyErrorCode(err));
+    if (!res.writableEnded) res.end();
+    return;
+  }
   if (err instanceof z.ZodError) {
     return res.status(400).json({
       error: {

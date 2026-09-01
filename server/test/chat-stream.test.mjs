@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { requestOpenAiCompatibleStream, writeSseResponse } from '../src/chat-stream.js';
+import { createSseChannel, requestOpenAiCompatibleStream, writeSseResponse } from '../src/chat-stream.js';
 
 test('requestOpenAiCompatibleStream emits deltas and done from an SSE provider', async () => {
   const response = new Response(ReadableStream.from([
@@ -21,4 +21,25 @@ test('writeSseResponse emits one fallback delta and the canonical payload', () =
   assert.equal(chunks.length, 2);
   assert.match(chunks[0], /"type":"delta"/);
   assert.match(chunks[1], /"type":"done"/);
+});
+
+test('createSseChannel keeps the connection open for deltas and closes with one canonical payload', () => {
+  const chunks = [];
+  const headers = new Map();
+  const response = {
+    writableEnded: false,
+    setHeader: (key, value) => headers.set(key, value),
+    flushHeaders: () => {},
+    write: (chunk) => chunks.push(chunk),
+    end: () => { response.writableEnded = true; },
+  };
+  const channel = createSseChannel(response, { heartbeatMs: 100000 });
+  channel.writeDelta('Sebagian');
+  channel.finish({ messages: [{ content: 'Selesai' }] });
+  assert.equal(headers.get('Content-Type'), 'text/event-stream; charset=utf-8');
+  assert.equal(chunks.length, 2);
+  assert.match(chunks[0], /Sebagian/);
+  assert.match(chunks[1], /"type":"done"/);
+  assert.equal(response.writableEnded, true);
+  assert.equal(channel.signal.aborted, false);
 });

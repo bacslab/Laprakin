@@ -7,6 +7,7 @@
 - Menambahkan navigasi keyboard, focus trap, focus return, dan atribut ARIA pada dropdown serta dialog yang disentuh pada fase ini.
 - Menambahkan fondasi locale Indonesia/Inggris dengan fallback ke Bahasa Indonesia tanpa menghapus copy utama aplikasi.
 - Menambahkan parser SSE dan fallback JSON untuk transport chat, redaksi audit admin dengan hash IP, helper TOTP opsional, serta checker metadata release semver.
+- Menghubungkan relay chunk provider AI ke endpoint chat dengan heartbeat, pembatalan saat client terputus, retry sebelum delta pertama, pemeriksaan output bertahap, dan payload kanonis di event akhir.
 - Mengaktifkan `helmet` untuk CSP dan header hardening, serta `cors` dengan whitelist origin eksplisit untuk API.
 
 ## 21.0.5 - 2026-09-02

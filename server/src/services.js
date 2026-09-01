@@ -26,6 +26,7 @@ import { config } from './config.js';
 import { ArchiveSafetyError, openSafeZip } from './archive-safety.js';
 import { generateAiContent, isAiConfigured } from './ai.js';
 import { moderationMessage, moderateText, sanitizeUntrustedDocumentText, wrapUntrustedDocumentText } from './content-safety.js';
+import { readStructuredTextField } from './chat-stream.js';
 import { audit, db, notify, toUser } from './db.js';
 import { planBenefits } from './pricing-config.js';
 import {
@@ -1601,7 +1602,7 @@ export function isCodeOnlyChatRequest(content = '') {
     .test(String(content || ''));
 }
 
-export async function answerWorkspaceChat({ session, user, content, aiMode = 'basic', historyRowsOverride = null, attachmentRowsOverride = null }) {
+export async function answerWorkspaceChat({ session, user, content, aiMode = 'basic', historyRowsOverride = null, attachmentRowsOverride = null, onDelta = null, signal = null }) {
   const historyRows = Array.isArray(historyRowsOverride)
     ? historyRowsOverride.map((message) => ({
       role: message.role,
@@ -1640,6 +1641,7 @@ export async function answerWorkspaceChat({ session, user, content, aiMode = 'ba
   });
   const localClarification = vaguePromptReply(content, workflow);
   if (localClarification && !isAiConfigured()) {
+    onDelta?.(localClarification);
     return { text: localClarification, model: 'laprakin-intake', usage: {}, workflow };
   }
   const chatConfig = parseJson(session.configuration_json, {});
@@ -1717,6 +1719,7 @@ Mode respons: ${modeInstruction}`;
     `Pertanyaan utama berikutnya: ${workflow.nextQuestion}`,
   ].join('\n');
   const userText = `${taskContext}\n\n${attachments.text ? `Konteks lampiran:\n${attachments.text}\n\n` : ''}Permintaan terbaru user:\n${String(content).slice(0, 1800)}`;
+  let displayedMessage = '';
   const result = await generateAiContent({
     userId: user.id,
     contextType: 'chat_session',
@@ -1743,6 +1746,22 @@ Mode respons: ${modeInstruction}`;
       },
       required: ['action', 'message', 'title', 'courseName', 'moduleTitle', 'projectName'],
     },
+    onDelta: onDelta
+      ? (_chunk, accumulated) => {
+        const nextMessage = readStructuredTextField(accumulated, 'message');
+        if (nextMessage.length <= displayedMessage.length) return;
+        const safety = moderateText(nextMessage, 'output');
+        if (safety.action !== 'allow') {
+          const error = new HttpError(422, moderationMessage(safety.code, 'output'), 'CONTENT_POLICY_BLOCKED');
+          error.policyCode = safety.code;
+          throw error;
+        }
+        const delta = nextMessage.slice(displayedMessage.length);
+        displayedMessage = nextMessage;
+        onDelta(delta);
+      }
+      : null,
+    signal,
   });
   const generationRequested = /\b(?:buat|buatkan|susun|kerjakan|hasilkan|generate)\b/i.test(String(content || ''));
   let parsed;
@@ -1783,6 +1802,7 @@ Mode respons: ${modeInstruction}`;
     .trim()
     .slice(0, 56);
   const text = guardKnownContextReply(String(parsed.message || workflow.nextQuestion).slice(0, 12000), workflow);
+  if (onDelta && text.length > displayedMessage.length) onDelta(text.slice(displayedMessage.length));
   return {
     text,
     action,

@@ -2,7 +2,45 @@ function extractText(payload) {
   return String(payload?.choices?.[0]?.message?.content || payload?.choices?.[0]?.delta?.content || '').trim();
 }
 
-async function* responseEvents(response) {
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Read a JSON string property while the surrounding JSON is still incomplete. */
+export function readStructuredTextField(raw, field) {
+  const source = String(raw || '');
+  const match = source.match(new RegExp(`(?:^|[,{])\\s*["']${escapeRegExp(field)}["']\\s*:\\s*"`));
+  if (!match) return '';
+  let index = match.index + match[0].length;
+  let value = '';
+  while (index < source.length) {
+    const character = source[index];
+    if (character === '"') return value;
+    if (character !== '\\') {
+      value += character;
+      index += 1;
+      continue;
+    }
+    const escaped = source[index + 1];
+    if (escaped === undefined) break;
+    const escapes = { '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
+    if (Object.hasOwn(escapes, escaped)) {
+      value += escapes[escaped];
+      index += 2;
+      continue;
+    }
+    if (escaped === 'u' && /^[0-9a-f]{4}$/i.test(source.slice(index + 2, index + 6))) {
+      value += String.fromCharCode(Number.parseInt(source.slice(index + 2, index + 6), 16));
+      index += 6;
+      continue;
+    }
+    value += escaped;
+    index += 2;
+  }
+  return value;
+}
+
+export async function* responseEvents(response) {
   const reader = response.body?.getReader?.();
   const chunks = reader
     ? (async function* readChunks() { try { while (true) { const next = await reader.read(); if (next.done) break; yield next.value; } } finally { reader.releaseLock?.(); } }())
@@ -69,6 +107,58 @@ export async function* requestOpenAiCompatibleStream({ url, token, body = {}, fe
     if (text) yield { type: 'delta', text };
   }
   if (!completed) yield { type: 'done' };
+}
+
+export function createSseChannel(response, { heartbeatMs = 15000 } = {}) {
+  const controller = new AbortController();
+  let ended = false;
+  const heartbeat = setInterval(() => {
+    if (ended || response.writableEnded || response.destroyed) return;
+    try { response.write(': keepalive\n\n'); } catch { controller.abort(); }
+  }, Math.max(1000, heartbeatMs));
+  heartbeat.unref?.();
+  const cleanup = () => clearInterval(heartbeat);
+  const write = (payload) => {
+    if (ended || response.writableEnded || response.destroyed) return false;
+    try {
+      response.write(`data: ${JSON.stringify(payload)}\n\n`);
+      return true;
+    } catch {
+      controller.abort();
+      return false;
+    }
+  };
+  const finish = (payload) => {
+    if (ended) return;
+    write({ type: 'done', message: payload });
+    ended = true;
+    cleanup();
+    response.end();
+  };
+  const fail = (code = 'AI_STREAM_ERROR') => {
+    if (ended) return;
+    write({ type: 'error', code: String(code).slice(0, 80) });
+    ended = true;
+    cleanup();
+    response.end();
+  };
+  if (typeof response.once === 'function') {
+    response.once('close', () => {
+      if (!ended) controller.abort();
+      cleanup();
+    });
+  }
+  response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  response.setHeader('Cache-Control', 'no-cache, no-transform');
+  response.setHeader('Connection', 'keep-alive');
+  response.flushHeaders?.();
+  return {
+    signal: controller.signal,
+    writeDelta(text) { return write({ type: 'delta', text: String(text || '') }); },
+    finish,
+    fail,
+    close() { ended = true; cleanup(); if (!response.writableEnded) response.end(); },
+  };
 }
 
 export function writeSseResponse(response, payload, text = '') {
