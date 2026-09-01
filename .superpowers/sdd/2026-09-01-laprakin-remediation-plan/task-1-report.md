@@ -6,6 +6,7 @@ Worktree: `C:/Users/Muba Sayang/Documents/SaaS/Laprakin-worktrees/refactor-ux-re
 
 ## Files changed
 
+- `.superpowers/sdd/2026-09-01-laprakin-remediation-plan/task-1-report.md`
 - `server/src/chat-revisions.js`
 - `server/src/services.js`
 - `server/src/index.js`
@@ -93,8 +94,91 @@ Admin operations passed: credits, restrictions and appeals, broadcasts, pricing,
 ## Commit hashes
 
 - Base before Task 1 commit: `bf0cae3deb2850222f74d80c2b99510b14ad4fbf`
-- Task 1 commit: `PENDING_COMMIT`
+- Task 1 implementation commit: `91e0c4971b05fe07807890d6ba03eab20980ec3c`
+- Task 1 fix-round code commit: `9d551b3f7d598715df65bba083486c06fe37b184`
+- Task 1 fix-round report commit: `PENDING_REPORT_COMMIT`
+
+## Fix round 1
+
+Temuan yang diperbaiki:
+
+1. `validateRevisionRequest` sekarang dipetakan ke error 4xx bertipe di route revisi, sehingga mode tidak valid dan edit kosong tidak lagi jatuh ke HTTP 500.
+2. `buildRevisionPlan` sekarang membaca `meta.revision.revisionNumber` agar revisi berantai melanjutkan nomor revisi secara berurutan.
+3. Heading changelog fase ini diubah dari `V39` menjadi heading semver valid.
+4. Hash commit implementasi awal dikoreksi ke hash penuh yang sesuai dengan review package.
+
+Command focused regression:
+
+```bash
+node --test server/test/chat-revisions.test.mjs
+```
+
+Red result before fixes:
+
+```text
+✖ buildRevisionPlan increments revision number when revising an already revised user message
+  AssertionError [ERR_ASSERTION]: 1 !== 2
+
+✖ revision API returns typed 4xx errors for invalid revision requests
+  AssertionError [ERR_ASSERTION]: 500 !== 400
+
+ℹ tests 7
+ℹ pass 5
+ℹ fail 2
+```
+
+Green result after fixes:
+
+```text
+✔ edit keeps the source branch and replaces messages after it
+✔ regenerate reuses the source user content without duplicating it
+✔ revision rejects an assistant source and an empty edit
+✔ validateRevisionRequest normalizes mode and content rules
+✔ buildRevisionPlan increments revision number when revising an already revised user message
+✔ revision API replaces only the trailing branch and returns the canonical payload shape
+✔ revision API returns typed 4xx errors for invalid revision requests
+ℹ tests 7
+ℹ pass 7
+ℹ fail 0
+```
+
+Fresh focused rerun before finalizing:
+
+```text
+✔ edit keeps the source branch and replaces messages after it
+✔ regenerate reuses the source user content without duplicating it
+✔ revision rejects an assistant source and an empty edit
+✔ validateRevisionRequest normalizes mode and content rules
+✔ buildRevisionPlan increments revision number when revising an already revised user message
+✔ revision API replaces only the trailing branch and returns the canonical payload shape
+✔ revision API returns typed 4xx errors for invalid revision requests
+ℹ tests 7
+ℹ pass 7
+ℹ fail 0
+ℹ duration_ms 16694.7661
+```
+
+Command full checks:
+
+```bash
+npm test
+npm run test:workflow-api
+npm run test:admin-ops
+```
+
+Outputs:
+
+```text
+ℹ tests 78
+ℹ pass 78
+ℹ fail 0
+ℹ duration_ms 58749.32
+
+Workflow API passed: brief dipahami sekali, identitas tersimpan, dokumen preview memiliki quiz berbasis isi, dan download terkunci sampai nilai lulus.
+
+Admin operations passed: credits, restrictions and appeals, broadcasts, pricing, metadata-only telemetry, and realtime alerts.
+```
 
 ## Concerns
 
-- Tidak ada concern fungsional yang tersisa setelah verifikasi fokus dan full checks.
+- Tidak ada concern tambahan setelah fix round ini; semua focused regression dan full checks yang diminta selesai hijau.
