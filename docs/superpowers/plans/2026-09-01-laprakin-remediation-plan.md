@@ -68,6 +68,13 @@ Interfaces:
 - [ ] Step 1: Write the failing domain tests.
 
 ~~~js
+const messages = [
+  { id: 'user-1', role: 'user', content: 'Konteks praktikum' },
+  { id: 'assistant-1', role: 'assistant', content: 'Jawaban awal' },
+  { id: 'user-2', role: 'user', content: 'Pertanyaan asli' },
+  { id: 'assistant-2', role: 'assistant', content: 'Jawaban kedua' },
+];
+
 test('edit keeps the source branch and replaces messages after it', () => {
   const result = buildRevisionPlan(messages, 'user-2', 'edit', 'Tulis ulang bagian metode');
   assert.deepEqual(result.retainedMessages.map(({ id }) => id), ['user-1', 'assistant-1', 'user-2']);
@@ -320,6 +327,9 @@ Interfaces:
 - [ ] Step 1: Write the failing CSS contract test.
 
 ~~~js
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+
 test('token stylesheet defines the existing light and dark theme contract', () => {
   const css = readFileSync('client/src/styles/tokens.css', 'utf8');
   assert.match(css, /--accent:/);
