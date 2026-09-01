@@ -26,6 +26,8 @@ import { getAiReadiness, initializeAiModelRegistry, isAiConfigured } from './ai.
 import { buildRevisionPlan, RevisionError, validateRevisionRequest } from './chat-revisions.js';
 import { moderationMessage, moderateText } from './content-safety.js';
 import { createLogger, reportException, statusSnapshot } from './observability.js';
+import { writeSseResponse } from './chat-stream.js';
+import { recordAdminAudit } from './admin-audit.js';
 import {
   analyzeChatRequest,
   assessChatReadiness,
@@ -3450,6 +3452,8 @@ app.post('/api/chat/sessions/:id/actions', requireAuth, requireCsrf, asyncHandle
 
 app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimiter, asyncHandler(async (req, res) => {
   const input = chatMessageSchema.parse(req.body || {});
+  const wantsStream = String(req.headers.accept || '').includes('text/event-stream');
+  const respond = (payload, text) => wantsStream ? writeSseResponse(res, payload, text) : res.json(payload);
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
   enforceContentPolicy({ text: input.content, userId: req.user.id, sessionId: session.id, direction: 'input' });
@@ -3570,7 +3574,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       workflowState: workflow.state,
       documentType: workflow.documentType,
     });
-    return res.json(chatConversationPayload(refreshed, req.user, { autoGenerate }));
+    return respond(chatConversationPayload(refreshed, req.user, { autoGenerate }), assistant.text);
   }
   const priorUserMessages = db.prepare(`
     SELECT role, content FROM chat_messages
@@ -3628,7 +3632,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   audit(req.user.id, 'ai.chat_completed', 'chat_session', session.id, { mode: input.aiMode, model: assistant.model, provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local') });
   const messages = db.prepare('SELECT id, role, content, meta_json, created_at FROM chat_messages WHERE session_id = ? AND owner_user_id = ? ORDER BY created_at ASC').all(session.id, req.user.id).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) }));
   const refreshedSession = exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id));
-  res.json({ session: refreshedSession, messages, attachments: listChatAttachments(session.id, req.user.id), workflow: chatWorkflow(refreshedSession, req.user) });
+  respond({ session: refreshedSession, messages, attachments: listChatAttachments(session.id, req.user.id), workflow: chatWorkflow(refreshedSession, req.user) }, assistant.text);
 }));
 
 app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requireCsrf, aiChatLimiter, asyncHandler(async (req, res) => {
@@ -5415,6 +5419,13 @@ app.post('/api/admin/credits/grant', requireAuth, requireCsrf, requireAdmin, adm
     }
     throw error;
   }
+  recordAdminAudit({
+    actorUserId: req.user.id,
+    action: 'admin.credit_granted',
+    target: grantId,
+    payloadDiff: { audience: input.audience, amount: input.amount, recipientCount: recipients.length },
+    ipAddress: req.ip,
+  });
   audit(req.user.id, 'admin.credit_granted', 'admin_credit_grant', grantId, {
     audience: input.audience,
     amount: input.amount,

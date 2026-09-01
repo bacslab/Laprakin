@@ -39,12 +39,30 @@ lapisan deployment; aplikasi tidak menambah penyedia identitas baru.
 - Regression test menjalankan akun student dan admin yang terpisah, memeriksa
   respons `403 ADMIN_ONLY`, cookie timeout, inventaris route, CSRF, dan audit log.
 
-Jalankan sebelum release:
+## Origin dan response headers
 
-```bash
-node --test server/test/authorization-boundaries.test.mjs
-NODE_ENV=production npm run verify:production
-```
+API hanya merefleksikan origin yang ada di `ALLOWED_ORIGINS` atau application URL
+yang dikonfigurasi. Origin yang tidak terdaftar menerima `ORIGIN_DENIED`; credential
+tidak pernah direfleksikan untuk origin tersebut. Header dasar mencakup `nosniff`,
+penolakan frame, content-security policy, cross-origin policy, dan default no-store.
+
+## Admin audit
+
+Helper `recordAdminAudit` menyediakan baris audit terstruktur untuk mutation yang
+memakainya. Payload diff di-redact secara rekursif untuk credential, token, cookie,
+password, prompt, isi dokumen, dan raw source. IP disimpan sebagai hash SHA-256
+satu arah dan tidak diekspos sebagai alamat mentah. Query hanya mengembalikan
+metadata. Route admin lain tetap menggunakan tabel audit legacy sampai migrasi
+uniform dilakukan.
+
+## TOTP opsional
+
+`createTotpSecret(userId)` membuat secret Base32 dan `verifyTotpCode(userId, code)`
+menerima window 30 detik saat ini serta satu window di sebelahnya untuk toleransi
+jam. User biasa tidak ditantang. Helper aplikasi dan flag deployment
+`ADMIN_MFA_REQUIRED=true` sudah tersedia, tetapi enrollment persisten, recovery,
+challenge middleware, dan UI admin masih harus dihubungkan sebelum enforcement
+aplikasi diaktifkan.
 
 ## Respons insiden admin
 

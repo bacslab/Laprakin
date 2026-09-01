@@ -85,6 +85,7 @@ export const config = {
   tokenSecret: process.env.TOKEN_HMAC_SECRET || process.env.JWT_SECRET || 'dev-token-secret-change-me',
   // Admin promotion must always be an explicit deployment decision.
   adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
+  adminMfaRequired: process.env.ADMIN_MFA_REQUIRED === 'true',
   naraRouterApiKey: process.env.NARAROUTER_API_KEY || '',
   naraRouterBaseUrl: (process.env.NARAROUTER_BASE_URL || 'https://router.bynara.id/v1').replace(/\/$/, ''),
   naraRouterMaxRpm: boundedInt(process.env.NARAROUTER_MAX_RPM, 8, 1, 10),
