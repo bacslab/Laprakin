@@ -1,3 +1,9 @@
+## 21.0.2 - 2026-09-02
+
+- Menambahkan kontrol `Ubah pesan` pada pesan user untuk mengirim revisi dari titik percakapan yang dipilih.
+- Menambahkan kontrol `Buat ulang jawaban` pada jawaban AI, dengan state busy, notice berbahasa Indonesia, dan fokus kembali ke composer saat mode edit aktif.
+- Menambahkan helper client dan kontrak test untuk request edit/regenerate tanpa mengubah endpoint chat lama.
+
 ## 21.0.1 - Revisi chat server-side tahap 1
 
 - Menambahkan kontrak domain revisi pesan chat di server untuk mode `edit` dan `regenerate`, termasuk validasi sumber pesan user dan nomor revisi berurutan.

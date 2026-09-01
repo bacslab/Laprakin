@@ -9468,6 +9468,13 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 .workspace .message-actions button:hover,
 .workspace .message-actions button.selected { background:var(--workspace-hover); color:var(--workspace-text); }
 .workspace .message-actions time { margin-left:6px; color:var(--workspace-muted); font-size:.56rem; }
+.workspace .message-actions-user { justify-content:flex-end; margin:0 0 8px; }
+.workspace .message-actions-user button { width:auto; min-height:25px; padding:0 8px; gap:5px; font-size:.56rem; }
+.workspace .message-actions-user button:disabled { opacity:.5; cursor:not-allowed; }
+.workspace .composer-editing-banner { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 auto 6px; width:min(760px,calc(100% - 34px)); color:var(--workspace-muted); font-size:.58rem; }
+.workspace .composer-editing-banner span { display:inline-flex; align-items:center; gap:5px; }
+.workspace .composer-editing-banner button { border:0; border-radius:6px; padding:4px 7px; background:var(--workspace-hover); color:var(--workspace-muted); font-size:.56rem; }
+.workspace .composer-editing-banner button:hover { color:var(--workspace-text); }
 
 .identity-intake-follow-up { margin-top:5px!important; }
 

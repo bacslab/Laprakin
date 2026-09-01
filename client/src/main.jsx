@@ -11,6 +11,7 @@ import {
   Copy, ThumbsDown, ThumbsUp, Upload,
 } from 'lucide-react';
 import { api, clearCsrfToken, download, setCsrfToken } from './api';
+import { buildRevisionRequest, getEditableMessage, getRegenerationTarget } from './lib/chat-message-actions';
 import { departments, programs } from './data';
 import '@fontsource-variable/plus-jakarta-sans';
 import '@fontsource/dm-mono/400.css';
@@ -1363,12 +1364,13 @@ function Workspace() {
   const resolvedTheme = useResolvedTheme(prefs.theme || 'system');
   const location = useLocation(); const navigate = useNavigate(); const uploadRef = useRef(null);
   const [sessions, setSessions] = useState([]); const [active, setActive] = useState(null); const [messages, setMessages] = useState([]); const [attachments, setAttachments] = useState([]); const [documentState, setDocumentState] = useState(null); const [workflow, setWorkflow] = useState(null); const [activeJob, setActiveJob] = useState(null);
-  const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [pendingConfigRequest, setPendingConfigRequest] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
+  const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [editingMessageId, setEditingMessageId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [pendingConfigRequest, setPendingConfigRequest] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
   const actionInFlightRef = useRef(false);
   const sendInFlightRef = useRef(false);
   const tutorialAutoOpenedRef = useRef(false);
   const [productUpdate, setProductUpdate] = useState(null);
   const page = location.pathname.includes('/projects') ? 'projects' : location.pathname.includes('/documents') ? 'documents' : 'chat';
+  const editingMessage = getEditableMessage(messages, editingMessageId);
   useEffect(() => {
     if (prefs.productUpdates === false || productUpdate) return undefined;
     let disposed = false;
@@ -1515,7 +1517,7 @@ function Workspace() {
     try {
       await api(`/chat/sessions/${session.id}/archive`, { method: 'POST', body: {} });
       setSessions((items) => items.filter((item) => item.id !== session.id));
-      if (active?.id === session.id) { localStorage.removeItem('laprakin-active-chat-id'); setActive(null); setMessages([]); setAttachments([]); setDocumentState(null); setWorkflow(null); setActiveJob(null); }
+      if (active?.id === session.id) { localStorage.removeItem('laprakin-active-chat-id'); setActive(null); setMessages([]); setAttachments([]); setDocumentState(null); setWorkflow(null); setActiveJob(null); setEditingMessageId(null); setInput(''); }
       setNotice('Chat diarsipkan.');
     } catch (err) { setNotice(err.message); }
   };
@@ -1523,7 +1525,7 @@ function Workspace() {
     try {
       await api(`/chat/sessions/${session.id}`, { method: 'DELETE' });
       setSessions((items) => items.filter((item) => item.id !== session.id));
-      if (active?.id === session.id) { localStorage.removeItem('laprakin-active-chat-id'); setActive(null); setMessages([]); setAttachments([]); setDocumentState(null); setWorkflow(null); setActiveJob(null); }
+      if (active?.id === session.id) { localStorage.removeItem('laprakin-active-chat-id'); setActive(null); setMessages([]); setAttachments([]); setDocumentState(null); setWorkflow(null); setActiveJob(null); setEditingMessageId(null); setInput(''); }
       setNotice('Chat dihapus permanen.');
     } catch (err) { setNotice(err.message); }
   };
@@ -1551,6 +1553,8 @@ function Workspace() {
   }, [active?.document_id]);
   useEffect(() => { if (location.pathname.endsWith('/support')) { setModal('help'); navigate('/app', { replace: true }); } if (location.pathname.endsWith('/feedback')) { setModal('feedback'); navigate('/app', { replace: true }); } if (location.pathname.endsWith('/profile')) { setModal('settings'); navigate('/app', { replace: true }); } }, [location.pathname, navigate]);
   const createSession = async (openConfig = false, overrides = {}) => {
+    setEditingMessageId(null);
+    setInput('');
     setBusy(true);
     try {
       const fresh = createDefaultConfig();
@@ -1584,6 +1588,7 @@ function Workspace() {
     setActiveJob(null);
     setConfig(createDefaultConfig());
     setInput('');
+    setEditingMessageId(null);
     setPendingLandingFiles([]);
     setIdentityIntake(null);
     setPendingConfigRequest(null);
@@ -1593,7 +1598,7 @@ function Workspace() {
     if (window.innerWidth <= 700) setLeftCollapsed(true);
     setRoute('chat');
   };
-  const openSession = async (id) => { try { const data = await api(`/chat/sessions/${id}`); hydrate(data); setPendingConfigRequest(null); setRoute('chat'); setRightOpen(false); setDocumentOpen(false); setContextOpen(false); if (window.innerWidth <= 700) setLeftCollapsed(true); } catch (err) { setNotice(err.message); } };
+  const openSession = async (id) => { setEditingMessageId(null); setInput(''); try { const data = await api(`/chat/sessions/${id}`); hydrate(data); setPendingConfigRequest(null); setRoute('chat'); setRightOpen(false); setDocumentOpen(false); setContextOpen(false); if (window.innerWidth <= 700) setLeftCollapsed(true); } catch (err) { setNotice(err.message); } };
   const saveConfig = async () => {
     const targetSession = active || pendingConfigRequest?.session;
     if (!targetSession) return;
@@ -1675,6 +1680,31 @@ function Workspace() {
       setBusy(false);
     }
   };
+  const reviseChatMessage = async ({ messageId, mode, content = '' }) => {
+    if (!active?.id || busy || actionBusy) return null;
+    let request;
+    try {
+      request = buildRevisionRequest({ sessionId: active.id, messageId, mode, content });
+    } catch (error) {
+      setNotice(error.message);
+      return null;
+    }
+    setBusy(true);
+    try {
+      const data = await api(request.path, { method: 'POST', body: request.body });
+      hydrate(data);
+      setSessions((old) => old.map((item) => item.id === data.session.id ? data.session : item));
+      setInput('');
+      setEditingMessageId(null);
+      setNotice(mode === 'regenerate' ? 'Jawaban AI dibuat ulang.' : 'Pesan dan jawaban AI diperbarui.');
+      return data;
+    } catch (error) {
+      setNotice(error.message);
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
   const completeIdentityIntake = async (identity) => {
     if (!identityIntake) return;
     setBusy(true);
@@ -1714,6 +1744,10 @@ function Workspace() {
     if (sendInFlightRef.current || busy || actionBusy || (!input.trim() && !pendingLandingFiles.length)) return;
     sendInFlightRef.current = true;
     try {
+    if (editingMessageId) {
+      await reviseChatMessage({ messageId: editingMessageId, mode: 'edit', content: input });
+      return;
+    }
     let current = active;
     const requiresConfiguration = !current;
     const landingContent = input.trim() || 'Saya sudah menambahkan bahan untuk laprak ini.';
@@ -2134,7 +2168,7 @@ function Workspace() {
     <main className="workspace-main">
       {page === 'chat' && <>
         <header className="workspace-header"><div className={`header-title ${active ? '' : 'is-empty'}`}><b>{active?.title || 'Chat Laprakin'}</b><small>{headerSubtitle}</small></div>{!hasSubscriptionPlan && <button className="workspace-plan" onClick={() => navigate('/pricing')} title="Buka billing"><span>{workspacePlanLabel}</span><i>?</i><b>Upgrade</b></button>}<div className="header-actions"><button className={`header-config-button ${rightOpen ? 'active' : ''}`} aria-label="Konfigurasi chat" title="Konfigurasi chat" onClick={() => { setDocumentOpen(false); setRightOpen((value) => !value); }}><SlidersHorizontal size={15} /><span>Konfigurasi</span></button><IconButton label="Buka tutorial" className="tutorial-button" onClick={() => { setTutorialFirstUse(false); setTutorialOpen(true); }}><HelpCircle size={16} /></IconButton><IconButton label={prefs.theme === 'system' ? 'Tema mengikuti sistem' : resolvedTheme === 'dark' ? 'Gunakan mode terang' : 'Gunakan dark mode'} className="theme-button" onClick={() => setPrefs((value) => ({ ...value, theme: value.theme === 'system' ? (resolvedTheme === 'dark' ? 'light' : 'dark') : value.theme === 'dark' ? 'light' : 'system' }))}>{prefs.theme === 'system' ? <Monitor size={16} /> : resolvedTheme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</IconButton><IconButton label="Notifikasi" onClick={() => setModal('notifications')}><Bell size={16} /></IconButton></div></header>
-        <ChatSurface active={active} messages={messages} attachments={attachments} documentState={documentState} workflow={workflow} activeJob={activeJob} user={user} input={input} setInput={setInput} busy={busy || actionBusy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} removeAttachment={removeAttachment} updateAttachmentCategory={updateAttachmentCategory} createDocument={createDocument} onWorkflowAction={performChatAction} contextOpen={contextOpen} setContextOpen={setContextOpen} config={config} updateConfig={updateConfig} pendingFiles={pendingLandingFiles} onPasteImages={pasteImagesIntoChat} onAddPendingFiles={addPendingFiles} onRemovePending={(index) => setPendingLandingFiles((items) => items.filter((_, itemIndex) => itemIndex !== index))} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={() => navigate('/pricing')} onOpenDocument={() => { setRightOpen(false); setDocumentOpen(true); }} quizMode={quizMode} onCloseQuiz={() => setQuizMode(false)} onStartQuiz={startDocumentQuiz} onSubmitQuiz={submitDocumentQuiz} />
+        <ChatSurface active={active} messages={messages} attachments={attachments} documentState={documentState} workflow={workflow} activeJob={activeJob} user={user} input={input} setInput={setInput} busy={busy || actionBusy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} removeAttachment={removeAttachment} updateAttachmentCategory={updateAttachmentCategory} createDocument={createDocument} onWorkflowAction={performChatAction} contextOpen={contextOpen} setContextOpen={setContextOpen} config={config} updateConfig={updateConfig} pendingFiles={pendingLandingFiles} onPasteImages={pasteImagesIntoChat} onAddPendingFiles={addPendingFiles} onRemovePending={(index) => setPendingLandingFiles((items) => items.filter((_, itemIndex) => itemIndex !== index))} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={() => navigate('/pricing')} onOpenDocument={() => { setRightOpen(false); setDocumentOpen(true); }} quizMode={quizMode} onCloseQuiz={() => setQuizMode(false)} onStartQuiz={startDocumentQuiz} onSubmitQuiz={submitDocumentQuiz} editingMessage={editingMessage} onEditMessage={(message) => { const editable = getEditableMessage(messages, message.id); if (!editable) return; setEditingMessageId(editable.id); setInput(editable.content || ''); }} onCancelEdit={() => { setEditingMessageId(null); setInput(''); }} onRevise={reviseChatMessage} />
       </>}
       {page === 'documents' && <DocumentLibrary documents={documents} onRefresh={loadDocuments} onOpen={(doc) => { const session = sessions.find((item) => item.document_id === doc.id); if (session) openSession(session.id); else setNotice('Dokumen ini belum memiliki ruang chat yang bisa dibuka.'); }} />}
     {page === 'projects' && <ProjectsPage
@@ -2434,7 +2468,7 @@ function MessageContent({ content }) {
   })}</div>;
 }
 
-function AssistantMessageActions({ message }) {
+function AssistantMessageActions({ message, onRegenerate, busy = false }) {
   const { setNotice } = useApp();
   const [reaction, setReaction] = useState('');
   const [copied, setCopied] = useState(false);
@@ -2456,11 +2490,18 @@ function AssistantMessageActions({ message }) {
     <button type="button" onClick={copy} aria-label="Salin jawaban" title="Salin jawaban">{copied ? <Check size={14} /> : <Copy size={14} />}</button>
     <button type="button" className={reaction === 'up' ? 'selected' : ''} onClick={() => rate('up')} aria-label="Jawaban membantu" title="Membantu"><ThumbsUp size={14} /></button>
     <button type="button" className={reaction === 'down' ? 'selected' : ''} onClick={() => rate('down')} aria-label="Jawaban perlu diperbaiki" title="Perlu diperbaiki"><ThumbsDown size={14} /></button>
+    {onRegenerate && <button type="button" onClick={onRegenerate} disabled={busy} aria-label="Buat ulang jawaban" title="Buat ulang jawaban"><RefreshCw size={14} /></button>}
     <time dateTime={message.created_at || message.createdAt}>{timestamp}</time>
   </footer>;
 }
 
-function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz }) {
+function UserMessageActions({ message, onEdit, busy = false }) {
+  return <footer className="message-actions message-actions-user" aria-label="Aksi pesanmu">
+    <button type="button" onClick={() => onEdit?.(message)} disabled={busy} aria-label="Ubah pesan" title="Ubah pesan"><Pencil size={14} />Ubah pesan</button>
+  </footer>;
+}
+
+function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz, editingMessage, onEditMessage, onCancelEdit, onRevise }) {
   const blankChat = !active || (!messages.length && !attachments.length && !active.document_id);
   const [previewFile, setPreviewFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
@@ -2524,7 +2565,15 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
           finishedAt={message.meta.thinkingFinishedAt || message.created_at}
         /> : null}
         <article className={`message ${message.role}`}><div><MessageContent content={message.content}/>{message.meta?.links?.length ? <div className="link-row">{message.meta.links.map((link) => <a key={link} href={link} target="_blank" rel="noreferrer"><Globe2 size={12} />{new URL(link).hostname}</a>)}</div> : null}</div></article>
-        {message.role === 'assistant' && <AssistantMessageActions message={message} />}
+        {message.role === 'user' && <UserMessageActions message={message} onEdit={onEditMessage} busy={busy} />}
+        {message.role === 'assistant' && <AssistantMessageActions
+          message={message}
+          busy={busy}
+          onRegenerate={getRegenerationTarget(visibleMessages, message.id) ? () => {
+            const target = getRegenerationTarget(visibleMessages, message.id);
+            onRevise?.({ messageId: target.id, mode: 'regenerate' });
+          } : undefined}
+        />}
         {message.meta?.kind === 'document_ready' ? <DocumentCard documentState={documentState} activeJob={jobForMessage(message)} version={message.meta.documentVersion} onOpen={onOpenDocument} /> : null}
       </div>)}
       {active && workflow?.state === 'CLARIFICATION_REQUIRED' && !active.document_id && <ChatBriefPanel config={config} updateConfig={updateConfig} workflow={workflow} busy={busy} onSubmit={(payload) => onWorkflowAction('SUBMIT_CLARIFICATION', payload)} />}
@@ -2535,7 +2584,7 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
         : !hasEmbeddedPlan && <WorkflowPanel workflow={workflow} busy={busy} onCreate={createDocument} onAction={onWorkflowAction} aiMode={aiMode} />}
       {busy && !active?.document_id && !['queued', 'running', 'retry_queued'].includes(activeJob?.status) && <ThinkingRail />}
     </div>}</div>
-    {!quizMode && <Composer input={input} setInput={setInput} busy={busy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} centered={blankChat} pendingFiles={pendingFiles} onPasteImages={onPasteImages} onAddPendingFiles={onAddPendingFiles} onRemovePending={onRemovePending} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={onUpgrade} />}
+    {!quizMode && <Composer input={input} setInput={setInput} busy={busy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} centered={blankChat} pendingFiles={pendingFiles} onPasteImages={onPasteImages} onAddPendingFiles={onAddPendingFiles} onRemovePending={onRemovePending} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={onUpgrade} editingMessage={editingMessage} onCancelEdit={onCancelEdit} />}
     {previewFile && <AttachmentPreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />}
   </div>;
 }
@@ -2853,7 +2902,7 @@ function resizeComposerTextarea(textarea) {
   textarea.style.overflowY = overflowing ? 'auto' : 'hidden';
 }
 
-function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, centered, pendingFiles = [], onPasteImages, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade }) {
+function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, centered, pendingFiles = [], onPasteImages, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, editingMessage = null, onCancelEdit }) {
   const textareaRef = useRef(null);
   const shortcutItems = [
     { key: 'laprak', label: 'Laprak', icon: FileText, prompt: 'Buatkan saya laporan praktikum berdasarkan bahan dan instruksi yang tersedia.' },
@@ -2882,8 +2931,15 @@ function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, up
       window.removeEventListener('resize', resize);
     };
   }, []);
+  useEffect(() => {
+    if (!editingMessage) return undefined;
+    setInput(editingMessage.content || '');
+    const frame = window.requestAnimationFrame(() => textareaRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [editingMessage, setInput]);
   return <div className={`composer-zone ${centered ? 'composer-centered composer-claude' : ''}`}>
     {pendingFiles.length ? <div className="pending-files">{pendingFiles.map((file, index) => <PendingAttachmentChip file={file} index={index} key={`${file.name}-${index}`} onRemove={onRemovePending} />)}</div> : null}
+    {editingMessage && <div className="composer-editing-banner" role="status" aria-live="polite"><span><Pencil size={13} />Mengubah pesan</span><button type="button" onClick={onCancelEdit} disabled={busy}>Batalkan</button></div>}
     <form className={`composer ${centered ? 'composer-style-reference' : ''}`} onSubmit={send}>
       <textarea ref={textareaRef} rows="2" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={placeholder} />
       <div className="composer-bottom-row">
@@ -2894,7 +2950,7 @@ function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, up
         </div>
         <div className="composer-actions">
           <AiModeMenu value={aiMode} onChange={setAiMode} access={aiModeAccess} onUpgrade={onUpgrade} />
-          <button className="send-button" type="submit" disabled={busy || (!input.trim() && !pendingFiles.length)} aria-label="Kirim pesan"><Send size={17} /></button>
+          <button className="send-button" type="submit" disabled={busy || (!input.trim() && !pendingFiles.length)} aria-label={editingMessage ? 'Simpan perubahan pesan' : 'Kirim pesan'}><Send size={17} /></button>
         </div>
       </div>
     </form>
