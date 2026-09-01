@@ -99,3 +99,42 @@ The unit, workflow, admin, and correctly configured E2E baselines are green.
 This document records the remaining npm install-script warning and the
 measured CSS inventory so later phases can distinguish existing state from
 regressions. No application source code was changed for Fase 0.
+
+## Final verification snapshot — 2026-09-02
+
+The remediation branch was re-verified from a fresh process after the latest
+changes. The final counts are intentionally recorded separately from the
+baseline so a partial migration is not mistaken for a completed rewrite.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| `npm test` | PASS | 99 tests, 99 passed, 0 failed |
+| `npm run test:e2e` | PASS | Clean server on port 4019 with isolated data directory |
+| `npm run test:workflow-api` | PASS | Workflow API contract passed |
+| `npm run test:admin-ops` | PASS | Admin operations contract passed |
+| `npm run build` | PASS | Ops renderer and client build completed; route chunks emitted |
+| `npm run lint` | PASS | Existing configured ESLint targets passed |
+| `npm run typecheck` | PASS | `tsc -p tsconfig.email.json` passed |
+| `node --test client/test/*.test.mjs` | PASS | 24 tests, 24 passed |
+| release/security/stream focused tests | PASS | 8 tests, 8 passed |
+| `node scripts/check-release-metadata.mjs` | PASS | Root/client/server all `21.0.6` |
+| `git diff --check` | PASS | No whitespace errors |
+
+Final measured inventory:
+
+| Area | Final |
+| --- | ---: |
+| `client/src/main.jsx` | 3,953 lines |
+| `client/src/Landing.jsx` | 594 lines |
+| `client/src/styles.css` | 10,812 lines |
+| `!important` occurrences | 4,739 |
+| `@media` blocks | 109 |
+| `server/src/index.js` | 5,956 lines |
+| `server/src/services.js` | 4,511 lines |
+| JSX files above 500 lines | 2 (`main.jsx`, `Landing.jsx`) |
+
+Fresh browser checks covered the dark desktop state at 1280×720 for landing,
+auth, workspace/tutorial, and admin/monitoring. The available browser control
+surface did not expose viewport resizing, so mobile and tablet screenshots are
+not claimed as completed evidence. The build still reports a large global CSS
+chunk and large vendor chunks; these remain follow-up work.
