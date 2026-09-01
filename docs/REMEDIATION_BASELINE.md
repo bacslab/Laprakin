@@ -113,7 +113,7 @@ baseline so a partial migration is not mistaken for a completed rewrite.
 | `npm run test:workflow-api` | PASS | Workflow API contract passed |
 | `npm run test:admin-ops` | PASS | Admin operations contract passed |
 | `npm run build` | PASS | Ops renderer and client build completed; route chunks emitted |
-| `npm run lint` | PASS | Existing configured ESLint targets passed |
+| `npm run lint` | PASS | Configured targets plus JSX a11y plugin passed with 0 errors and 130 warnings |
 | `npm run typecheck` | PASS | `tsc -p tsconfig.email.json` passed |
 | `node --test client/test/*.test.mjs` | PASS | 24 tests, 24 passed |
 | release/security/stream focused tests | PASS | 8 tests, 8 passed |
