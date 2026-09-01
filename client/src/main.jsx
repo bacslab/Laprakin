@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from './router';
-import { Component, Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Component, Fragment, Suspense, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArrowDownToLine, ArrowLeft, ArrowRight, Bell, Check, CheckCircle2, ChevronDown, CircleAlert,
   CodeXml, CreditCard, FileText, FolderOpen, FolderKanban, Globe2, GraduationCap, HelpCircle, LayoutTemplate, LoaderCircle, Mail, Search,
@@ -10,10 +10,11 @@ import {
   ChevronRight, Database, Eye, GripVertical, Keyboard, MoreHorizontal, Pencil, Pin, PinOff, UserRound, Volume2, BellRing, Shield, Sliders, Monitor, Palette, Languages, CircleUserRound, LogOut as LogOutIcon, LayoutDashboard, Users, AlertTriangle, ClipboardList, Megaphone, RefreshCw, MessageSquareText, Activity, FileCog,
   Copy, ThumbsDown, ThumbsUp, Upload,
 } from 'lucide-react';
-import { api, clearCsrfToken, download, setCsrfToken } from './api';
+import { api, apiStream, clearCsrfToken, download, setCsrfToken } from './api';
 import { buildRevisionRequest, getEditableMessage, getRegenerationTarget } from './lib/chat-message-actions';
 import { canonicalCourseLabel, courseAcronym, courseTokens, editDistance, normalizedCourseKey } from './lib/academic';
 import { formatBytes, formatCurrency, formatDate } from './lib/formatters';
+import { resolveTheme, useResolvedTheme } from './lib/theme';
 import { departments, programs } from './data';
 import { BrandMark } from './components/BrandMark';
 import { Button } from './components/Button';
@@ -26,12 +27,24 @@ import './styles/layers.css';
 import './styles/tokens.css';
 import './styles.css';
 import './styles/landing.css';
-import LandingPage from './Landing';
+import './styles/accessibility.css';
+import './styles/auth.css';
+import './styles/workspace.css';
+import './styles/admin.css';
+import LoadingScreen from './components/LoadingScreen';
+import { loadPage } from './lib/load-page';
+import { AppContext, useApp } from './state/ui-context';
+import { useFocusReturn } from './hooks/useFocusReturn';
+import { useFocusTrap } from './hooks/useFocusTrap';
+import { createTranslator } from './i18n';
 import { FeatureUpdatesAdmin, ProductUpdatePopup } from './FeatureUpdates';
 import { renderAsync as renderDocx } from 'docx-preview';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-const AppContext = createContext(null);
+const LandingRoutePage = loadPage(() => import('./pages/Landing/LandingPage'));
+const AuthPageModule = loadPage(() => import('./pages/Auth/AuthPage'));
+const AdminWorkspaceBoundary = loadPage(() => import('./pages/Admin/AdminWorkspace'));
+const WorkspaceBoundary = loadPage(() => import('./pages/Workspace/Workspace'));
 
 const I18nContext = createContext({ language: 'id', t: (value) => value });
 const textNodeOriginals = new WeakMap();
@@ -391,6 +404,7 @@ function I18nRuntime({ children }) {
   const { prefs } = useApp();
   const language = prefs?.language || 'id';
   const resolvedTheme = useResolvedTheme(prefs?.theme || 'system');
+  const translateKey = useMemo(() => createTranslator(language), [language]);
   const translateDom = () => {
     const root = document.getElementById('root');
     if (!root) return;
@@ -436,7 +450,7 @@ function I18nRuntime({ children }) {
     if (root) observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label'] });
     return () => { cancelAnimationFrame(frame); observer.disconnect(); };
   }, [language, resolvedTheme]);
-  return <I18nContext.Provider value={{ language, t: (value) => translateUiText(value, language) }}>{children}</I18nContext.Provider>;
+  return <I18nContext.Provider value={{ language, t: (value, values) => translateKey(value, values) }}>{children}</I18nContext.Provider>;
 }
 
 function useI18n() { return useContext(I18nContext); }
@@ -501,30 +515,6 @@ const pricingFallback = {
 function pricingFeatures(plan, fallback) {
   return Array.isArray(plan?.features) ? plan.features : fallback;
 }
-function getSystemTheme() {
-  if (typeof window === 'undefined' || !window.matchMedia) return 'light';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-function resolveTheme(theme = 'system') {
-  if (theme === 'dark') return 'dark';
-  if (theme === 'light') return 'light';
-  return getSystemTheme();
-}
-
-function useResolvedTheme(theme = 'system') {
-  const [resolved, setResolved] = useState(() => resolveTheme(theme));
-  useEffect(() => {
-    const update = () => setResolved(resolveTheme(theme));
-    update();
-    if (theme !== 'system' || typeof window === 'undefined' || !window.matchMedia) return undefined;
-    const query = window.matchMedia('(prefers-color-scheme: dark)');
-    query.addEventListener?.('change', update);
-    return () => query.removeEventListener?.('change', update);
-  }, [theme]);
-  return resolved;
-}
-
 const defaultPrefs = {
   theme: 'system', language: 'id', compact: true, reducedMotion: false, enterToSend: true,
   tone: 'formal', perspective: 'saya', profile: 'langkah', customInstructions: '', accent: 'lime', productUpdates: true, allowExternalAi: true,
@@ -649,21 +639,6 @@ function readPrefs() {
   catch { return defaultPrefs; }
 }
 
-function useApp() {
-  const value = useContext(AppContext);
-  if (!value) throw new Error('App context belum tersedia.');
-  return value;
-}
-
-function GoogleLogo() {
-  return <svg className="google-logo" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
-    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
-  </svg>;
-}
-
 function Toggle({ checked, onChange, title, description }) {
   return <label className="toggle-control"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><span className="toggle-dot" /><span><b>{title}</b>{description && <small>{description}</small>}</span></label>;
 }
@@ -717,15 +692,7 @@ function AppProvider({ children }) {
 
 function App() {
   const location = useLocation();
-  return <AppErrorBoundary resetKey={location.pathname}><AppProvider><I18nRuntime><div className="route-transition"><Routes><Route path="/" element={<Landing />} /><Route path="/auth" element={<AuthPage />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/pricing" element={<PublicPricingPage />} /><Route path="/checkout" element={<PublicPricingPage />} /><Route path="/billing" element={<PricingRedirect />} /><Route path="/app/billing" element={<PricingRedirect />} /><Route path="/admin/*" element={<ProtectedAdmin />} /><Route path="/app/*" element={<ProtectedApp />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></div></I18nRuntime></AppProvider></AppErrorBoundary>;
-}
-
-function Landing() {
-  const { user, loading } = useApp();
-  const navigate = useNavigate();
-  if (loading) return <LoadingScreen />;
-  if (user?.emailVerified) return <Navigate to={user.role === 'admin' ? '/admin' : '/app'} replace />;
-  return <LandingPage navigate={navigate} />;
+  return <AppErrorBoundary resetKey={location.pathname}><AppProvider><I18nRuntime><Suspense fallback={<LoadingScreen />}><div className="route-transition"><Routes><Route path="/" element={<LandingRoutePage />} /><Route path="/auth" element={<AuthPageModule />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/pricing" element={<PublicPricingPage />} /><Route path="/checkout" element={<PublicPricingPage />} /><Route path="/billing" element={<PricingRedirect />} /><Route path="/app/billing" element={<PricingRedirect />} /><Route path="/admin/*" element={<ProtectedAdmin />} /><Route path="/app/*" element={<ProtectedApp />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></div></Suspense></I18nRuntime></AppProvider></AppErrorBoundary>;
 }
 
 const legalContent = {
@@ -840,117 +807,7 @@ function TutorialCarousel({ media = {}, copy = {} }) {
   return <section id="tutorial" className="landing-section tutorial-section landing-reveal"><div className="section-copy split"><div><span className="section-index">03</span><h2>{copy.tutorialTitle || 'Tiga langkah, satu alur.'}</h2><p>{copy.tutorialSubtitle || 'Geser gambar atau gunakan navigasi langsung di dalam gambar.'}</p></div></div><article className="tutorial-frame"><div className="tutorial-image-wrap" onPointerDown={pointerDown} onPointerUp={pointerUp}>{current.imageUrl ? <img key={current.imageUrl} src={current.imageUrl} alt={current.alt || current.title} onError={(event) => event.currentTarget.classList.add('image-fallback')} /> : <div className="tutorial-placeholder">Gambar tutorial belum dipilih di CMS.</div>}<div className="tutorial-image-overlay" /><button className="tutorial-image-nav previous" onClick={() => go(-1)} aria-label="Tutorial sebelumnya">←</button><button className="tutorial-image-nav next" onClick={() => go(1)} aria-label="Tutorial selanjutnya">→</button><div className="tutorial-image-count">{String(index + 1).padStart(2, '0')} / {String(slides.length).padStart(2, '0')}</div></div><div className="tutorial-caption"><small>Langkah {index + 1}</small><h3>{current.title}</h3><p>{current.text}</p><div className="tutorial-dots">{slides.map((slide, dotIndex) => <button key={slide.id || slide.title} className={dotIndex === index ? 'active' : ''} onClick={() => setIndex(dotIndex)} aria-label={`Buka tutorial ${dotIndex + 1}`} />)}</div></div></article></section>;
 }
 
-function AuthPage() {
-  const { user, refreshSession, prefs } = useApp();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const authTheme = useResolvedTheme(prefs?.theme || 'system');
-  const query = new URLSearchParams(location.search);
-  const verifyToken = query.get('verify') || '';
-  const resetToken = query.get('reset') || '';
-  const requestedNext = query.get('next') || '';
-  const googleStatus = query.get('google') || '';
-  const safeNext = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '';
-  const destination = safeNext || (user?.role === 'admin' ? '/admin' : '/app');
-  const [mode, setMode] = useState(resetToken ? 'reset' : 'login');
-  const [form, setForm] = useState({ email: '', password: '', newPassword: '', referralCode: '' });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(googleStatus === 'cancelled'
-    ? 'Masuk dengan Google dibatalkan.'
-    : googleStatus === 'failed'
-      ? 'Masuk dengan Google belum berhasil. Coba lagi.'
-      : googleStatus === 'restricted'
-        ? 'Akses akun atau perangkat ini sedang dibatasi.'
-      : '');
-  const [restriction, setRestriction] = useState(googleStatus === 'restricted' ? { appealAllowed: true } : null);
-  const [appealMessage, setAppealMessage] = useState('');
-  const [appealOpen, setAppealOpen] = useState(googleStatus === 'restricted');
-  const [success, setSuccess] = useState('');
-  const [devToken, setDevToken] = useState('');
-  const [googleEnabled, setGoogleEnabled] = useState(false);
-  useEffect(() => { api('/meta', { includeCsrf: false }).then((data) => setGoogleEnabled(Boolean(data.features?.googleLoginEnabled))).catch(() => {}); }, []);
-  useEffect(() => { if (user?.emailVerified) navigate(destination); }, [user, navigate, destination]);
-  useEffect(() => { if (!verifyToken) return; (async () => { setBusy(true); try { const data = await api('/auth/verify', { method: 'POST', body: { token: verifyToken }, includeCsrf: false }); setCsrfToken(data.csrfToken); const nextSession = await refreshSession(); navigate(safeNext || (nextSession?.user?.role === 'admin' ? '/admin' : '/app')); } catch (err) { setError(err.message); } finally { setBusy(false); } })(); }, [verifyToken, navigate, refreshSession]);
-  const submit = async (event) => {
-    event.preventDefault(); setBusy(true); setError(''); setSuccess('');
-    try {
-      if (mode === 'login') { const data = await api('/auth/login', { method: 'POST', body: { email: form.email, password: form.password }, includeCsrf: false }); setCsrfToken(data.csrfToken); const nextSession = await refreshSession(); navigate(safeNext || (nextSession?.user?.role === 'admin' ? '/admin' : '/app')); }
-      if (mode === 'register') { const data = await api('/auth/register', { method: 'POST', body: { email: form.email, password: form.password, referralCode: form.referralCode }, includeCsrf: false }); setDevToken(data.developmentVerificationToken || ''); setSuccess('Akun dibuat. Verifikasi email sebelum memakai credit gratis.'); }
-      if (mode === 'forgot') { const data = await api('/auth/request-password-reset', { method: 'POST', body: { email: form.email }, includeCsrf: false }); setDevToken(data.developmentResetToken || ''); setSuccess(data.message || 'Link reset telah diproses.'); }
-      if (mode === 'reset') { const data = await api('/auth/reset-password', { method: 'POST', body: { token: resetToken || devToken, password: form.newPassword }, includeCsrf: false }); setCsrfToken(data.csrfToken || ''); if (!data.csrfToken) { setMessage(data.message); setMode('login'); return; } const nextSession = await refreshSession(); navigate(safeNext || (nextSession?.user?.role === 'admin' ? '/admin' : '/app')); }
-    } catch (err) {
-      setError(err.message);
-      if (err.code === 'ACCOUNT_RESTRICTED') {
-        setRestriction(err.payload?.error?.details || { appealAllowed: true });
-        setAppealOpen(true);
-      }
-    } finally { setBusy(false); }
-  };
-  const submitAppeal = async () => {
-    if (!form.email || appealMessage.trim().length < 20) return;
-    setBusy(true); setError('');
-    try {
-      const data = await api('/auth/appeals', {
-        method: 'POST',
-        body: { email: form.email, message: appealMessage },
-        includeCsrf: false,
-      });
-      setSuccess(data.message || 'Permohonan appeal telah diterima.');
-      setAppealOpen(false);
-      setAppealMessage('');
-    } catch (err) { setError(err.message); } finally { setBusy(false); }
-  };
-  const verifyDev = async () => { setBusy(true); try { const data = await api('/auth/verify', { method: 'POST', body: { token: devToken }, includeCsrf: false }); setCsrfToken(data.csrfToken); const nextSession = await refreshSession(); navigate(safeNext || (nextSession?.user?.role === 'admin' ? '/admin' : '/app')); } catch (err) { setError(err.message); } finally { setBusy(false); } };
-  const info = { login: ['Masuk', 'Lanjutkan chat dan laprak yang sedang kamu kerjakan.'], register: ['Buat akun', 'Credit gratis aktif setelah email terverifikasi.'], forgot: ['Atur ulang akses', 'Masukkan email untuk meminta link reset.'], reset: ['Kata sandi baru', 'Gunakan kata sandi yang belum pernah dipakai.'] }[mode];
-  const changeMode = (nextMode) => { setMode(nextMode); setError(''); setSuccess(''); setDevToken(''); };
-  const formModes = !['forgot', 'reset'].includes(mode);
-  return <div className={`auth-page auth-page-${mode} theme-${authTheme}`}>
-    <header className="auth-topbar">
-      <Link to="/" className="auth-brand"><BrandMark /><b>laprakin</b><small>BETA</small></Link>
-      <Link to="/" className="auth-back-link"><ArrowLeft size={15} />Beranda</Link>
-    </header>
-    <main className="auth-shell">
-      <section className="auth-card">
-        <div className="auth-card-heading">
-          <span className="auth-eyebrow">Workspace akademik</span>
-          <h1>{info[0]}</h1>
-          <p>{info[1]}</p>
-        </div>
-        {formModes && <div className="auth-mode-tabs" aria-label="Pilih akses akun">
-          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => changeMode('login')}>Masuk</button>
-          <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => changeMode('register')}>Daftar</button>
-        </div>}
-        {googleEnabled && formModes && <>
-          <button type="button" className="google-button" onClick={() => { window.location.href = `${import.meta.env.VITE_API_URL || '/api'}/auth/google/start?next=${encodeURIComponent(safeNext || '/app')}`; }}><GoogleLogo /> Lanjutkan dengan Google</button>
-          <div className="auth-divider"><span>atau gunakan email</span></div>
-        </>}
-        {success && <div className="auth-notice success"><CheckCircle2 size={15} />{success}</div>}
-        {devToken && mode === 'register' ? <div className="local-verify"><p>Mode lokal: verifikasi tanpa provider email.</p><button type="button" className="auth-submit" onClick={verifyDev} disabled={busy}>Verifikasi sekarang <ArrowRight size={15} /></button></div> : <form onSubmit={submit} className="auth-form">
-          {mode !== 'reset' && <label><span>Email</span><input type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="nama@email.com" /></label>}
-          {['login', 'register'].includes(mode) && <label><span>Kata sandi</span><input type="password" minLength={mode === 'register' ? 12 : 1} maxLength="64" required value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={mode === 'register' ? 'Minimal 12 karakter' : 'Kata sandi'} /></label>}
-          {mode === 'register' && <label><span>Kode referral <small>opsional</small></span><input value={form.referralCode} onChange={(event) => setForm({ ...form, referralCode: event.target.value })} placeholder="R-XXXXXXXX" /></label>}
-          {mode === 'reset' && <label><span>Kata sandi baru</span><input type="password" minLength="12" maxLength="64" required value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} placeholder="Minimal 12 karakter" /></label>}
-          {error && !restriction?.appealAllowed && <div className="auth-notice error"><CircleAlert size={15} />{error}</div>}
-          {restriction?.appealAllowed && <section className="auth-appeal-panel">
-            <div><b>Akses sedang dibatasi</b><p>{restriction.reason || 'Tim Laprakin perlu meninjau aktivitas akun atau perangkat ini.'}</p>{restriction.expiresAt && <small>Berlaku sampai {formatDate(restriction.expiresAt)}.</small>}</div>
-            {!appealOpen ? <button type="button" className="auth-text-button" onClick={() => setAppealOpen(true)}>Ajukan appeal</button> : <>
-              <label><span>Penjelasan appeal</span><textarea minLength="20" maxLength="1200" value={appealMessage} onChange={(event) => setAppealMessage(event.target.value)} placeholder="Jelaskan alasan aksesmu perlu ditinjau kembali." /></label>
-              <button type="button" className="auth-appeal-submit" disabled={busy || !form.email || appealMessage.trim().length < 20} onClick={submitAppeal}>Kirim appeal</button>
-            </>}
-          </section>}
-          <button className="auth-submit" type="submit" disabled={busy}>{busy && <LoaderCircle className="spin" size={15} />}{mode === 'login' ? 'Masuk ke workspace' : mode === 'register' ? 'Buat akun' : mode === 'forgot' ? 'Kirim link reset' : 'Simpan kata sandi'} <ArrowRight size={15} /></button>
-        </form>}
-        <div className="auth-card-footer">
-          {mode === 'login' && <button type="button" className="auth-text-button" onClick={() => changeMode('forgot')}>Lupa kata sandi?</button>}
-          {['forgot', 'reset'].includes(mode) && <button type="button" className="auth-text-button" onClick={() => changeMode('login')}><ArrowLeft size={13} />Kembali ke masuk</button>}
-        </div>
-      </section>
-      <p className="auth-legal">Dengan melanjutkan, kamu menyetujui <Link to="/terms">Ketentuan Layanan</Link> dan <Link to="/privacy">Kebijakan Privasi</Link> Laprakin.</p>
-    </main>
-  </div>;
-}
-
-function ProtectedApp() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role === 'admin') return <Navigate to="/admin" replace />; return <Workspace />; }
+function ProtectedApp() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role === 'admin') return <Navigate to="/admin" replace />; return <WorkspaceBoundary><LegacyWorkspace /></WorkspaceBoundary>; }
 
 function PublicPricingPage() {
   const { user, prefs, setNotice, refreshSession } = useApp();
@@ -1242,7 +1099,7 @@ function ProtectedBilling() {
   return <BillingPage />;
 }
 function PricingRedirect() { const location = useLocation(); return <Navigate to={`/pricing${location.search || ''}`} replace />; }
-function ProtectedAdmin() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role !== 'admin') return <Navigate to="/app" replace />; return <AdminWorkspace />; }
+function ProtectedAdmin() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role !== 'admin') return <Navigate to="/app" replace />; return <AdminWorkspaceBoundary render={() => <LegacyAdminWorkspace />} />; }
 
 function courseLabelsMatch(left, right) {
   const a = normalizedCourseKey(left);
@@ -1276,7 +1133,7 @@ function inferPendingAttachmentKind(file) {
   return 'unknown';
 }
 
-function Workspace() {
+function LegacyWorkspace() {
   const { user, wallet, refreshSession, setNotice, prefs, setPrefs, showDialog } = useApp();
   const resolvedTheme = useResolvedTheme(prefs.theme || 'system');
   const location = useLocation(); const navigate = useNavigate(); const uploadRef = useRef(null);
@@ -1552,6 +1409,7 @@ function Workspace() {
   };
   const dispatchChatMessage = async ({ session, content, files = [], kind = '' }) => {
     let current = session;
+    let streamAssistantId = '';
     setBusy(true);
     try {
       await api(`/chat/sessions/${current.id}/processing-access`, { method: 'POST', body: {} });
@@ -1569,6 +1427,7 @@ function Workspace() {
       setActive(synced.session);
       setConfig({ title: synced.session.title || 'Laprak baru', structureMode: synced.session.structure_mode || 'guided', configuration: { ...defaultChatConfig.configuration, ...(synced.session.configuration || {}) } });
       setSessions((old) => old.map((item) => item.id === synced.session.id ? synced.session : item));
+      streamAssistantId = `local-assistant-${crypto.randomUUID()}`;
       setMessages((items) => [...items, {
         id: `local-user-${crypto.randomUUID()}`,
         role: 'user',
@@ -1576,9 +1435,26 @@ function Workspace() {
         meta: { aiMode },
         created_at: new Date().toISOString(),
       }]);
-      const data = await api(`/chat/sessions/${current.id}/messages`, {
+      const data = await apiStream(`/chat/sessions/${current.id}/messages`, {
         method: 'POST',
         body: { content, aiMode, allowExternalAi: prefs.allowExternalAi !== false },
+        onDelta: (delta) => {
+          const text = String(delta || '');
+          if (!text) return;
+          setMessages((items) => {
+            const existing = items.findIndex((item) => item.id === streamAssistantId);
+            if (existing < 0) {
+              return [...items, {
+                id: streamAssistantId,
+                role: 'assistant',
+                content: text,
+                meta: { aiMode, streaming: true },
+                created_at: new Date().toISOString(),
+              }];
+            }
+            return items.map((item, index) => index === existing ? { ...item, content: `${item.content || ''}${text}` } : item);
+          });
+        },
       });
       hydrate(data);
       setSessions((old) => old.map((item) => item.id === data.session.id ? data.session : item));
@@ -1591,6 +1467,7 @@ function Workspace() {
         try { await api(`/chat/sessions/${current.id}/processing-access`, { method: 'DELETE', body: {} }); } catch { /* reservation tetap aman bila proses sudah dimulai */ }
         await refreshSession();
       }
+      if (streamAssistantId) setMessages((items) => items.filter((item) => item.id !== streamAssistantId));
       appendAssistantMessage(err.message);
       return null;
     } finally {
@@ -2146,7 +2023,7 @@ function SessionGroup({ group, items, activeId, page, onOpen, renamingId, setRen
 
 function RecentSettingsPopover({ value, onChange, onClose }) {
   useEffect(() => { const timer = window.setTimeout(onClose, 5000); return () => window.clearTimeout(timer); }, [onClose]);
-  return <div className="recent-settings-popover" role="dialog" aria-label="Atur daftar chat"><b>Atur daftar chat</b><small>Urutan chat di sidebar</small><button type="button" className={value === 'latest' ? 'active' : ''} onClick={() => onChange('latest')}><Check size={13} />Terbaru diperbarui</button><button type="button" className={value === 'title' ? 'active' : ''} onClick={() => onChange('title')}><Check size={13} />Judul A–Z</button></div>;
+  return <div className="recent-settings-popover" role="dialog" aria-modal="true" aria-label="Atur daftar chat"><b>Atur daftar chat</b><small>Urutan chat di sidebar</small><button type="button" className={value === 'latest' ? 'active' : ''} onClick={() => onChange('latest')}><Check size={13} />Terbaru diperbarui</button><button type="button" className={value === 'title' ? 'active' : ''} onClick={() => onChange('title')}><Check size={13} />Judul A–Z</button></div>;
 }
 
 function ChatSessionRow({ item, active, onOpen, editing, setEditing, onRename, draggingSession, onDragStart, onDropSession, folders, onPin, onMove, onArchive, onDelete }) {
@@ -3722,20 +3599,26 @@ function FeedbackModal({ onClose }) {
   </Modal>;
 }
 
-function NotificationModal({ onClose }) { const { setNotice } = useApp(); const [data, setData] = useState({ notifications: [], unread: 0 }); const ref = useRef(null); useEffect(() => { api('/notifications').then(setData).catch((err) => setNotice(err.message)); }, []); useEffect(() => { const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose(); }; window.addEventListener('mousedown', closeOutside); return () => window.removeEventListener('mousedown', closeOutside); }, [onClose]); useEffect(() => { const timer = window.setTimeout(onClose, 5000); return () => window.clearTimeout(timer); }, [onClose]); const markRead = async () => { try { setData(await api('/notifications/read', { method: 'PUT', body: {} })); } catch (err) { setNotice(err.message); } }; return <aside ref={ref} className="notification-popover" role="dialog" aria-label="Notifikasi"><header><div><b>Notifikasi</b><small>{data.unread ? `${data.unread} baru` : 'Semua sudah dibaca'}</small></div><IconButton label="Tutup" onClick={onClose}><X size={16} /></IconButton></header>{data.unread ? <button className="notification-read" onClick={markRead}>Tandai semua dibaca</button> : null}<div className="notification-list">{data.notifications.length ? data.notifications.map((note) => <article key={note.id} className={note.is_read ? 'is-read' : ''}><span /> <div><b>{note.title}</b><p>{note.body}</p><small>{formatDate(note.created_at)}</small></div></article>) : <p className="muted-note">Belum ada notifikasi.</p>}</div></aside>; }
+function NotificationModal({ onClose }) { const { setNotice } = useApp(); const [data, setData] = useState({ notifications: [], unread: 0 }); const ref = useRef(null); useEffect(() => { api('/notifications').then(setData).catch((err) => setNotice(err.message)); }, []); useEffect(() => { const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose(); }; window.addEventListener('mousedown', closeOutside); return () => window.removeEventListener('mousedown', closeOutside); }, [onClose]); useEffect(() => { const timer = window.setTimeout(onClose, 5000); return () => window.clearTimeout(timer); }, [onClose]); const markRead = async () => { try { setData(await api('/notifications/read', { method: 'PUT', body: {} })); } catch (err) { setNotice(err.message); } }; return <aside ref={ref} className="notification-popover" role="dialog" aria-modal="true" aria-label="Notifikasi"><header><div><b>Notifikasi</b><small>{data.unread ? `${data.unread} baru` : 'Semua sudah dibaca'}</small></div><IconButton label="Tutup" onClick={onClose}><X size={16} /></IconButton></header>{data.unread ? <button className="notification-read" onClick={markRead}>Tandai semua dibaca</button> : null}<div className="notification-list">{data.notifications.length ? data.notifications.map((note) => <article key={note.id} className={note.is_read ? 'is-read' : ''}><span /> <div><b>{note.title}</b><p>{note.body}</p><small>{formatDate(note.created_at)}</small></div></article>) : <p className="muted-note">Belum ada notifikasi.</p>}</div></aside>; }
 
 function AppDialog({ dialog, onResolve }) {
   const [value, setValue] = useState('');
+  const dialogRef = useRef(null);
+  useFocusReturn(Boolean(dialog));
+  useFocusTrap(dialogRef, Boolean(dialog));
   const isPrompt = dialog?.kind === 'prompt';
   useEffect(() => { setValue(dialog?.initialValue || ''); }, [dialog]);
   if (!dialog) return null;
   const close = (result) => onResolve(isPrompt && result === true ? value.trim() : result);
-  return <div className="app-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(isPrompt ? null : false); }}><section className={`app-dialog ${dialog.destructive ? 'is-danger' : ''}`} role="dialog" aria-modal="true" aria-labelledby="app-dialog-title"><div className="app-dialog-icon">{dialog.destructive ? <Trash2 size={17} /> : isPrompt ? <Pencil size={17} /> : <CircleAlert size={17} />}</div><div className="app-dialog-copy"><h2 id="app-dialog-title">{dialog.title || 'Konfirmasi'}</h2>{dialog.message && <p>{dialog.message}</p>}</div>{isPrompt && <form onSubmit={(event) => { event.preventDefault(); close(true); }}><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder={dialog.placeholder || ''} maxLength={dialog.maxLength || 100} /><div className="app-dialog-actions"><button type="button" className="app-dialog-cancel" onClick={() => close(null)}>Batal</button><button type="submit" className="app-dialog-confirm">{dialog.confirmLabel || 'Simpan'}</button></div></form>}{!isPrompt && <div className="app-dialog-actions"><button type="button" className="app-dialog-cancel" onClick={() => close(false)}>Batal</button><button type="button" className="app-dialog-confirm" onClick={() => close(true)}>{dialog.confirmLabel || 'Lanjutkan'}</button></div>}</section></div>;
+  return <div className="app-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(isPrompt ? null : false); }}><section ref={dialogRef} className={`app-dialog ${dialog.destructive ? 'is-danger' : ''}`} role="dialog" aria-modal="true" aria-labelledby="app-dialog-title"><div className="app-dialog-icon">{dialog.destructive ? <Trash2 size={17} /> : isPrompt ? <Pencil size={17} /> : <CircleAlert size={17} />}</div><div className="app-dialog-copy"><h2 id="app-dialog-title">{dialog.title || 'Konfirmasi'}</h2>{dialog.message && <p>{dialog.message}</p>}</div>{isPrompt && <form onSubmit={(event) => { event.preventDefault(); close(true); }}><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder={dialog.placeholder || ''} maxLength={dialog.maxLength || 100} /><div className="app-dialog-actions"><button type="button" className="app-dialog-cancel" onClick={() => close(null)}>Batal</button><button type="submit" className="app-dialog-confirm">{dialog.confirmLabel || 'Simpan'}</button></div></form>}{!isPrompt && <div className="app-dialog-actions"><button type="button" className="app-dialog-cancel" onClick={() => close(false)}>Batal</button><button type="button" className="app-dialog-confirm" onClick={() => close(true)}>{dialog.confirmLabel || 'Lanjutkan'}</button></div>}</section></div>;
 }
 
 function Modal({ title, onClose, children, className = '' }) {
+  const modalRef = useRef(null);
+  useFocusReturn(true);
+  useFocusTrap(modalRef, true);
   useEffect(() => { const closeOnEscape = (event) => { if (event.key === 'Escape') onClose(); }; window.addEventListener('keydown', closeOnEscape); return () => window.removeEventListener('keydown', closeOnEscape); }, [onClose]);
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className={`modal ${className}`} role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title"><header><b id="workspace-modal-title">{title}</b><IconButton label="Tutup" onClick={onClose}><X size={16}/></IconButton></header>{children}</section></div>;
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={modalRef} className={`modal ${className}`} role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title"><header><b id="workspace-modal-title">{title}</b><IconButton label="Tutup" onClick={onClose}><X size={16}/></IconButton></header>{children}</section></div>;
 }
 
 function AdminAccessPanel({ users, setNotice, onRefresh }) {
@@ -3935,7 +3818,7 @@ function AdminPricingPanel({ setNotice }) {
   </section>;
 }
 
-function AdminWorkspace() {
+function LegacyAdminWorkspace() {
   const { user, refreshSession, setNotice, prefs, setPrefs } = useApp();
   const navigate = useNavigate();
   const adminTheme = useResolvedTheme(prefs.theme || 'system');
@@ -4085,7 +3968,5 @@ function AdminWorkspace() {
     </main>
   </div>;
 }
-
-function LoadingScreen() { return <div className="loading-screen"><LoaderCircle className="spin" size={20} /><span>Menyiapkan Laprakin...</span></div>; }
 
 createRoot(document.getElementById('root')).render(<BrowserRouter><App /></BrowserRouter>);

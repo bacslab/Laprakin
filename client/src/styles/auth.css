@@ -1,0 +1,9 @@
+@layer sections {
+  .auth-page {
+    color-scheme: light;
+  }
+
+  .auth-page.theme-dark {
+    color-scheme: dark;
+  }
+}

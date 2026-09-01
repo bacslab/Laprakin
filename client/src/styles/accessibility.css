@@ -1,0 +1,15 @@
+@layer utilities {
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--accent, #c2ff33) 82%, white 18%);
+    outline-offset: 3px;
+  }
+
+  .theme-dark :where(a, button, input, select, textarea, [tabindex]):focus-visible,
+  [data-theme="dark"] :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline-color: color-mix(in srgb, var(--accent, #c2ff33) 78%, white 22%);
+  }
+
+  .select-options [role="option"].active {
+    background: color-mix(in srgb, var(--accent, #c2ff33) 18%, var(--panel, #1f1f1e));
+  }
+}

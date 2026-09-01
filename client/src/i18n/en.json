@@ -1,0 +1,29 @@
+{
+  "common": {
+    "appName": "Laprakin",
+    "close": "Close",
+    "save": "Save",
+    "send": "Send",
+    "loading": "Preparing Laprakin..."
+  },
+  "auth": {
+    "login": "Log in",
+    "register": "Create account",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "welcome": "Continue the chats and reports you are working on."
+  },
+  "workspace": {
+    "chats": "Chats",
+    "documents": "Documents",
+    "configuration": "Chat configuration",
+    "newChat": "New chat",
+    "searchChats": "Search chats"
+  },
+  "accessibility": {
+    "closeNavigation": "Close navigation",
+    "closeDialog": "Close dialog",
+    "selectOption": "Choose an option"
+  }
+}

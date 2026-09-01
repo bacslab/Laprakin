@@ -1,0 +1,29 @@
+{
+  "common": {
+    "appName": "Laprakin",
+    "close": "Tutup",
+    "save": "Simpan",
+    "send": "Kirim",
+    "loading": "Menyiapkan Laprakin..."
+  },
+  "auth": {
+    "login": "Masuk",
+    "register": "Buat akun",
+    "email": "Email",
+    "password": "Kata sandi",
+    "forgotPassword": "Lupa kata sandi?",
+    "welcome": "Lanjutkan chat dan laprak yang sedang kamu kerjakan."
+  },
+  "workspace": {
+    "chats": "Chats",
+    "documents": "Dokumen",
+    "configuration": "Konfigurasi chat",
+    "newChat": "Chat baru",
+    "searchChats": "Cari chat"
+  },
+  "accessibility": {
+    "closeNavigation": "Tutup navigasi",
+    "closeDialog": "Tutup dialog",
+    "selectOption": "Pilih opsi"
+  }
+}
