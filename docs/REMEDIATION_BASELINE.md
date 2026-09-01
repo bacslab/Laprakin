@@ -120,6 +120,12 @@ baseline so a partial migration is not mistaken for a completed rewrite.
 | `node scripts/check-release-metadata.mjs` | PASS | Root/client/server all `21.0.6` |
 | `git diff --check` | PASS | No whitespace errors |
 
+One post-commit parallel run briefly timed out while starting the authorization
+test child process; the authorization test passed in isolation, the complete
+suite passed serially with 99/99, and a subsequent standard `npm test` rerun
+also passed 99/99. No application or test-source change was made for that
+environmental contention.
+
 Final measured inventory:
 
 | Area | Final |
