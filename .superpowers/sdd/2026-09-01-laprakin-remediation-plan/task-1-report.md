@@ -96,7 +96,7 @@ Admin operations passed: credits, restrictions and appeals, broadcasts, pricing,
 - Base before Task 1 commit: `bf0cae3deb2850222f74d80c2b99510b14ad4fbf`
 - Task 1 implementation commit: `91e0c4971b05fe07807890d6ba03eab20980ec3c`
 - Task 1 fix-round code commit: `9d551b3f7d598715df65bba083486c06fe37b184`
-- Task 1 fix-round report commit: `PENDING_REPORT_COMMIT`
+- Task 1 fix-round report commit: `6a84e7d67d2ecdf4c9f1d3e51ec80f97c37579ef`
 
 ## Fix round 1
 
@@ -176,6 +176,71 @@ Outputs:
 
 Workflow API passed: brief dipahami sekali, identitas tersimpan, dokumen preview memiliki quiz berbasis isi, dan download terkunci sampai nilai lulus.
 
+Admin operations passed: credits, restrictions and appeals, broadcasts, pricing, metadata-only telemetry, and realtime alerts.
+```
+
+## Takeover verification evidence
+
+Tanggal rerun: 2026-09-01
+
+Command:
+
+```bash
+node --test server/test/chat-revisions.test.mjs
+```
+
+Output:
+
+```text
+✔ edit keeps the source branch and replaces messages after it
+✔ regenerate reuses the source user content without duplicating it
+✔ revision rejects an assistant source and an empty edit
+✔ validateRevisionRequest normalizes mode and content rules
+✔ buildRevisionPlan increments revision number when revising an already revised user message
+✔ revision API replaces only the trailing branch and returns the canonical payload shape
+✔ revision API returns typed 4xx errors for invalid revision requests
+ℹ tests 7
+ℹ pass 7
+ℹ fail 0
+ℹ duration_ms 21902.4249
+```
+
+Command:
+
+```bash
+npm test
+```
+
+Output:
+
+```text
+ℹ tests 78
+ℹ pass 78
+ℹ fail 0
+ℹ duration_ms 26469.0665
+```
+
+Command:
+
+```bash
+npm run test:workflow-api
+```
+
+Output:
+
+```text
+Workflow API passed: brief dipahami sekali, identitas tersimpan, dokumen preview memiliki quiz berbasis isi, dan download terkunci sampai nilai lulus.
+```
+
+Command:
+
+```bash
+npm run test:admin-ops
+```
+
+Output:
+
+```text
 Admin operations passed: credits, restrictions and appeals, broadcasts, pricing, metadata-only telemetry, and realtime alerts.
 ```
 
