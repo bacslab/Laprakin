@@ -1,3 +1,9 @@
+## V39 - Revisi chat server-side tahap 1
+
+- Menambahkan kontrak domain revisi pesan chat di server untuk mode `edit` dan `regenerate`, termasuk validasi sumber pesan user dan nomor revisi berurutan.
+- Menambahkan endpoint aditif `POST /api/chat/sessions/:id/messages/:messageId/revise` yang mengembalikan payload percakapan kanonis yang sama ditambah metadata revisi.
+- Saat revisi berhasil, server mempertahankan cabang chat sampai pesan sumber lalu mengganti pesan setelahnya secara aman tanpa mengubah kontrak endpoint pesan chat yang sudah ada.
+
 ## V37 - Laprak Template, Admin Ops, and Production Private Beta
 
 - Added the default DOCX template contract for laprak export: cover preservation, dynamic cover fields, no body identity section, and contextual explanation after every image.

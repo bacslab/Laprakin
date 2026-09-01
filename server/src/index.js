@@ -23,6 +23,7 @@ import { EMAIL_LOGO_URL } from './emails/_components/email-layout.js';
 import { capitalizeInitial } from './emails/text.js';
 import { verifyProductionIntegrations } from './integrations.js';
 import { getAiReadiness, initializeAiModelRegistry, isAiConfigured } from './ai.js';
+import { buildRevisionPlan, RevisionError, validateRevisionRequest } from './chat-revisions.js';
 import {
   analyzeChatRequest,
   assessChatReadiness,
@@ -51,6 +52,7 @@ import {
   listVersions,
   observeDevice,
   publicUser,
+  persistChatExchange,
   refundCredit,
   refundLaprakCredit,
   reserveLaprakCredit,
@@ -356,6 +358,23 @@ const quizAttemptSchema = z.object({
 const supportMessageSchema = z.object({
   content: z.string().trim().min(1).max(900),
 });
+
+function revisionHttpError(error) {
+  if (!(error instanceof RevisionError)) return error;
+  if (error.code === 'MESSAGE_NOT_FOUND') {
+    return new HttpError(404, 'Pesan sumber tidak ditemukan.', 'CHAT_MESSAGE_NOT_FOUND');
+  }
+  if (error.code === 'USER_MESSAGE_REQUIRED') {
+    return new HttpError(409, 'Hanya pesan pengguna yang bisa direvisi.', 'USER_MESSAGE_REQUIRED');
+  }
+  if (error.code === 'CONTENT_REQUIRED') {
+    return new HttpError(422, 'Tulis perubahan yang kamu inginkan sebelum merevisi pesan ini.', 'CONTENT_REQUIRED');
+  }
+  if (error.code === 'MODE_INVALID') {
+    return new HttpError(400, 'Mode revisi tidak valid.', 'MODE_INVALID');
+  }
+  return new HttpError(400, 'Permintaan revisi tidak valid.', error.code || 'REVISION_INVALID');
+}
 
 // Checkout schema and all QRIS-only Midtrans logic live in payments.js. The
 // server only accepts SKU + quantity and computes the final order here.
@@ -3519,24 +3538,26 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     throw error;
   }
   const timestamp = now();
-  db.exec('BEGIN');
-  try {
-    const userMessageId = nanoid();
-    db.prepare(`INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at) VALUES (?, ?, ?, 'user', ?, ?, ?)`)
-      .run(userMessageId, session.id, req.user.id, input.content, JSON.stringify({ links, aiMode: input.aiMode }), timestamp);
-    db.prepare(`
-      UPDATE chat_attachments SET message_id = ?
-      WHERE session_id = ? AND owner_user_id = ? AND message_id IS NULL AND deleted_at IS NULL
-    `).run(userMessageId, session.id, req.user.id);
-    db.prepare(`INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at) VALUES (?, ?, ?, 'assistant', ?, ?, ?)`)
-      .run(nanoid(), session.id, req.user.id, assistant.text, JSON.stringify({ aiMode: input.aiMode, provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'), model: assistant.model, workflow: assistant.workflow || null }), timestamp);
-    db.prepare('UPDATE chat_sessions SET configuration_json = ?, updated_at = ? WHERE id = ?')
-      .run(effectiveSession.configuration_json, timestamp, session.id);
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
+  persistChatExchange({
+    sessionId: session.id,
+    ownerUserId: req.user.id,
+    userMessage: {
+      content: input.content,
+      meta: { links, aiMode: input.aiMode },
+      createdAt: timestamp,
+    },
+    assistantMessage: {
+      content: assistant.text,
+      meta: {
+        aiMode: input.aiMode,
+        provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+        model: assistant.model,
+        workflow: assistant.workflow || null,
+      },
+      createdAt: timestamp,
+    },
+    sessionConfigurationJson: effectiveSession.configuration_json,
+  });
   const workflow = chatWorkflow(effectiveSession, req.user);
   if (workflow.stage !== 'intake' && (!session.title || /^laprak baru$/i.test(session.title.trim()))) {
     const cfg = inferredContext.configuration;
@@ -3548,6 +3569,135 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   const messages = db.prepare('SELECT id, role, content, meta_json, created_at FROM chat_messages WHERE session_id = ? AND owner_user_id = ? ORDER BY created_at ASC').all(session.id, req.user.id).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) }));
   const refreshedSession = exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id));
   res.json({ session: refreshedSession, messages, attachments: listChatAttachments(session.id, req.user.id), workflow: chatWorkflow(refreshedSession, req.user) });
+}));
+
+app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requireCsrf, aiChatLimiter, asyncHandler(async (req, res) => {
+  const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
+  if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+
+  const input = validateRevisionRequest(req.body || {});
+  const userConfiguration = parseJson(session.configuration_json, {});
+  if (userConfiguration.allowExternalAi !== true) {
+    throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum memakai chat.', 'AI_CONSENT_REQUIRED');
+  }
+
+  const messages = listChatMessages(session.id, req.user.id);
+  let revisionPlan;
+  try {
+    revisionPlan = buildRevisionPlan(messages, req.params.messageId, input.mode, input.content);
+  } catch (error) {
+    throw revisionHttpError(error);
+  }
+
+  const sourceAiMode = String(revisionPlan.source.meta?.aiMode || 'basic');
+  const aiModes = aiModeAccessForUser(req.user.id);
+  if (!aiModes[sourceAiMode]?.available) {
+    const message = sourceAiMode === 'xtrathink'
+      ? 'Mode XtraThink hanya tersedia untuk subscription Max aktif.'
+      : 'Mode Thinking membutuhkan pembelian kredit Laprakin atau subscription Pro/Max aktif.';
+    throw new HttpError(403, message, 'AI_MODE_LOCKED');
+  }
+
+  const hadCreditReservation = Boolean(session.processing_credit_bucket && !session.processing_credit_refunded_at);
+  reserveLaprakCredit(req.user.id, session.id);
+
+  const retainedMessages = revisionPlan.retainedMessages;
+  const retainedMessageIds = new Set(retainedMessages.map((message) => message.id));
+  const priorUserMessages = retainedMessages
+    .filter((message) => message.role === 'user')
+    .slice(-40);
+  const retainedAttachments = db.prepare(`
+    SELECT * FROM chat_attachments
+    WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL
+    ORDER BY created_at DESC LIMIT 24
+  `).all(session.id, req.user.id).filter((attachment) => !attachment.message_id || retainedMessageIds.has(attachment.message_id));
+  const inferredContext = inferChatContext({
+    messages: [...priorUserMessages, { role: 'user', content: revisionPlan.userContent }],
+    configuration: userConfiguration,
+  });
+  const effectiveSession = {
+    ...session,
+    configuration_json: JSON.stringify(inferredContext.configuration),
+    configuration: inferredContext.configuration,
+  };
+  let assistant;
+  try {
+    assistant = isAiConfigured()
+      ? await answerWorkspaceChat({
+        session: effectiveSession,
+        user: req.user,
+        content: revisionPlan.userContent,
+        aiMode: sourceAiMode,
+        historyRowsOverride: [...retainedMessages, { role: 'user', content: revisionPlan.userContent }],
+        attachmentRowsOverride: retainedAttachments,
+      })
+      : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
+  } catch (error) {
+    if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
+    throw error;
+  }
+
+  const timestamp = now();
+  const links = Array.from(revisionPlan.userContent.matchAll(/https?:\/\/[^\s)]+/g)).map((match) => match[0]).slice(0, 8);
+  const revisionMeta = {
+    sourceMessageId: revisionPlan.source.id,
+    mode: input.mode,
+    revisionNumber: revisionPlan.revisionNumber,
+  };
+  persistChatExchange({
+    sessionId: session.id,
+    ownerUserId: req.user.id,
+    userMessage: {
+      content: revisionPlan.userContent,
+      meta: {
+        links,
+        aiMode: sourceAiMode,
+        revision: revisionMeta,
+      },
+      createdAt: timestamp,
+    },
+    assistantMessage: {
+      content: assistant.text,
+      meta: {
+        aiMode: sourceAiMode,
+        provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+        model: assistant.model,
+        workflow: assistant.workflow || null,
+        revision: revisionMeta,
+      },
+      createdAt: timestamp,
+    },
+    sessionConfigurationJson: effectiveSession.configuration_json,
+    sourceMessageId: revisionPlan.source.id,
+    sourceMessageMeta: {
+      revision: {
+        latestRevisionNumber: revisionPlan.revisionNumber,
+      },
+    },
+    deleteMessageIds: messages.slice(retainedMessages.length).map((message) => message.id),
+  });
+
+  let refreshed = refreshChatWorkflow(session.id, req.user);
+  const currentTitle = String(refreshed.title || '').trim();
+  const titleIsGeneric = /^(?:laprak baru|chat baru|untitled)$/i.test(String(session.title || '').trim())
+    || /^(?:laprak baru|chat baru|untitled)$/i.test(currentTitle)
+    || currentTitle === String(refreshed.generated_title || '').trim();
+  if (assistant.title && titleIsGeneric) {
+    db.prepare('UPDATE chat_sessions SET title = ?, generated_title = ?, updated_at = ? WHERE id = ? AND owner_user_id = ?')
+      .run(assistant.title, assistant.title, now(), refreshed.id, req.user.id);
+    refreshed = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(refreshed.id, req.user.id);
+  }
+
+  audit(req.user.id, 'ai.chat_revised', 'chat_session', session.id, {
+    mode: input.mode,
+    sourceMessageId: revisionPlan.source.id,
+    revisionNumber: revisionPlan.revisionNumber,
+    model: assistant.model,
+    provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+  });
+  return res.json(chatConversationPayload(refreshed, req.user, {
+    revision: revisionMeta,
+  }));
 }));
 
 app.post('/api/chat/sessions/:id/document', requireAuth, requireCsrf, asyncHandler(async (req, res) => {

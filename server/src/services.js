@@ -1319,12 +1319,7 @@ function recentChatContext(rows, characterLimit) {
   return selected.reverse();
 }
 
-async function chatAttachmentContext(sessionId, ownerUserId) {
-  const files = db.prepare(`
-    SELECT * FROM chat_attachments
-    WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL
-    ORDER BY created_at DESC LIMIT 12
-  `).all(sessionId, ownerUserId);
+async function buildChatAttachmentContext(files) {
   const textBlocks = [];
   const imageParts = [];
   let textCharacters = 0;
@@ -1350,6 +1345,109 @@ async function chatAttachmentContext(sessionId, ownerUserId) {
     } catch { /* format yang tidak dapat diekstrak tetap tersedia sebagai metadata */ }
   }
   return { files, text: textBlocks.join('\n\n'), imageParts };
+}
+
+async function chatAttachmentContext(sessionId, ownerUserId) {
+  const files = db.prepare(`
+    SELECT * FROM chat_attachments
+    WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL
+    ORDER BY created_at DESC LIMIT 12
+  `).all(sessionId, ownerUserId);
+  return buildChatAttachmentContext(files);
+}
+
+function mergeMessageMeta(baseMeta = {}, patchMeta = {}) {
+  const base = baseMeta && typeof baseMeta === 'object' ? baseMeta : {};
+  const patch = patchMeta && typeof patchMeta === 'object' ? patchMeta : {};
+  return {
+    ...base,
+    ...patch,
+    ...(base.revision || patch.revision ? {
+      revision: {
+        ...(base.revision && typeof base.revision === 'object' ? base.revision : {}),
+        ...(patch.revision && typeof patch.revision === 'object' ? patch.revision : {}),
+      },
+    } : {}),
+  };
+}
+
+export function persistChatExchange({
+  sessionId,
+  ownerUserId,
+  userMessage,
+  assistantMessage,
+  sessionConfigurationJson = null,
+  sourceMessageId = '',
+  sourceMessageMeta = null,
+  deleteMessageIds = [],
+}) {
+  const userMessageId = userMessage?.id || nanoid();
+  const assistantMessageId = assistantMessage?.id || nanoid();
+  const userCreatedAt = userMessage?.createdAt || now();
+  const assistantCreatedAt = assistantMessage?.createdAt || userCreatedAt;
+  const userMetaJson = JSON.stringify(userMessage?.meta || {});
+  const assistantMetaJson = JSON.stringify(assistantMessage?.meta || {});
+  const trimmedDeleteIds = Array.isArray(deleteMessageIds)
+    ? [...new Set(deleteMessageIds.filter((value) => typeof value === 'string' && value))]
+    : [];
+
+  db.exec('BEGIN');
+  try {
+    if (sourceMessageId && sourceMessageMeta) {
+      const sourceRow = db.prepare(`
+        SELECT meta_json FROM chat_messages
+        WHERE id = ? AND session_id = ? AND owner_user_id = ?
+      `).get(sourceMessageId, sessionId, ownerUserId);
+      const mergedMeta = mergeMessageMeta(parseJson(sourceRow?.meta_json, {}), sourceMessageMeta);
+      db.prepare(`
+        UPDATE chat_messages
+        SET meta_json = ?
+        WHERE id = ? AND session_id = ? AND owner_user_id = ?
+      `).run(JSON.stringify(mergedMeta), sourceMessageId, sessionId, ownerUserId);
+    }
+
+    if (trimmedDeleteIds.length) {
+      const placeholders = trimmedDeleteIds.map(() => '?').join(',');
+      db.prepare(`
+        UPDATE chat_attachments
+        SET deleted_at = COALESCE(deleted_at, ?)
+        WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL
+          AND message_id IN (${placeholders})
+      `).run(userCreatedAt, sessionId, ownerUserId, ...trimmedDeleteIds);
+      db.prepare(`
+        DELETE FROM chat_messages
+        WHERE session_id = ? AND owner_user_id = ?
+          AND id IN (${placeholders})
+      `).run(sessionId, ownerUserId, ...trimmedDeleteIds);
+    }
+
+    db.prepare(`
+      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+      VALUES (?, ?, ?, 'user', ?, ?, ?)
+    `).run(userMessageId, sessionId, ownerUserId, userMessage.content, userMetaJson, userCreatedAt);
+    db.prepare(`
+      UPDATE chat_attachments
+      SET message_id = ?
+      WHERE session_id = ? AND owner_user_id = ? AND message_id IS NULL AND deleted_at IS NULL
+    `).run(userMessageId, sessionId, ownerUserId);
+    db.prepare(`
+      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+      VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+    `).run(assistantMessageId, sessionId, ownerUserId, assistantMessage.content, assistantMetaJson, assistantCreatedAt);
+    if (sessionConfigurationJson !== null) {
+      db.prepare(`
+        UPDATE chat_sessions SET configuration_json = ?, updated_at = ? WHERE id = ?
+      `).run(sessionConfigurationJson, assistantCreatedAt, sessionId);
+    } else {
+      db.prepare('UPDATE chat_sessions SET updated_at = ? WHERE id = ?').run(assistantCreatedAt, sessionId);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+
+  return { userMessageId, assistantMessageId };
 }
 
 function localChatWorkPlan({ session, attachments, content }) {
@@ -1501,12 +1599,17 @@ export function isCodeOnlyChatRequest(content = '') {
     .test(String(content || ''));
 }
 
-export async function answerWorkspaceChat({ session, user, content, aiMode = 'basic' }) {
-  const historyRows = db.prepare(`
-    SELECT role, content FROM chat_messages
-    WHERE session_id = ? AND owner_user_id = ?
-    ORDER BY created_at DESC LIMIT 18
-  `).all(session.id, user.id).reverse();
+export async function answerWorkspaceChat({ session, user, content, aiMode = 'basic', historyRowsOverride = null, attachmentRowsOverride = null }) {
+  const historyRows = Array.isArray(historyRowsOverride)
+    ? historyRowsOverride.map((message) => ({
+      role: message.role,
+      content: String(message.content || ''),
+    }))
+    : db.prepare(`
+      SELECT role, content FROM chat_messages
+      WHERE session_id = ? AND owner_user_id = ?
+      ORDER BY created_at DESC LIMIT 18
+    `).all(session.id, user.id).reverse();
   if (
     historyRows.at(-1)?.role === 'user'
     && historyRows.at(-1)?.content?.trim() === String(content || '').trim()
@@ -1514,7 +1617,9 @@ export async function answerWorkspaceChat({ session, user, content, aiMode = 'ba
     historyRows.pop();
   }
   const history = recentChatContext(historyRows, config.aiContextCharacters);
-  const attachments = await chatAttachmentContext(session.id, user.id);
+  const attachments = Array.isArray(attachmentRowsOverride)
+    ? await buildChatAttachmentContext(attachmentRowsOverride)
+    : await chatAttachmentContext(session.id, user.id);
   const knownWorkspaceCourses = db.prepare(`
     SELECT DISTINCT course_group
     FROM chat_sessions
