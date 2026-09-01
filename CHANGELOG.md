@@ -1,4 +1,4 @@
-## V39 - Revisi chat server-side tahap 1
+## 21.0.1 - Revisi chat server-side tahap 1
 
 - Menambahkan kontrak domain revisi pesan chat di server untuk mode `edit` dan `regenerate`, termasuk validasi sumber pesan user dan nomor revisi berurutan.
 - Menambahkan endpoint aditif `POST /api/chat/sessions/:id/messages/:messageId/revise` yang mengembalikan payload percakapan kanonis yang sama ditambah metadata revisi.

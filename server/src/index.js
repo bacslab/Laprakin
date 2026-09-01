@@ -3575,7 +3575,12 @@ app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requi
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
 
-  const input = validateRevisionRequest(req.body || {});
+  let input;
+  try {
+    input = validateRevisionRequest(req.body || {});
+  } catch (error) {
+    throw revisionHttpError(error);
+  }
   const userConfiguration = parseJson(session.configuration_json, {});
   if (userConfiguration.allowExternalAi !== true) {
     throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum memakai chat.', 'AI_CONSENT_REQUIRED');

@@ -36,7 +36,8 @@ export function buildRevisionPlan(messages, sourceMessageId, mode, content = '')
   if (!userContent) throw new RevisionError('CONTENT_REQUIRED');
 
   const priorRevisionCount = Number(
-    source?.meta?.revision?.latestRevisionNumber
+    source?.meta?.revision?.revisionNumber
+    || source?.meta?.revision?.latestRevisionNumber
     || source?.meta?.latestRevisionNumber
     || source?.latestRevisionNumber
     || source?.revision_number
