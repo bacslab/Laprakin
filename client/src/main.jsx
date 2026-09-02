@@ -16,6 +16,7 @@ import { canonicalCourseLabel, courseAcronym, courseTokens, editDistance, normal
 import { formatBytes, formatCurrency, formatDate } from './lib/formatters';
 import { resolveTheme, useResolvedTheme } from './lib/theme';
 import { departments, programs } from './data';
+import { pricingFallback, pricingFeatures } from './data/pricing';
 import { BrandMark } from './components/BrandMark';
 import { Button } from './components/Button';
 import { CustomSelect } from './components/CustomSelect';
@@ -42,6 +43,7 @@ import { ChatSessionRow, SessionGroup } from './pages/Workspace/Sidebar/ChatSess
 import AccountPopover from './pages/Workspace/Sidebar/AccountPopover';
 import { AppDialog, Modal } from './components/Dialog';
 import AdminAccessPanel from './pages/Admin/AdminAccessPanel';
+import AdminPricingPanel from './pages/Admin/AdminPricingPanel';
 import { renderAsync as renderDocx } from 'docx-preview';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -161,15 +163,6 @@ class AppErrorBoundary extends Component {
       </div>
     </div>;
   }
-}
-const pricingFallback = {
-  free: { credits: 2, durationDays: 60, revisionsPerReport: 3, storageMb: 100, features: ['2 credit awal', '3 revisi per laprak', '100 MB penyimpanan'] },
-  single: { unitPrice: 3900, minQuantity: 1, maxQuantity: 20, credits: 1, durationDays: 180, revisionsPerReport: 5, storageMb: 500, features: ['Tanpa subscription', '5 revisi per laprak', 'Aktif hingga 180 hari'] },
-  monthly: { price: 29900, credits: 12, durationDays: 30, revisionsPerReport: 5, storageMb: 1024, storageGb: 1, features: ['12 credit / 30 hari', 'Mode Thinking terbuka', '1 GB penyimpanan'] },
-  pro: { price: 45900, credits: 20, durationDays: 30, revisionsPerReport: 15, storageMb: 5120, storageGb: 5, features: ['20 credit / 30 hari', 'Mode XtraThink terbuka', '5 GB penyimpanan'] },
-};
-function pricingFeatures(plan, fallback) {
-  return Array.isArray(plan?.features) ? plan.features : fallback;
 }
 const defaultPrefs = {
   theme: 'system', language: 'id', compact: true, reducedMotion: false, enterToSend: true,
@@ -3255,76 +3248,6 @@ function AdminBroadcastPanel({ users, setNotice }) {
   };
   const invalid = form.subject.trim().length < 3 || form.heading.trim().length < 2 || form.body.trim().length < 10 || (form.audience === 'selected' && !form.userIds.length);
   return <section className="admin-content"><div className="admin-grid admin-broadcast-grid"><section className="admin-panel admin-broadcast-form"><div className="admin-panel-head"><h2>Email user</h2><small>Promosi, update, atau maintenance</small></div><label htmlFor="admin-broadcast-audience">Target<CustomSelect id="admin-broadcast-audience" ariaLabel="Target email" value={form.audience} onChange={(audience) => setForm((value) => ({ ...value, audience }))} options={[{value:'all',label:'Semua user terverifikasi'},{value:'paid',label:'Semua user paid'},{value:'selected',label:'User terpilih'}]}/></label>{form.audience === 'selected' && <div className="admin-recipient-list">{users.map((item) => <label key={item.id}><input aria-label={`Pilih penerima ${item.email}`} type="checkbox" checked={form.userIds.includes(item.id)} onChange={() => toggleRecipient(item.id)}/><span>{item.email}</span></label>)}</div>}<label>Subjek<input aria-label="Subjek email" maxLength="140" value={form.subject} onChange={(event) => setForm((value) => ({ ...value, subject: event.target.value }))}/></label><label>Judul email<input aria-label="Judul email" maxLength="140" value={form.heading} onChange={(event) => setForm((value) => ({ ...value, heading: event.target.value }))}/></label><label>Isi<textarea aria-label="Isi email" maxLength="6000" value={form.body} onChange={(event) => setForm((value) => ({ ...value, body: event.target.value }))}/></label><div className="admin-form-row"><label>Label tombol<input aria-label="Label tombol email" maxLength="50" value={form.ctaLabel} onChange={(event) => setForm((value) => ({ ...value, ctaLabel: event.target.value }))}/></label><label>URL tombol<input aria-label="URL tombol email" type="url" value={form.ctaUrl} onChange={(event) => setForm((value) => ({ ...value, ctaUrl: event.target.value }))}/></label></div><label>Gambar<input aria-label="Gambar email" type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadImage}/></label><div className="admin-color-row"><label>Aksen<input aria-label="Warna aksen email" type="color" value={form.accentColor} onChange={(event) => setForm((value) => ({ ...value, accentColor: event.target.value }))}/></label><label>Latar<input aria-label="Warna latar email" type="color" value={form.backgroundColor} onChange={(event) => setForm((value) => ({ ...value, backgroundColor: event.target.value }))}/></label><label>Teks<input aria-label="Warna teks email" type="color" value={form.textColor} onChange={(event) => setForm((value) => ({ ...value, textColor: event.target.value }))}/></label></div><Button onClick={sendBroadcast} disabled={busy || invalid}><Send size={14}/>Kirim email</Button></section><div><section className="admin-email-preview" style={{background:form.backgroundColor,color:form.textColor}}>{form.imageUrl && <img src={form.imageUrl} alt="Preview email"/>}<h2>{form.heading || 'Judul email'}</h2><p>{form.body || 'Isi email akan tampil di sini.'}</p>{form.ctaLabel && <span style={{background:form.accentColor,color:form.textColor}}>{form.ctaLabel}</span>}</section><section className="admin-panel"><div className="admin-panel-head"><h2>Riwayat</h2><small>{history.length} email</small></div><div className="admin-list">{history.slice(0,20).map((item) => <article key={item.id}><div><b>{item.subject}</b><small>{item.audience} · {formatDate(item.createdAt)}</small></div><span>{item.deliveredCount}/{item.recipientCount}</span></article>)}</div></section></div></div></section>;
-}
-
-function AdminPricingPanel({ setNotice }) {
-  const [products, setProducts] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const loadPricing = useCallback(() => api('/admin/pricing').then((data) => {
-    const createProduct = (sku, label, plan, fallback, price) => ({
-      sku,
-      label,
-      unitPriceIdr: price,
-      discountPercent: plan?.discountPercent || 0,
-      discountExpiresAt: plan?.discountExpiresAt || '',
-      credits: plan?.credits ?? fallback.credits,
-      durationDays: plan?.durationDays ?? fallback.durationDays,
-      revisionsPerReport: plan?.revisionsPerReport ?? fallback.revisionsPerReport,
-      storageMb: plan?.storageMb ?? fallback.storageMb,
-      featuresText: pricingFeatures(plan, fallback.features).join('\n'),
-    });
-    setProducts([
-      createProduct('free', 'Free', data.free, pricingFallback.free, 0),
-      createProduct('credit', 'Satuan', data.single, pricingFallback.single, data.single?.originalPrice || data.single?.unitPrice || 3900),
-      createProduct('monthly', 'Pro', data.monthly, pricingFallback.monthly, data.monthly?.originalPrice || data.monthly?.price || 29900),
-      createProduct('pro', 'Max', data.pro, pricingFallback.pro, data.pro?.originalPrice || data.pro?.price || 45900),
-    ]);
-  }).catch((error) => setNotice(error.message)), [setNotice]);
-  useEffect(() => { loadPricing(); }, [loadPricing]);
-  const update = (sku, patch) => setProducts((items) => items.map((item) => item.sku === sku ? { ...item, ...patch } : item));
-  const save = async () => {
-    setBusy(true);
-    try {
-      await api('/admin/pricing', {
-        method: 'PUT',
-        body: {
-          products: products.map((product) => ({
-            sku: product.sku,
-            unitPriceIdr: Number(product.unitPriceIdr),
-            discountPercent: product.sku === 'free' ? 0 : Number(product.discountPercent),
-            discountExpiresAt: product.sku === 'free' ? '' : product.discountExpiresAt,
-            credits: Number(product.credits),
-            durationDays: Number(product.durationDays),
-            revisionsPerReport: Number(product.revisionsPerReport),
-            storageMb: Number(product.storageMb),
-            features: product.featuresText.split('\n').map((item) => item.trim()).filter(Boolean),
-          })),
-        },
-      });
-      await loadPricing(); setNotice('Benefit, harga, dan diskon berhasil diperbarui.');
-    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
-  };
-  return <section className="admin-content">
-    <div className="admin-panel admin-wide">
-      <div className="admin-panel-head"><h2>Plan dan benefit</h2><small>Nilai ini dipakai langsung oleh pricing, checkout, credit, revisi, dan penyimpanan.</small></div>
-      <div className="admin-pricing-grid">
-        {products.map((product) => <article key={product.sku}>
-          <h3>{product.label}</h3>
-          <div className="admin-pricing-fields">
-             <label>Harga rupiah<input aria-label={`${product.label} harga rupiah`} type="number" min={product.sku === 'free' ? 0 : 1000} max="10000000" disabled={product.sku === 'free'} value={product.unitPriceIdr} onChange={(event) => update(product.sku, { unitPriceIdr: event.target.value })}/></label>
-             <label>Jumlah credit<input aria-label={`${product.label} jumlah credit`} type="number" min="1" max="1000" value={product.credits} onChange={(event) => update(product.sku, { credits: event.target.value })}/></label>
-             <label>Masa aktif (hari)<input aria-label={`${product.label} masa aktif`} type="number" min="1" max="3650" value={product.durationDays} onChange={(event) => update(product.sku, { durationDays: event.target.value })}/></label>
-             <label>Revisi per laprak<input aria-label={`${product.label} revisi per laprak`} type="number" min="0" max="100" value={product.revisionsPerReport} onChange={(event) => update(product.sku, { revisionsPerReport: event.target.value })}/></label>
-             <label>Penyimpanan (MB)<input aria-label={`${product.label} penyimpanan megabyte`} type="number" min="1" max="102400" value={product.storageMb} onChange={(event) => update(product.sku, { storageMb: event.target.value })}/></label>
-             {product.sku !== 'free' && <label>Diskon persen<input aria-label={`${product.label} diskon persen`} type="number" min="0" max="90" value={product.discountPercent} onChange={(event) => update(product.sku, { discountPercent: event.target.value })}/></label>}
-             {product.sku !== 'free' && <label>Diskon berakhir<input aria-label={`${product.label} diskon berakhir`} type="datetime-local" value={product.discountExpiresAt ? product.discountExpiresAt.slice(0,16) : ''} onChange={(event) => update(product.sku, { discountExpiresAt: event.target.value })}/></label>}
-          </div>
-           <label>Daftar fitur <span>Satu fitur per baris</span><textarea aria-label={`${product.label} daftar fitur`} rows="4" maxLength="1200" value={product.featuresText} onChange={(event) => update(product.sku, { featuresText: event.target.value })}/></label>
-        </article>)}
-      </div>
-      <Button onClick={save} disabled={busy || products.length !== 4}><Save size={14}/>Simpan plan</Button>
-    </div>
-  </section>;
 }
 
 function LegacyAdminWorkspace() {
