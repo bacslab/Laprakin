@@ -27,6 +27,7 @@ import './styles/accessibility.css';
 import './styles/auth.css';
 import './styles/workspace.css';
 import './styles/admin.css';
+import './styles/pricing.css';
 import LoadingScreen from './components/LoadingScreen';
 import { loadPage } from './lib/load-page';
 import { AppContext, useApp } from './state/ui-context';

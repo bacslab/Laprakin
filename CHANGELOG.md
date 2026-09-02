@@ -9,6 +9,7 @@
 - Memigrasikan halaman Billing beserta katalog plan, checkout, dan status pembayaran ke translation key Indonesia/Inggris.
 - Memindahkan aturan utama Auth yang viewport-locked ke stylesheet section terpisah dengan contract test, sambil mempertahankan responsive behavior.
 - Memindahkan override khusus Auth ke layer stylesheet terpisah dan menurunkan budget compatibility `!important` secara terukur.
+- Memindahkan aturan aktif public Pricing dan standalone Billing ke `client/src/styles/pricing.css` dengan breakpoint responsive dan contract test.
 
 ## 21.0.6 - 2026-09-02
 

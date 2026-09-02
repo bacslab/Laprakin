@@ -2903,7 +2903,8 @@ body[data-laprakin-theme="dark"] .google-button { background:#2a2a28; color:#f2e
 .workspace .empty-chat .composer { min-height:86px!important; }
 .workspace .empty-chat .composer textarea { min-height:42px!important; }
 
-/* Pricing is intentionally plan-only: no brand, profile, summary, cart clutter or transaction history. */
+/* Pricing section moved to client/src/styles/pricing.css. */
+/*
 .billing-portal.pricing-only { min-height:100dvh; display:block; background:var(--billing-bg); }
 .billing-portal.pricing-only .pricing-only-nav { position:fixed; inset:0 0 auto 0; z-index:4; height:56px; display:flex; align-items:center; padding:0 24px; border-bottom:0; background:transparent; }
 .billing-portal.pricing-only .pricing-only-nav .billing-back { width:34px; height:34px; display:grid; place-items:center; border:0; border-radius:8px; background:transparent; color:var(--billing-text); }
@@ -2953,6 +2954,7 @@ body[data-laprakin-theme="dark"] .google-button { background:#2a2a28; color:#f2e
 }
 .billing-inline-error a:hover,
 .pricing-compact-error a:hover { background:color-mix(in srgb, currentColor 9%, transparent); }
+*/
 
 /* Transaction history lives in Settings > Billing. */
 .billing-settings-history-pane { display:grid; gap:20px; }
@@ -5426,7 +5428,8 @@ body { margin:0; overflow-x:hidden; }
 }
 
 
-/* V35 — Single compact pricing path. Public, workspace, and legacy billing links all resolve here. */
+/* Pricing section moved to client/src/styles/pricing.css. */
+/*
 .pricing-compact-page {
   --pricing-bg:#fbfaf8;
   --pricing-surface:#ffffff;
@@ -5606,6 +5609,7 @@ body { margin:0; overflow-x:hidden; }
   .pricing-compact-checkout, .pricing-compact-status { align-items:stretch; flex-direction:column; }
   .pricing-compact-checkout .button { width:100%; }
 }
+*/
 
 /* V37 — Claude-like centered composer */
 .workspace .composer {

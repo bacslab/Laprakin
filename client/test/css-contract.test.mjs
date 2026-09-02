@@ -37,3 +37,13 @@ test('auth stylesheet owns the viewport-locked authentication section', () => {
   assert.match(css, /\.auth-submit/);
   assert.match(css, /@media\(max-height: 720px\)/);
 });
+
+test('pricing stylesheet owns public and standalone pricing sections', () => {
+  const css = readFileSync('client/src/styles/pricing.css', 'utf8');
+
+  assert.match(css, /@layer\s+sections/);
+  assert.match(css, /\.pricing-compact-page/);
+  assert.match(css, /\.pricing-compact-grid/);
+  assert.match(css, /\.billing-portal\.pricing-only/);
+  assert.match(css, /@media \(max-width:620px\)/);
+});

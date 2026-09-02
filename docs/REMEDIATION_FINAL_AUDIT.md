@@ -24,7 +24,7 @@ passing tests.
 | Application content moderation | Complete for current scope | Input/output policy, stable decision codes, and unsafe document-source normalization are covered by server tests. |
 | Error tracking and status surface | Foundation complete | Structured redacted logs, DSN-gated Sentry adapter, and `/api/status` exist; production DSN/alert routing still requires deployment configuration. |
 | CSS token/layer foundation | Complete | Token, layer, and landing ownership contracts pass. |
-| CSS section migration and `!important` target | Incomplete | The viewport-locked Auth section now has an owned `styles/auth.css` boundary and contract; the compatibility stylesheet remains large and above the target budget, with Workspace/Admin migration and all required visual breakpoints still remaining. |
+| CSS section migration and `!important` target | Incomplete | The viewport-locked Auth and public Pricing/standalone Billing sections now have owned `styles/auth.css` and `styles/pricing.css` boundaries with contracts; the compatibility stylesheet remains large and above the target budget, with Workspace/Admin migration and all required visual breakpoints still remaining. |
 | Client modularization | Incomplete | Domain providers, utilities, leaves, workspace helpers, and page boundaries exist; Admin orchestration, Workspace orchestration, and ChatSurface are extracted/lazy, `main.jsx` is down to 294 lines, and every client JSX module passes the 500-line contract. Full domain/reducer ownership migration remains. |
 | Workspace state split | Foundation complete | Chat, document, and UI provider contracts plus state boundary tests pass; full reducer/page ownership migration remains. |
 | True progressive AI streaming | Complete for current provider scope | Provider relay emits deltas and heartbeats with cancellation, retries before the first delta, progressive output moderation, canonical persistence, and a tested JSON fallback. |
@@ -42,7 +42,7 @@ passing tests.
 ## Verification evidence
 
 - Server suite: 107 passed, 0 failed.
-- Client contract suite: 37 passed, 0 failed.
+- Client contract suite: 38 passed, 0 failed.
 - Clean-data E2E: passed for auth, profile, evidence, timeline, quality gate,
   template DOCX, restore, and verified password changes.
 - Workflow API and admin operations checks: passed.
