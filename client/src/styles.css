@@ -1585,8 +1585,6 @@ body { overflow-x:hidden; }
 .cms-media-grid-expanded { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
 .cms-media-card label { display:grid; gap:4px; color:var(--admin-muted); font-size:.58rem; font-weight:800; }
 .cms-media-card video { width:100%; height:100%; object-fit:cover; }
-.admin-loading-state { min-height:100dvh; display:grid; place-content:center; justify-items:center; gap:9px; padding:24px; background:var(--admin-bg); color:var(--admin-text); text-align:center; }
-.admin-loading-state span { max-width:360px; color:var(--admin-muted); font-size:.66rem; line-height:1.5; }
 
 @media(max-width:900px) {
   .admin-workspace { grid-template-columns:72px minmax(0,1fr) !important; }

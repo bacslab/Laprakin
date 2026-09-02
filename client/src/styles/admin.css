@@ -37,4 +37,18 @@
   .admin-mfa-form { display: grid; gap: 8px; }
   .admin-mfa-secret { padding: 14px; border-radius: 12px; background: color-mix(in srgb, var(--accent, #c2ff33) 14%, transparent); }
   .admin-mfa-secret small { color: var(--workspace-muted, #666); }
+
+  .admin-loading-state {
+    min-height: 100dvh;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 9px;
+    padding: 24px;
+    background: var(--admin-bg, var(--workspace-bg, #f5f5f2));
+    color: var(--admin-text, var(--workspace-text, #1f1f1e));
+    text-align: center;
+  }
+
+  .admin-loading-state span { max-width: 360px; color: var(--admin-muted, var(--workspace-muted, #666)); font-size: .66rem; line-height: 1.5; }
 }

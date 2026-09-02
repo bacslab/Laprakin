@@ -47,3 +47,13 @@ test('pricing stylesheet owns public and standalone pricing sections', () => {
   assert.match(css, /\.billing-portal\.pricing-only/);
   assert.match(css, /@media \(max-width:620px\)/);
 });
+
+test('admin stylesheet owns the admin loading state', () => {
+  const adminCss = readFileSync('client/src/styles/admin.css', 'utf8');
+  const compatibilityCss = readFileSync('client/src/styles.css', 'utf8');
+
+  assert.match(adminCss, /@layer\s+sections/);
+  assert.match(adminCss, /\.admin-loading-state\s*\{/);
+  assert.match(adminCss, /\.admin-loading-state span/);
+  assert.doesNotMatch(compatibilityCss, /\.admin-loading-state\s*\{/);
+});
