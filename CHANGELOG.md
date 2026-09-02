@@ -17,6 +17,7 @@
 - Memigrasikan panel Settings untuk referral, billing, tema, dan warna aksen ke translation key Indonesia/Inggris.
 - Memigrasikan navigasi Settings serta preferensi umum, notifikasi, dan personalisasi ke translation key Indonesia/Inggris.
 - Memigrasikan kontrol data, penyimpanan, safety, keamanan/login, chat arsip, profil akademik, dan keyboard Settings ke translation key Indonesia/Inggris.
+- Memigrasikan navigasi shell Workspace, panel konfigurasi, notice alur chat, dan dialog project ke translation key Indonesia/Inggris.
 
 ## 21.0.6 - 2026-09-02
 

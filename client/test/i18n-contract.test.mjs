@@ -20,6 +20,8 @@ const [id, en, source, landingSource, statusSource, pricingSource, billingSource
   readFile(new URL('../src/pages/Workspace/SettingsModal.jsx', import.meta.url), 'utf8'),
 ]);
 const runtimeSource = await readFile(new URL('../src/i18n/I18nRuntime.jsx', import.meta.url), 'utf8');
+const workspaceShellSource = await readFile(new URL('../src/pages/Workspace/LegacyWorkspaceView.jsx', import.meta.url), 'utf8');
+const workspaceControllerSource = await readFile(new URL('../src/pages/Workspace/useLegacyWorkspaceController.js', import.meta.url), 'utf8');
 
 function keys(value, prefix = '') {
   return Object.entries(value).flatMap(([key, nested]) => {
@@ -119,6 +121,17 @@ test('workspace settings referral, billing, and appearance surfaces consume keye
   assert.match(settingsSource, /workspace\.settings\.keyboard\.enterToSend/);
   assert.doesNotMatch(settingsSource, /Kode referralmu|Cara bonus dihitung|Warna aksen workspace|Ikuti sistem/);
   assert.doesNotMatch(settingsSource, /Akun sedang mendapat alert|Google terhubung|Belum ada chat diarsipkan|Nama lengkap/);
+});
+
+test('workspace shell navigation and configuration consume keyed locale copy', () => {
+  assert.match(workspaceShellSource, /workspace\.shell\.sidebarOpen/);
+  assert.match(workspaceShellSource, /workspace\.shell\.chatConfiguration/);
+  assert.match(workspaceShellSource, /workspace\.shell\.requiredContext/);
+  assert.match(workspaceShellSource, /workspace\.shell\.saveAndStart/);
+  assert.doesNotMatch(workspaceShellSource, /Minimalkan sidebar|Cari chat terbaru|Konteks wajib diisi|Simpan & mulai|Tutup navigasi/);
+  assert.match(workspaceControllerSource, /workspace\.notices\.quizPassed/);
+  assert.match(workspaceControllerSource, /workspace\.dialogs\.newProjectTitle/);
+  assert.doesNotMatch(workspaceControllerSource, /Chat disematkan|Project dibuat|DOCX siap diunduh|Pulihkan versi dokumen/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {

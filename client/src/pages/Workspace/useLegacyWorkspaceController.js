@@ -6,6 +6,7 @@ import { courseTokens, normalizedCourseKey } from '../../lib/academic';
 import { inferPendingAttachmentKind } from '../../lib/attachments';
 import { useResolvedTheme } from '../../lib/theme';
 import { useApp } from '../../state/ui-context';
+import { useI18n } from '../../i18n';
 import {
   canonicalCourseLabel, clipboardImageFiles, courseLabelsMatch, defaultChatConfig, mergeFiles,
   preferredCourseLabel, resolveAccent, takeLandingDraft,
@@ -13,6 +14,7 @@ import {
 
 export function useLegacyWorkspaceController() {
   const { user, wallet, refreshSession, setNotice, prefs, setPrefs, showDialog } = useApp();
+  const { t } = useI18n();
   const resolvedTheme = useResolvedTheme(prefs.theme || 'system');
   const location = useLocation(); const navigate = useNavigate(); const uploadRef = useRef(null);
   const [sessions, setSessions] = useState([]); const [active, setActive] = useState(null); const [messages, setMessages] = useState([]); const [attachments, setAttachments] = useState([]); const [documentState, setDocumentState] = useState(null); const [workflow, setWorkflow] = useState(null); const [activeJob, setActiveJob] = useState(null);
@@ -89,8 +91,8 @@ export function useLegacyWorkspaceController() {
     };
   };
   const createDefaultConfig = () => ({ ...defaultChatConfig, configuration: writingPrefsConfig(defaultChatConfig.configuration) });
-  const sessionPayload = (base) => ({ ...base, departmentKey: user.departmentKey || '', studyProgramKey: user.studyProgramKey || '', structureMode: base.structureMode || 'guided', courseGroup: base.courseGroup || base.configuration?.courseName || 'Belum dikelompokkan' });
-  const hydrate = (data) => { setActive(data.session); if (data.session?.id) localStorage.setItem('laprakin-active-chat-id', data.session.id); setMessages(data.messages || []); setAttachments(data.attachments || []); setWorkflow(data.workflow || null); const current = data.session.configuration || {}; setConfig({ title: data.session.title || 'Laprak baru', structureMode: data.session.structure_mode || 'guided', configuration: { ...defaultChatConfig.configuration, ...current } }); };
+  const sessionPayload = (base) => ({ ...base, departmentKey: user.departmentKey || '', studyProgramKey: user.studyProgramKey || '', structureMode: base.structureMode || 'guided', courseGroup: base.courseGroup || base.configuration?.courseName || t('workspace.defaults.ungrouped') });
+  const hydrate = (data) => { setActive(data.session); if (data.session?.id) localStorage.setItem('laprakin-active-chat-id', data.session.id); setMessages(data.messages || []); setAttachments(data.attachments || []); setWorkflow(data.workflow || null); const current = data.session.configuration || {}; setConfig({ title: data.session.title || t('workspace.defaults.laprak'), structureMode: data.session.structure_mode || 'guided', configuration: { ...defaultChatConfig.configuration, ...current } }); };
   const loadSessions = async () => {
     try {
       const data = await api('/chat/sessions');
@@ -109,11 +111,11 @@ export function useLegacyWorkspaceController() {
   const appendAssistantMessage = (content) => setMessages((items) => [...items, {
     id: `local-assistant-${crypto.randomUUID()}`,
     role: 'assistant',
-    content: String(content || 'Permintaan belum dapat diproses. Coba jelaskan kembali perubahan yang kamu inginkan.'),
+    content: String(content || t('workspace.defaults.startPrompt')),
     meta: { kind: 'local_conversation_feedback' },
     created_at: new Date().toISOString(),
   }]);
-  const groupLabel = (item) => canonicalCourseLabel(item.course_group || item.courseGroup || item.configuration?.courseName || 'Belum dikelompokkan');
+  const groupLabel = (item) => canonicalCourseLabel(item.course_group || item.courseGroup || item.configuration?.courseName || t('workspace.defaults.ungrouped'));
   const groupsFromSessions = (items) => {
     const groups = [];
     [...items]
@@ -136,9 +138,9 @@ export function useLegacyWorkspaceController() {
   const visibleRecentSessions = useMemo(() => {
     const query = recentSearchQuery.trim().toLocaleLowerCase();
     if (!query) return orderedSessions;
-    return orderedSessions.filter((item) => `${item.title || 'Chat baru'} ${groupLabel(item)}`.toLocaleLowerCase().includes(query));
+    return orderedSessions.filter((item) => `${item.title || t('workspace.defaults.chat')} ${groupLabel(item)}`.toLocaleLowerCase().includes(query));
   }, [orderedSessions, recentSearchQuery]);
-  const sessionFolders = useMemo(() => Object.keys(groupsFromSessions(sessions)).filter((folder) => folder && folder !== 'Belum dikelompokkan'), [sessions]);
+  const sessionFolders = useMemo(() => Object.keys(groupsFromSessions(sessions)).filter((folder) => folder && folder !== t('workspace.defaults.ungrouped')), [sessions, t]);
   const persistOrder = async (next) => {
     setSessions(next);
     try { await api('/chat/sessions/reorder', { method: 'POST', body: { items: next.map((item, index) => ({ id: item.id, courseGroup: groupLabel(item), sortPosition: index })) } }); } catch (err) { setNotice(err.message); await loadSessions(); }
@@ -155,7 +157,7 @@ export function useLegacyWorkspaceController() {
     try {
       const data = await api(`/chat/sessions/${session.id}/pin`, { method: 'POST', body: { pinned } });
       setSessions((items) => items.map((item) => item.id === session.id ? data.session : item));
-      setNotice(pinned ? 'Chat disematkan.' : 'Chat dilepas dari sematan.');
+      setNotice(t(pinned ? 'workspace.notices.pinnedChat' : 'workspace.notices.unpinnedChat'));
     } catch (err) { setNotice(err.message); }
   };
   const setProjectPinned = async (project, pinned) => {
@@ -168,7 +170,7 @@ export function useLegacyWorkspaceController() {
       setProjectPins((items) => pinned
         ? [...items.filter((item) => item.projectKey !== projectKey), { projectKey, projectName: project.name }]
         : items.filter((item) => item.projectKey !== projectKey));
-      setNotice(pinned ? 'Project disematkan.' : 'Project dilepas dari sematan.');
+      setNotice(t(pinned ? 'workspace.notices.pinnedProject' : 'workspace.notices.unpinnedProject'));
     } catch (err) { setNotice(err.message); }
   };
   const archiveSession = async (session) => {
@@ -176,7 +178,7 @@ export function useLegacyWorkspaceController() {
       await api(`/chat/sessions/${session.id}/archive`, { method: 'POST', body: {} });
       setSessions((items) => items.filter((item) => item.id !== session.id));
       if (active?.id === session.id) { localStorage.removeItem('laprakin-active-chat-id'); setActive(null); setMessages([]); setAttachments([]); setDocumentState(null); setWorkflow(null); setActiveJob(null); setEditingMessageId(null); setInput(''); }
-      setNotice('Chat diarsipkan.');
+      setNotice(t('workspace.notices.archivedChat'));
     } catch (err) { setNotice(err.message); }
   };
   const deleteSession = async (session) => {
@@ -184,7 +186,7 @@ export function useLegacyWorkspaceController() {
       await api(`/chat/sessions/${session.id}`, { method: 'DELETE' });
       setSessions((items) => items.filter((item) => item.id !== session.id));
       if (active?.id === session.id) { localStorage.removeItem('laprakin-active-chat-id'); setActive(null); setMessages([]); setAttachments([]); setDocumentState(null); setWorkflow(null); setActiveJob(null); setEditingMessageId(null); setInput(''); }
-      setNotice('Chat dihapus permanen.');
+      setNotice(t('workspace.notices.deletedChat'));
     } catch (err) { setNotice(err.message); }
   };
   useEffect(() => { loadSessions(); loadDocuments(); loadProjectPins(); loadBillingPlan(); loadAiModes(); }, []);
@@ -263,7 +265,7 @@ export function useLegacyWorkspaceController() {
     const courseName = String(config.configuration.courseName || '').trim();
     const moduleTitle = String(config.configuration.moduleTitle || '').trim();
     if (!courseName || !moduleTitle) {
-      setNotice('Isi mata kuliah dan modul atau materi sebelum memulai chat.');
+      setNotice(t('workspace.notices.missingConfiguration'));
       return;
     }
     setBusy(true);
@@ -283,7 +285,7 @@ export function useLegacyWorkspaceController() {
       const queued = pendingConfigRequest;
       setPendingConfigRequest(null);
       setRightOpen(false);
-      setNotice('Konfigurasi chat disimpan.');
+      setNotice(t('workspace.notices.savedConfiguration'));
       if (queued?.session?.id === data.session.id) {
         const next = { ...queued, session: data.session };
         await dispatchChatMessage(next);
@@ -301,15 +303,15 @@ export function useLegacyWorkspaceController() {
       if (files.length) current = await uploadFiles(current, files, kind, false);
       const currentConfiguration = current.configuration || config.configuration || {};
       const syncedConfig = {
-        title: current.title || config.title || 'Laprak baru',
+        title: current.title || config.title || t('workspace.defaults.laprak'),
         structureMode: current.structure_mode || current.structureMode || config.structureMode || 'guided',
         configuration: writingPrefsConfig(currentConfiguration),
-        courseGroup: currentConfiguration.courseName || current.course_group || 'Belum dikelompokkan',
+        courseGroup: currentConfiguration.courseName || current.course_group || t('workspace.defaults.ungrouped'),
       };
       const synced = await api(`/chat/sessions/${current.id}`, { method: 'PUT', body: sessionPayload(syncedConfig) });
       current = synced.session;
       setActive(synced.session);
-      setConfig({ title: synced.session.title || 'Laprak baru', structureMode: synced.session.structure_mode || 'guided', configuration: { ...defaultChatConfig.configuration, ...(synced.session.configuration || {}) } });
+      setConfig({ title: synced.session.title || t('workspace.defaults.laprak'), structureMode: synced.session.structure_mode || 'guided', configuration: { ...defaultChatConfig.configuration, ...(synced.session.configuration || {}) } });
       setSessions((old) => old.map((item) => item.id === synced.session.id ? synced.session : item));
       streamAssistantId = `local-assistant-${crypto.randomUUID()}`;
       setMessages((items) => [...items, {
@@ -374,7 +376,7 @@ export function useLegacyWorkspaceController() {
       setSessions((old) => old.map((item) => item.id === data.session.id ? data.session : item));
       setInput('');
       setEditingMessageId(null);
-      setNotice(mode === 'regenerate' ? 'Jawaban AI dibuat ulang.' : 'Pesan dan jawaban AI diperbarui.');
+      setNotice(t(mode === 'regenerate' ? 'workspace.notices.regenerated' : 'workspace.notices.revised'));
       return data;
     } catch (error) {
       setNotice(error.message);
@@ -456,7 +458,7 @@ export function useLegacyWorkspaceController() {
         });
         if (out.conversation) hydrate(out.conversation);
         if (out.needsClarification || !out.jobId) return;
-        setActiveJob({ id: out.jobId, type: 'generate', status: 'queued', progress: 0, message: 'Memvalidasi dan menyiapkan revisi', timeline: [] });
+        setActiveJob({ id: out.jobId, type: 'generate', status: 'queued', progress: 0, message: t('workspace.jobs.validatingRevision'), timeline: [] });
         const job = await waitForJob(out.jobId);
         if (job.status !== 'completed') throw new Error(job.errorMessage || job.message || 'Revisi belum berhasil diproses.');
         const nextDocument = await api(`/documents/${current.document_id}`);
@@ -479,7 +481,7 @@ export function useLegacyWorkspaceController() {
       try {
         const access = await api('/chat/processing-access');
         if (!access.available) {
-          appendAssistantMessage('Kredit Basic kamu sudah habis. Tambah kredit sebelum memulai laprak baru.');
+          appendAssistantMessage(t('workspace.notices.basicCreditEmpty'));
           return;
         }
       } catch (err) {
@@ -534,7 +536,7 @@ export function useLegacyWorkspaceController() {
     try {
       const refreshed = await api(`/chat/sessions/${active.id}/attachments/${id}`, { method: 'PATCH', body: { kind } });
       hydrate(refreshed);
-      setNotice('Kategori bahan diperbarui.');
+      setNotice(t('workspace.notices.attachmentCategoryUpdated'));
     } catch (err) { setNotice(err.message); }
   };
   const waitForJob = async (jobId) => { const started = Date.now(); while (Date.now() - started < 300000) { const job = await api(`/jobs/${jobId}`); setActiveJob(job); if (['completed', 'failed', 'canceled'].includes(job.status)) return job; await new Promise((resolve) => setTimeout(resolve, 650)); } throw new Error('Proses masih berjalan. Timeline akan tetap tersedia saat chat ini dibuka lagi.'); };
@@ -563,14 +565,14 @@ export function useLegacyWorkspaceController() {
       setDocumentState(out.document);
       const queuedJob = out.document.jobs?.find((job) => job.id === out.jobId)
         || out.document.jobs?.find((job) => ['queued', 'running', 'retry_queued'].includes(job.status));
-      setActiveJob(queuedJob || (out.jobId ? { id: out.jobId, type: 'analyze', status: 'queued', progress: 0, message: 'Membaca bahan', timeline: [] } : out.document.jobs?.[0] || null));
+      setActiveJob(queuedJob || (out.jobId ? { id: out.jobId, type: 'analyze', status: 'queued', progress: 0, message: t('workspace.jobs.readingMaterials'), timeline: [] } : out.document.jobs?.[0] || null));
       const refreshed = await api(`/chat/sessions/${targetSession.id}`);
       hydrate(refreshed);
       await waitForDocumentReady(out.document.id, targetSession.id);
       await loadDocuments();
     } catch (err) {
       try { hydrate(await api(`/chat/sessions/${targetSession.id}`)); } catch {}
-      setNotice('Dokumen tetap diproses otomatis. Kamu boleh meninggalkan chat ini dan kembali lagi nanti.');
+      setNotice(t('workspace.notices.documentContinues'));
     } finally {
       setBusy(false);
     }
@@ -634,15 +636,15 @@ export function useLegacyWorkspaceController() {
           ? { instruction: payload.instruction }
           : {};
       const out = await api(path, { method: 'POST', body });
-      setActiveJob({ id: out.jobId, type: action, status: 'queued', progress: 0, message: 'Masuk antrean', timeline: [] });
+      setActiveJob({ id: out.jobId, type: action, status: 'queued', progress: 0, message: t('workspace.jobs.queued'), timeline: [] });
       const job = await waitForJob(out.jobId);
       if (job.status !== 'completed') throw new Error(job.errorMessage || job.message || 'Proses belum berhasil.');
       const nextDocument = await api(`/documents/${active.document_id}`);
       setDocumentState(nextDocument);
       setActiveJob(nextDocument.jobs?.find((item) => item.id === job.id) || job);
       if (['generate', 'revise'].includes(action) && active?.id) hydrate(await api(`/chat/sessions/${active.id}`));
-      if (action === 'analyze') appendAssistantMessage('Bahan selesai dibaca. Laprakin melanjutkan pembuatan dokumen secara otomatis.');
-      if (action === 'export') setNotice('DOCX siap diunduh.');
+      if (action === 'analyze') appendAssistantMessage(t('workspace.notices.analysisComplete'));
+      if (action === 'export') setNotice(t('workspace.notices.exportReady'));
       return true;
     } catch (err) {
       if (['generate', 'revise'].includes(action) && active?.id) {
@@ -657,9 +659,9 @@ export function useLegacyWorkspaceController() {
     if (!active?.document_id || !versionId) return false;
     const confirmed = await showDialog({
       kind: 'confirm',
-      title: 'Pulihkan versi dokumen?',
-      message: 'Isi saat ini akan disimpan sebagai versi baru sebelum versi pilihan dipulihkan.',
-      confirmLabel: 'Pulihkan versi',
+      title: t('workspace.dialogs.restoreVersionTitle'),
+      message: t('workspace.dialogs.restoreVersionMessage'),
+      confirmLabel: t('workspace.dialogs.restoreVersionConfirm'),
     });
     if (!confirmed) return false;
     setBusy(true);
@@ -697,7 +699,7 @@ export function useLegacyWorkspaceController() {
       const result = await api(`/documents/${active.document_id}/quiz/attempts/${attemptId}`, { method: 'POST', body: { answers } });
       const nextDocument = await api(`/documents/${active.document_id}`);
       setDocumentState(nextDocument);
-      setNotice(result.passed ? `Nilai ${result.score}%. Download sudah terbuka.` : `Nilai ${result.score}%. Minimal ${result.passScore}%; kamu bisa coba lagi dengan soal baru.`);
+      setNotice(t(result.passed ? 'workspace.notices.quizPassed' : 'workspace.notices.quizFailed', { score: result.score, passScore: result.passScore }));
       if (result.passed) setQuizMode(false);
       return result;
     } catch (err) {
@@ -727,7 +729,7 @@ export function useLegacyWorkspaceController() {
   };
   const logout = async () => { try { await api('/auth/logout', { method: 'POST' }); } catch {} clearCsrfToken(); await refreshSession(); navigate('/'); };
   const projectEntries = useMemo(() => {
-    const grouped = groupsFromSessions(sessions.filter((item) => groupLabel(item) !== 'Belum dikelompokkan'));
+    const grouped = groupsFromSessions(sessions.filter((item) => groupLabel(item) !== t('workspace.defaults.ungrouped')));
     const pinnedKeys = new Set(projectPins.map((item) => normalizedCourseKey(item.projectKey || item.projectName)));
     return Object.entries(grouped)
       .map(([name, items]) => ({
@@ -744,18 +746,18 @@ export function useLegacyWorkspaceController() {
   }, [sessions, projectPins]);
   const openProject = (name) => { closeMobileSidebar(); navigate(`/app/projects?project=${encodeURIComponent(name)}`); };
   const createProject = async () => {
-    const name = await showDialog({ kind: 'prompt', title: 'Project baru', message: 'Beri nama untuk mengelompokkan chat dan dokumen terkait.', placeholder: 'Contoh: Praktikum Jaringan', confirmLabel: 'Buat project' });
+    const name = await showDialog({ kind: 'prompt', title: t('workspace.dialogs.newProjectTitle'), message: t('workspace.dialogs.newProjectMessage'), placeholder: t('workspace.dialogs.newProjectPlaceholder'), confirmLabel: t('workspace.dialogs.newProjectConfirm') });
     const clean = String(name || '').trim().slice(0, 100);
-    if (!clean) { if (name !== null) setNotice('Project belum diberi nama.'); return; }
+    if (!clean) { if (name !== null) setNotice(t('workspace.notices.projectNeedsName')); return; }
     const session = await createSession(false, {
-      title: 'Chat baru',
+      title: t('workspace.defaults.chat'),
       courseGroup: clean,
       configuration: { courseName: clean },
     });
-    if (session) { setNotice('Project dibuat.'); openProject(clean); }
+    if (session) { setNotice(t('workspace.notices.projectCreated')); openProject(clean); }
   };
   const createProjectChat = async (projectName, title = '') => {
-    const cleanTitle = String(title || '').trim().slice(0, 120) || 'Chat baru';
+    const cleanTitle = String(title || '').trim().slice(0, 120) || t('workspace.defaults.chat');
     const session = await createSession(false, {
       title: cleanTitle,
       courseGroup: projectName,
