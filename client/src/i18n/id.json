@@ -538,6 +538,65 @@
           "detail": "Menyimpan dokumen agar siap dibuka dan diperiksa."
         }
       ]
+    },
+    "settings": {
+      "referral": {
+        "codeLabel": "Kode referralmu",
+        "loading": "…",
+        "unavailable": "Belum tersedia",
+        "copied": "Tersalin",
+        "copyCode": "Salin kode",
+        "copyLink": "Salin link undangan",
+        "manualCopy": "Salin manual: {{value}}",
+        "termsTitle": "Cara bonus dihitung",
+        "terms": [
+          "Temanmu memasukkan kodemu saat mendaftar.",
+          "Bonus aktif setelah temanmu belanja minimal Rp29.900 atau berlangganan Pro.",
+          "Credit masuk setelah masa tahan selesai, untuk memastikan transaksinya sah.",
+          "Akun yang dibuat dari perangkat yang sama tidak dihitung."
+        ],
+        "listTitle": "Undangan",
+        "listSummary": "{{total}} terdaftar · {{rewarded}} berbonus",
+        "reload": "Muat ulang",
+        "empty": "Belum ada yang mendaftar memakai kodemu. Bagikan link undangan di atas untuk mulai.",
+        "codeUnavailableNotice": "Kode referral belum tersedia.",
+        "status": {
+          "registered": { "label": "Terdaftar", "hint": "Menunggu pembelian pertama." },
+          "pending": { "label": "Menunggu masa tahan", "hint": "Bonus dilepas setelah masa tahan selesai." },
+          "held": { "label": "Ditahan", "hint": "Sedang ditinjau sebelum bonus dilepas." },
+          "rewarded": { "label": "Bonus diberikan", "hint": "Credit sudah masuk ke saldomu." },
+          "rejected": { "label": "Tidak memenuhi syarat", "hint": "Undangan tidak memenuhi ketentuan bonus." }
+        }
+      },
+      "billing": {
+        "activePlan": "Plan aktif",
+        "freePlan": "Free plan",
+        "overview": "Kelola plan dan credit tanpa meninggalkan riwayat transaksi akunmu.",
+        "manage": "Kelola plan",
+        "creditsAvailable": "Credit tersedia",
+        "creditsHint": "Dipakai saat proses dokumen berjalan.",
+        "transactions": "Transaksi",
+        "transactionsHint": "Tercatat pada akun ini.",
+        "history": "Riwayat transaksi",
+        "historyHint": "Pembayaran dan perubahan credit",
+        "reload": "Muat ulang",
+        "loadingIndicator": "…",
+        "loading": "Memuat riwayat...",
+        "emptyTitle": "Belum ada transaksi",
+        "emptyDescription": "Riwayat pembayaran akan muncul di sini setelah checkout pertama."
+      },
+      "appearance": {
+        "accentLabel": "Warna aksen",
+        "accentDescription": "Dipakai untuk tombol utama dan status aktif—bukan seluruh hover.",
+        "darkOnlyAria": "{{label}} (hanya tersedia pada tema gelap)",
+        "darkOnlyTitle": "{{label}} tidak terbaca pada tema terang. Tersedia kembali di tema gelap.",
+        "themeLabel": "Tema workspace",
+        "themes": {
+          "system": "Ikuti sistem",
+          "light": "Tema terang",
+          "dark": "Tema gelap"
+        }
+      }
     }
   },
   "accessibility": {

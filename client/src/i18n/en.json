@@ -538,6 +538,65 @@
           "detail": "Saving the document so it is ready to open and review."
         }
       ]
+    },
+    "settings": {
+      "referral": {
+        "codeLabel": "Your referral code",
+        "loading": "…",
+        "unavailable": "Not available yet",
+        "copied": "Copied",
+        "copyCode": "Copy code",
+        "copyLink": "Copy invite link",
+        "manualCopy": "Copy manually: {{value}}",
+        "termsTitle": "How the bonus is calculated",
+        "terms": [
+          "Your friend enters your code during signup.",
+          "The bonus activates after your friend spends at least Rp29,900 or subscribes to Pro.",
+          "Credits arrive after the holding period ends, to confirm the transaction is valid.",
+          "Accounts created from the same device are not counted."
+        ],
+        "listTitle": "Invitations",
+        "listSummary": "{{total}} registered · {{rewarded}} rewarded",
+        "reload": "Reload",
+        "empty": "No one has signed up with your code yet. Share the invite link above to get started.",
+        "codeUnavailableNotice": "Your referral code is not available yet.",
+        "status": {
+          "registered": { "label": "Registered", "hint": "Waiting for the first purchase." },
+          "pending": { "label": "Holding period", "hint": "The bonus is released after the holding period ends." },
+          "held": { "label": "Held", "hint": "Under review before the bonus is released." },
+          "rewarded": { "label": "Bonus awarded", "hint": "Credits have been added to your balance." },
+          "rejected": { "label": "Not eligible", "hint": "The invitation does not meet the bonus terms." }
+        }
+      },
+      "billing": {
+        "activePlan": "Active plan",
+        "freePlan": "Free plan",
+        "overview": "Manage plans and credits without leaving your account transaction history.",
+        "manage": "Manage plan",
+        "creditsAvailable": "Credits available",
+        "creditsHint": "Used while documents are processed.",
+        "transactions": "Transactions",
+        "transactionsHint": "Recorded on this account.",
+        "history": "Transaction history",
+        "historyHint": "Payments and credit changes",
+        "reload": "Reload",
+        "loadingIndicator": "…",
+        "loading": "Loading history...",
+        "emptyTitle": "No transactions yet",
+        "emptyDescription": "Payment history will appear here after your first checkout."
+      },
+      "appearance": {
+        "accentLabel": "Accent color",
+        "accentDescription": "Used for primary buttons and active states—not every hover.",
+        "darkOnlyAria": "{{label}} (available only in dark theme)",
+        "darkOnlyTitle": "{{label}} is not readable in light theme. It is available again in dark theme.",
+        "themeLabel": "Workspace theme",
+        "themes": {
+          "system": "Follow system",
+          "light": "Light theme",
+          "dark": "Dark theme"
+        }
+      }
     }
   },
   "accessibility": {

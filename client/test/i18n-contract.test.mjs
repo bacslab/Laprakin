@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [id, en, source, landingSource, statusSource, pricingSource, billingSource, tutorialSource, composerSource, previewSource, attachmentSource, overlaysSource, documentSource, workflowSource] = await Promise.all([
+const [id, en, source, landingSource, statusSource, pricingSource, billingSource, tutorialSource, composerSource, previewSource, attachmentSource, overlaysSource, documentSource, workflowSource, settingsSource] = await Promise.all([
   readFile(new URL('../src/i18n/id.json', import.meta.url), 'utf8').then(JSON.parse),
   readFile(new URL('../src/i18n/en.json', import.meta.url), 'utf8').then(JSON.parse),
   readFile(new URL('../src/i18n/index.js', import.meta.url), 'utf8'),
@@ -17,6 +17,7 @@ const [id, en, source, landingSource, statusSource, pricingSource, billingSource
   readFile(new URL('../src/components/WorkspaceOverlays.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/Workspace/DocumentSidePanel.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/Workspace/WorkspaceWorkflow.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/pages/Workspace/SettingsModal.jsx', import.meta.url), 'utf8'),
 ]);
 const runtimeSource = await readFile(new URL('../src/i18n/I18nRuntime.jsx', import.meta.url), 'utf8');
 
@@ -102,6 +103,14 @@ test('workspace document and workflow surfaces consume keyed locale copy', () =>
   assert.match(workflowSource, /workspace\.workflow\.thinkingDuration/);
   assert.doesNotMatch(documentSource, /Memuat dokumen kerja|Versi dokumen|Sudah lengkap atau perlu revisi/);
   assert.doesNotMatch(workflowSource, /Sedang berpikir|Mulai susun|Membaca seluruh bahan/);
+});
+
+test('workspace settings referral, billing, and appearance surfaces consume keyed locale copy', () => {
+  assert.match(settingsSource, /workspace\.settings\.referral\.codeLabel/);
+  assert.match(settingsSource, /workspace\.settings\.billing\.history/);
+  assert.match(settingsSource, /workspace\.settings\.appearance\.darkOnlyTitle/);
+  assert.match(settingsSource, /workspace\.settings\.appearance\.themes\.system/);
+  assert.doesNotMatch(settingsSource, /Kode referralmu|Cara bonus dihitung|Warna aksen workspace|Ikuti sistem/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {

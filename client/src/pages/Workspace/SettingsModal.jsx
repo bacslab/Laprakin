@@ -12,16 +12,12 @@ import { userGreetingName, userInitials } from '../../lib/user';
 import { useResolvedTheme } from '../../lib/theme';
 import { DARK_ONLY_ACCENTS, workspaceAccents } from '../../data/workspace';
 import { useApp } from '../../state/ui-context';
+import { useI18n } from '../../i18n/context';
 
-const REFERRAL_STATUS_LABEL = {
-  registered: { label: 'Terdaftar', hint: 'Menunggu pembelian pertama.' },
-  pending: { label: 'Menunggu masa tahan', hint: 'Bonus dilepas setelah masa tahan selesai.' },
-  held: { label: 'Ditahan', hint: 'Sedang ditinjau sebelum bonus dilepas.' },
-  rewarded: { label: 'Bonus diberikan', hint: 'Credit sudah masuk ke saldomu.' },
-  rejected: { label: 'Tidak memenuhi syarat', hint: 'Undangan tidak memenuhi ketentuan bonus.' },
-};
+const REFERRAL_STATUS_KEYS = new Set(['registered', 'pending', 'held', 'rewarded', 'rejected']);
 
 function ReferralSettingsPane() {
+  const { t } = useI18n();
   const { user, setNotice } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,13 +33,13 @@ function ReferralSettingsPane() {
   const inviteLink = code ? `${window.location.origin}/auth?ref=${encodeURIComponent(code)}` : '';
 
   const copy = async (value, key) => {
-    if (!value) return setNotice('Kode referral belum tersedia.');
+    if (!value) return setNotice(t('workspace.settings.referral.codeUnavailableNotice'));
     try {
       await navigator.clipboard?.writeText(value);
       setCopied(key);
       setTimeout(() => setCopied((current) => (current === key ? '' : current)), 2000);
     } catch {
-      setNotice(`Salin manual: ${value}`);
+      setNotice(t('workspace.settings.referral.manualCopy', { value }));
     }
   };
 
@@ -52,35 +48,30 @@ function ReferralSettingsPane() {
 
   return <div className="referral-settings-pane">
     <section className="referral-code-card">
-      <div className="referral-code-head"><span className="referral-code-icon"><Megaphone size={19} /></span><div><small>Kode referralmu</small><h3>{loading && !code ? '…' : code || 'Belum tersedia'}</h3></div></div>
+      <div className="referral-code-head"><span className="referral-code-icon"><Megaphone size={19} /></span><div><small>{t('workspace.settings.referral.codeLabel')}</small><h3>{loading && !code ? t('workspace.settings.referral.loading') : code || t('workspace.settings.referral.unavailable')}</h3></div></div>
       <div className="referral-code-actions">
         <Button variant="secondary" onClick={() => copy(code, 'code')} disabled={!code}>
-          {copied === 'code' ? <><Check size={14} />Tersalin</> : <><Copy size={14} />Salin kode</>}
+          {copied === 'code' ? <><Check size={14} />{t('workspace.settings.referral.copied')}</> : <><Copy size={14} />{t('workspace.settings.referral.copyCode')}</>}
         </Button>
         <Button variant="secondary" onClick={() => copy(inviteLink, 'link')} disabled={!inviteLink}>
-          {copied === 'link' ? <><Check size={14} />Tersalin</> : <><Copy size={14} />Salin link undangan</>}
+          {copied === 'link' ? <><Check size={14} />{t('workspace.settings.referral.copied')}</> : <><Copy size={14} />{t('workspace.settings.referral.copyLink')}</>}
         </Button>
       </div>
     </section>
 
     <section className="referral-terms">
-      <b>Cara bonus dihitung</b>
-      <ul>
-        <li>Temanmu memasukkan kodemu saat mendaftar.</li>
-        <li>Bonus aktif setelah temanmu belanja minimal Rp29.900 atau berlangganan Pro.</li>
-        <li>Credit masuk setelah masa tahan selesai, untuk memastikan transaksinya sah.</li>
-        <li>Akun yang dibuat dari perangkat yang sama tidak dihitung.</li>
-      </ul>
+      <b>{t('workspace.settings.referral.termsTitle')}</b>
+      <ul>{[0, 1, 2, 3].map((index) => <li key={index}>{t(`workspace.settings.referral.terms.${index}`)}</li>)}</ul>
     </section>
 
     <section className="referral-list">
       <div className="referral-list-head">
-        <div><b>Undangan</b><small>{loading ? 'Memuat…' : `${referrals.length} terdaftar · ${rewarded} berbonus`}</small></div>
-        <button type="button" onClick={load} disabled={loading}><RefreshCw size={13} />Muat ulang</button>
+        <div><b>{t('workspace.settings.referral.listTitle')}</b><small>{loading ? t('workspace.settings.referral.loading') : t('workspace.settings.referral.listSummary', { total: referrals.length, rewarded })}</small></div>
+        <button type="button" onClick={load} disabled={loading}><RefreshCw size={13} />{t('workspace.settings.referral.reload')}</button>
       </div>
-      {!loading && !referrals.length && <p className="referral-empty">Belum ada yang mendaftar memakai kodemu. Bagikan link undangan di atas untuk mulai.</p>}
+      {!loading && !referrals.length && <p className="referral-empty">{t('workspace.settings.referral.empty')}</p>}
       {referrals.map((item) => {
-        const status = REFERRAL_STATUS_LABEL[item.status] || { label: item.status, hint: '' };
+        const status = REFERRAL_STATUS_KEYS.has(item.status) ? { label: t(`workspace.settings.referral.status.${item.status}.label`), hint: t(`workspace.settings.referral.status.${item.status}.hint`) } : { label: item.status, hint: '' };
         return <article key={item.id} className="referral-row">
           <div><b>{item.email}</b><small>{status.hint || item.rejection_reason || ''}</small></div>
           <span className={`referral-status referral-status-${item.status}`}>{status.label}</span>
@@ -91,6 +82,7 @@ function ReferralSettingsPane() {
 }
 
 function BillingSettingsPane({ onOpenBilling }) {
+  const { t } = useI18n();
   const [billing, setBilling] = useState(null);
   const [loading, setLoading] = useState(true);
   const load = async () => { setLoading(true); try { setBilling(await api('/billing')); } catch { setBilling(null); } finally { setLoading(false); } };
@@ -101,31 +93,32 @@ function BillingSettingsPane({ onOpenBilling }) {
   return <div className="billing-settings-pane billing-settings-history-pane">
     <section className="billing-overview-card">
       <span className="billing-overview-icon"><CreditCard size={19} /></span>
-      <div><small>Plan aktif</small><h3>{currentPlan.label || currentPlan.name || 'Free plan'}</h3><p>Kelola plan dan credit tanpa meninggalkan riwayat transaksi akunmu.</p></div>
-      <Button onClick={onOpenBilling}>Kelola plan <ArrowRight size={14} /></Button>
+      <div><small>{t('workspace.settings.billing.activePlan')}</small><h3>{currentPlan.label || currentPlan.name || t('workspace.settings.billing.freePlan')}</h3><p>{t('workspace.settings.billing.overview')}</p></div>
+      <Button onClick={onOpenBilling}>{t('workspace.settings.billing.manage')} <ArrowRight size={14} /></Button>
     </section>
     <div className="billing-summary-grid">
-      <article><span>Credit tersedia</span><b>{availableCredits}</b><small>Dipakai saat proses dokumen berjalan.</small></article>
-      <article><span>Transaksi</span><b>{loading ? '…' : transactionCount}</b><small>Tercatat pada akun ini.</small></article>
+      <article><span>{t('workspace.settings.billing.creditsAvailable')}</span><b>{availableCredits}</b><small>{t('workspace.settings.billing.creditsHint')}</small></article>
+      <article><span>{t('workspace.settings.billing.transactions')}</span><b>{loading ? t('workspace.settings.billing.loadingIndicator') : transactionCount}</b><small>{t('workspace.settings.billing.transactionsHint')}</small></article>
     </div>
     <section className="settings-billing-history">
-      <div className="settings-billing-history-head"><div><b>Riwayat transaksi</b><small>Pembayaran dan perubahan credit</small></div><button type="button" onClick={load} disabled={loading}><RefreshCw size={13} />Muat ulang</button></div>
-      {loading ? <div className="settings-loading-state"><LoaderCircle className="spin" size={16} />Memuat riwayat...</div> : billing?.transactions?.length ? <div>{billing.transactions.map((item) => <article key={item.id}><span className="transaction-mark">{item.kind === 'payment' || item.kind === 'subscription' ? <CreditCard size={13} /> : <Sparkles size={13} />}</span><div><b>{item.title}</b><small>{item.detail}</small></div><div><strong>{item.amountLabel}</strong><small>{formatDate(item.createdAt)}</small></div></article>)}</div> : <div className="settings-empty-state"><CreditCard size={18} /><div><b>Belum ada transaksi</b><p>Riwayat pembayaran akan muncul di sini setelah checkout pertama.</p></div></div>}
+      <div className="settings-billing-history-head"><div><b>{t('workspace.settings.billing.history')}</b><small>{t('workspace.settings.billing.historyHint')}</small></div><button type="button" onClick={load} disabled={loading}><RefreshCw size={13} />{t('workspace.settings.billing.reload')}</button></div>
+      {loading ? <div className="settings-loading-state"><LoaderCircle className="spin" size={16} />{t('workspace.settings.billing.loading')}</div> : billing?.transactions?.length ? <div>{billing.transactions.map((item) => <article key={item.id}><span className="transaction-mark">{item.kind === 'payment' || item.kind === 'subscription' ? <CreditCard size={13} /> : <Sparkles size={13} />}</span><div><b>{item.title}</b><small>{item.detail}</small></div><div><strong>{item.amountLabel}</strong><small>{formatDate(item.createdAt)}</small></div></article>)}</div> : <div className="settings-empty-state"><CreditCard size={18} /><div><b>{t('workspace.settings.billing.emptyTitle')}</b><p>{t('workspace.settings.billing.emptyDescription')}</p></div></div>}
     </section>
   </div>;
 }
 
 function AccentPicker({ value, onChange, resolvedTheme = 'dark' }) {
+  const { t } = useI18n();
   const lightMode = resolvedTheme === 'light';
-  return <div className="accent-picker" role="radiogroup" aria-label="Warna aksen workspace">
+  return <div className="accent-picker" role="radiogroup" aria-label={t('workspace.settings.appearance.accentLabel')}>
     {workspaceAccents.map((accent) => {
       const unavailable = lightMode && DARK_ONLY_ACCENTS.has(accent.key);
       return <button
         key={accent.key}
         type="button"
         role="radio"
-        aria-label={unavailable ? `${accent.label} (hanya tersedia pada tema gelap)` : accent.label}
-        title={unavailable ? `${accent.label} tidak terbaca pada tema terang. Tersedia kembali di tema gelap.` : accent.label}
+        aria-label={unavailable ? t('workspace.settings.appearance.darkOnlyAria', { label: accent.label }) : accent.label}
+        title={unavailable ? t('workspace.settings.appearance.darkOnlyTitle', { label: accent.label }) : accent.label}
         aria-checked={value === accent.key}
         disabled={unavailable}
         className={`${value === accent.key ? 'selected' : ''}${unavailable ? ' accent-unavailable' : ''}`.trim()}
@@ -139,12 +132,13 @@ function AccentPicker({ value, onChange, resolvedTheme = 'dark' }) {
 }
 
 function ThemePicker({ value, onChange }) {
+  const { t } = useI18n();
   const themes = [
-    { key: 'system', label: 'Ikuti sistem', icon: Monitor },
-    { key: 'light', label: 'Tema terang', icon: Sun },
-    { key: 'dark', label: 'Tema gelap', icon: Moon },
+    { key: 'system', label: t('workspace.settings.appearance.themes.system'), icon: Monitor },
+    { key: 'light', label: t('workspace.settings.appearance.themes.light'), icon: Sun },
+    { key: 'dark', label: t('workspace.settings.appearance.themes.dark'), icon: Moon },
   ];
-  return <div className="theme-picker" role="radiogroup" aria-label="Tema workspace">
+  return <div className="theme-picker" role="radiogroup" aria-label={t('workspace.settings.appearance.themeLabel')}>
     {themes.map(({ key, label, icon: Icon }) => <button key={key} type="button" role="radio" aria-label={label} title={label} aria-checked={value === key} className={value === key ? 'selected' : ''} onClick={() => onChange(key)}><Icon size={15} /></button>)}
   </div>;
 }
