@@ -452,7 +452,7 @@ export default function LandingPage({ navigate }) {
           <GradientButton onClick={() => navigate('/auth')}>Coba sekarang</GradientButton>
           <div className="fg-video-frame fg-hero-video" data-cursor="PLAY">
             {media.tutorialVideoUrl
-              ? <video src={media.tutorialVideoUrl} muted autoPlay loop playsInline />
+               ? <video src={media.tutorialVideoUrl} muted autoPlay loop playsInline aria-label="Video tutorial Laprakin" />
               : <MediaPlaceholder label="Product video" />}
           </div>
         </div>
@@ -476,18 +476,13 @@ export default function LandingPage({ navigate }) {
         <div
           ref={howViewportRef}
           className={`fg-how-viewport ${stepDragging ? 'is-dragging' : ''}`}
-          role="group"
+           role="region"
           aria-label="Geser langkah penggunaan Laprakin"
           data-cursor="DRAG"
           data-step-index={step}
           data-drag-offset="0"
-          tabIndex="0"
           onMouseDown={startStepMouseDrag}
           onTouchStart={startStepTouchDrag}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowLeft') animateStepChange(-1);
-            if (event.key === 'ArrowRight') animateStepChange(1);
-          }}
         >
           <div ref={howTrackRef} className="fg-how-track">
             {STEPS.map((_, index) => <StepCard key={index} index={index} active={index === step} />)}
@@ -526,7 +521,7 @@ export default function LandingPage({ navigate }) {
         </SectionTitle>
         <div className="fg-video-frame fg-compare-video" data-aos="zoom-in" data-cursor="PLAY">
           {media.compareVideoUrl
-            ? <video src={media.compareVideoUrl} controls playsInline poster={media.compareVideoPosterUrl || ''} />
+             ? <video src={media.compareVideoUrl} controls playsInline poster={media.compareVideoPosterUrl || ''} aria-label="Video perbandingan Laprakin" />
             : <MediaPlaceholder label="Comparison video" />}
           {!media.compareVideoUrl && <button type="button" className="fg-play-placeholder" aria-label="Video perbandingan belum tersedia"><Play size={24} fill="currentColor" /></button>}
         </div>

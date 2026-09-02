@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from './router';
 import { Archive, CalendarClock, ImagePlus, LoaderCircle, Plus, Save, UploadCloud, X } from 'lucide-react';
 import { api } from './api';
@@ -142,19 +142,19 @@ export function FeatureUpdatesAdmin({ setNotice }) {
           <header><div><h3>{form.title || 'Update fitur'}</h3><span className={`feature-status status-${form.status}`}>{statusLabel(form)}</span></div><div className="feature-editor-actions"><button type="button" className={archivePending ? 'confirm' : ''} onClick={archive} disabled={busy}><Archive size={14} />{archivePending ? 'Konfirmasi arsip' : 'Arsipkan'}</button><button className="feature-primary" type="submit" disabled={busy}>{busy ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}Simpan</button></div></header>
           <div className="feature-editor-grid">
             <div className="feature-fields">
-              <label><span>Judul</span><input required minLength="3" maxLength="100" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-              <label><span>Ringkasan</span><textarea maxLength="240" rows="3" value={form.summary} onChange={(event) => setForm({ ...form, summary: event.target.value })} placeholder="Satu kalimat tentang manfaat update ini." /></label>
-              <label><span>Penjelasan</span><textarea maxLength="3000" rows="6" value={form.body} onChange={(event) => setForm({ ...form, body: event.target.value })} placeholder="Jelaskan perubahan dengan bahasa yang singkat dan konkret." /></label>
-              <label><span>Highlight <small>satu poin per baris, maksimal 6</small></span><textarea maxLength="900" rows="5" value={form.highlightsText} onChange={(event) => setForm({ ...form, highlightsText: event.target.value })} placeholder={'Workspace lebih cepat\nExport lebih stabil'} /></label>
-              <div className="feature-field-pair"><label><span>Label versi</span><input maxLength="40" value={form.versionLabel} onChange={(event) => setForm({ ...form, versionLabel: event.target.value })} placeholder="v1.8 · Juli 2026" /></label><label><span>Prioritas</span><select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}><option value="normal">Normal</option><option value="important">Penting</option></select></label></div>
-              <div className="feature-field-pair"><label><span>Audience</span><select value={form.audience} onChange={(event) => setForm({ ...form, audience: event.target.value })}><option value="all">Semua user</option><option value="free">Free plan</option><option value="paid">User berbayar</option></select></label><label><span>Status</span><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label></div>
-              <div className="feature-field-pair"><label><span><CalendarClock size={13} /> Jadwal tayang</span><input type="datetime-local" value={form.publishedAt} onChange={(event) => setForm({ ...form, publishedAt: event.target.value })} /></label><label><span>Kedaluwarsa <small>opsional</small></span><input type="datetime-local" value={form.expiresAt} onChange={(event) => setForm({ ...form, expiresAt: event.target.value })} /></label></div>
-              <div className="feature-field-pair"><label><span>Label CTA</span><input maxLength="40" value={form.ctaLabel} onChange={(event) => setForm({ ...form, ctaLabel: event.target.value })} placeholder="Coba sekarang" /></label><label><span>Tujuan internal</span><input maxLength="420" value={form.ctaPath} onChange={(event) => setForm({ ...form, ctaPath: event.target.value })} placeholder="/app atau /pricing" /></label></div>
+               <label><span>Judul</span><input aria-label="Judul update" required minLength="3" maxLength="100" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
+               <label><span>Ringkasan</span><textarea aria-label="Ringkasan update" maxLength="240" rows="3" value={form.summary} onChange={(event) => setForm({ ...form, summary: event.target.value })} placeholder="Satu kalimat tentang manfaat update ini." /></label>
+               <label><span>Penjelasan</span><textarea aria-label="Penjelasan update" maxLength="3000" rows="6" value={form.body} onChange={(event) => setForm({ ...form, body: event.target.value })} placeholder="Jelaskan perubahan dengan bahasa yang singkat dan konkret." /></label>
+               <label><span>Highlight <small>satu poin per baris, maksimal 6</small></span><textarea aria-label="Highlight update" maxLength="900" rows="5" value={form.highlightsText} onChange={(event) => setForm({ ...form, highlightsText: event.target.value })} placeholder={'Workspace lebih cepat\nExport lebih stabil'} /></label>
+               <div className="feature-field-pair"><label><span>Label versi</span><input aria-label="Label versi" maxLength="40" value={form.versionLabel} onChange={(event) => setForm({ ...form, versionLabel: event.target.value })} placeholder="v1.8 · Juli 2026" /></label><label><span>Prioritas</span><select aria-label="Prioritas update" value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}><option value="normal">Normal</option><option value="important">Penting</option></select></label></div>
+               <div className="feature-field-pair"><label><span>Audience</span><select aria-label="Audience update" value={form.audience} onChange={(event) => setForm({ ...form, audience: event.target.value })}><option value="all">Semua user</option><option value="free">Free plan</option><option value="paid">User berbayar</option></select></label><label><span>Status</span><select aria-label="Status update" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label></div>
+               <div className="feature-field-pair"><label><span><CalendarClock size={13} /> Jadwal tayang</span><input aria-label="Jadwal tayang" type="datetime-local" value={form.publishedAt} onChange={(event) => setForm({ ...form, publishedAt: event.target.value })} /></label><label><span>Kedaluwarsa <small>opsional</small></span><input aria-label="Waktu kedaluwarsa" type="datetime-local" value={form.expiresAt} onChange={(event) => setForm({ ...form, expiresAt: event.target.value })} /></label></div>
+               <div className="feature-field-pair"><label><span>Label CTA</span><input aria-label="Label CTA" maxLength="40" value={form.ctaLabel} onChange={(event) => setForm({ ...form, ctaLabel: event.target.value })} placeholder="Coba sekarang" /></label><label><span>Tujuan internal</span><input aria-label="Tujuan internal CTA" maxLength="420" value={form.ctaPath} onChange={(event) => setForm({ ...form, ctaPath: event.target.value })} placeholder="/app atau /pricing" /></label></div>
             </div>
             <aside className="feature-preview-column">
               <div className="feature-image-uploader">
                 <div>{form.imageUrl ? <img src={form.imageUrl} alt="Preview update" /> : <><ImagePlus size={20} /><b>Visual update</b><small>PNG, JPG, atau WEBP · maksimal 5 MB</small></>}</div>
-                <label className="feature-upload-button"><UploadCloud size={15} />{form.imageUrl ? 'Ganti gambar' : 'Upload gambar'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadImage} disabled={busy} /></label>
+                 <label className="feature-upload-button"><UploadCloud size={15} />{form.imageUrl ? 'Ganti gambar' : 'Upload gambar'}<input aria-label="Upload gambar update" type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadImage} disabled={busy} /></label>
               </div>
               <FeatureUpdatePreview update={{ ...payloadFromForm(form), id: selected.id }} />
             </aside>
@@ -176,11 +176,13 @@ function FeatureUpdatePreview({ update }) {
 
 export function ProductUpdatePopup({ update, onReceipt, onClose }) {
   const navigate = useNavigate();
+  const initialFocusRef = useRef(null);
   useEffect(() => {
     const onKeyDown = (event) => { if (event.key === 'Escape') onClose('dismissed'); };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
+  useEffect(() => { initialFocusRef.current?.focus(); }, [update]);
   if (!update) return null;
   const open = async () => {
     await onReceipt('opened');
@@ -189,7 +191,7 @@ export function ProductUpdatePopup({ update, onReceipt, onClose }) {
   };
   return <div className="product-update-backdrop" role="presentation">
     <section className={`product-update-popup ${update.priority === 'important' ? 'important' : ''}`} role="dialog" aria-modal="true" aria-labelledby="product-update-title">
-      <button className="product-update-close" type="button" aria-label="Tutup update fitur" onClick={() => onClose('dismissed')}><X size={17} /></button>
+      <button ref={!update.ctaLabel || !update.ctaPath ? initialFocusRef : undefined} className="product-update-close" type="button" aria-label="Tutup update fitur" onClick={() => onClose('dismissed')}><X size={17} /></button>
       {update.imageUrl && <div className="product-update-visual"><img src={update.imageUrl} alt={update.imageName || ''} /></div>}
       <div className="product-update-copy">
         <div className="product-update-kicker"><span>Yang baru</span>{update.versionLabel && <small>{update.versionLabel}</small>}</div>
@@ -197,7 +199,7 @@ export function ProductUpdatePopup({ update, onReceipt, onClose }) {
         {update.summary && <p className="product-update-summary">{update.summary}</p>}
         {update.body && <p className="product-update-body">{update.body}</p>}
         {update.highlights?.length > 0 && <ul>{update.highlights.map((item) => <li key={item}><span>{item}</span></li>)}</ul>}
-        <div className="product-update-actions"><button type="button" className="product-update-later" onClick={() => onClose('dismissed')}>Nanti</button>{update.ctaLabel && update.ctaPath && <button autoFocus type="button" className="product-update-cta" onClick={open}>{update.ctaLabel}</button>}</div>
+        <div className="product-update-actions"><button type="button" className="product-update-later" onClick={() => onClose('dismissed')}>Nanti</button>{update.ctaLabel && update.ctaPath && <button ref={initialFocusRef} type="button" className="product-update-cta" onClick={open}>{update.ctaLabel}</button>}</div>
       </div>
     </section>
   </div>;
