@@ -20,6 +20,7 @@
 - Memigrasikan navigasi shell Workspace, panel konfigurasi, notice alur chat, dan dialog project ke translation key Indonesia/Inggris.
 - Memigrasikan sidebar chat, library dokumen, Projects, dan intake identitas akademik ke translation key Indonesia/Inggris.
 - Memigrasikan shell Admin Console, monitoring, kredit, alert, audit, dan retensi ke translation key Indonesia/Inggris.
+- Memigrasikan panel Admin Pricing, akses user, dan appeal ke translation key Indonesia/Inggris.
 
 ## 21.0.6 - 2026-09-02
 

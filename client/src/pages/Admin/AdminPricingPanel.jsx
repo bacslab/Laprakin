@@ -3,8 +3,10 @@ import { Save } from 'lucide-react';
 import { api } from '../../api';
 import { pricingFallback, pricingFeatures } from '../../data/pricing';
 import { Button } from '../../components/Button';
+import { useI18n } from '../../i18n';
 
 export default function AdminPricingPanel({ setNotice }) {
+  const { t } = useI18n();
   const [products, setProducts] = useState([]);
   const [busy, setBusy] = useState(false);
   const loadPricing = useCallback(() => api('/admin/pricing').then((data) => {
@@ -21,10 +23,10 @@ export default function AdminPricingPanel({ setNotice }) {
       featuresText: pricingFeatures(plan, fallback.features).join('\n'),
     });
     setProducts([
-      createProduct('free', 'Free', data.free, pricingFallback.free, 0),
-      createProduct('credit', 'Satuan', data.single, pricingFallback.single, data.single?.originalPrice || data.single?.unitPrice || 3900),
-      createProduct('monthly', 'Pro', data.monthly, pricingFallback.monthly, data.monthly?.originalPrice || data.monthly?.price || 29900),
-      createProduct('pro', 'Max', data.pro, pricingFallback.pro, data.pro?.originalPrice || data.pro?.price || 45900),
+      createProduct('free', t('admin.console.pricing.free'), data.free, pricingFallback.free, 0),
+      createProduct('credit', t('admin.console.pricing.single'), data.single, pricingFallback.single, data.single?.originalPrice || data.single?.unitPrice || 3900),
+      createProduct('monthly', t('admin.console.pricing.pro'), data.monthly, pricingFallback.monthly, data.monthly?.originalPrice || data.monthly?.price || 29900),
+      createProduct('pro', t('admin.console.pricing.max'), data.pro, pricingFallback.pro, data.pro?.originalPrice || data.pro?.price || 45900),
     ]);
   }).catch((error) => setNotice(error.message)), [setNotice]);
   useEffect(() => { loadPricing(); }, [loadPricing]);
@@ -48,28 +50,28 @@ export default function AdminPricingPanel({ setNotice }) {
           })),
         },
       });
-      await loadPricing(); setNotice('Benefit, harga, dan diskon berhasil diperbarui.');
+      await loadPricing(); setNotice(t('admin.console.pricing.saved'));
     } catch (error) { setNotice(error.message); } finally { setBusy(false); }
   };
   return <section className="admin-content">
     <div className="admin-panel admin-wide">
-      <div className="admin-panel-head"><h2>Plan dan benefit</h2><small>Nilai ini dipakai langsung oleh pricing, checkout, credit, revisi, dan penyimpanan.</small></div>
+      <div className="admin-panel-head"><h2>{t('admin.console.pricing.planAndBenefits')}</h2><small>{t('admin.console.pricing.description')}</small></div>
       <div className="admin-pricing-grid">
         {products.map((product) => <article key={product.sku}>
           <h3>{product.label}</h3>
           <div className="admin-pricing-fields">
-             <label>Harga rupiah<input aria-label={`${product.label} harga rupiah`} type="number" min={product.sku === 'free' ? 0 : 1000} max="10000000" disabled={product.sku === 'free'} value={product.unitPriceIdr} onChange={(event) => update(product.sku, { unitPriceIdr: event.target.value })}/></label>
-             <label>Jumlah credit<input aria-label={`${product.label} jumlah credit`} type="number" min="1" max="1000" value={product.credits} onChange={(event) => update(product.sku, { credits: event.target.value })}/></label>
-             <label>Masa aktif (hari)<input aria-label={`${product.label} masa aktif`} type="number" min="1" max="3650" value={product.durationDays} onChange={(event) => update(product.sku, { durationDays: event.target.value })}/></label>
-             <label>Revisi per laprak<input aria-label={`${product.label} revisi per laprak`} type="number" min="0" max="100" value={product.revisionsPerReport} onChange={(event) => update(product.sku, { revisionsPerReport: event.target.value })}/></label>
-             <label>Penyimpanan (MB)<input aria-label={`${product.label} penyimpanan megabyte`} type="number" min="1" max="102400" value={product.storageMb} onChange={(event) => update(product.sku, { storageMb: event.target.value })}/></label>
-             {product.sku !== 'free' && <label>Diskon persen<input aria-label={`${product.label} diskon persen`} type="number" min="0" max="90" value={product.discountPercent} onChange={(event) => update(product.sku, { discountPercent: event.target.value })}/></label>}
-             {product.sku !== 'free' && <label>Diskon berakhir<input aria-label={`${product.label} diskon berakhir`} type="datetime-local" value={product.discountExpiresAt ? product.discountExpiresAt.slice(0,16) : ''} onChange={(event) => update(product.sku, { discountExpiresAt: event.target.value })}/></label>}
+             <label>{t('admin.console.pricing.price')}<input aria-label={`${product.label} ${t('admin.console.pricing.price')}`} type="number" min={product.sku === 'free' ? 0 : 1000} max="10000000" disabled={product.sku === 'free'} value={product.unitPriceIdr} onChange={(event) => update(product.sku, { unitPriceIdr: event.target.value })}/></label>
+             <label>{t('admin.console.pricing.credits')}<input aria-label={`${product.label} ${t('admin.console.pricing.credits')}`} type="number" min="1" max="1000" value={product.credits} onChange={(event) => update(product.sku, { credits: event.target.value })}/></label>
+             <label>{t('admin.console.pricing.duration')}<input aria-label={`${product.label} ${t('admin.console.pricing.duration')}`} type="number" min="1" max="3650" value={product.durationDays} onChange={(event) => update(product.sku, { durationDays: event.target.value })}/></label>
+             <label>{t('admin.console.pricing.revisions')}<input aria-label={`${product.label} ${t('admin.console.pricing.revisions')}`} type="number" min="0" max="100" value={product.revisionsPerReport} onChange={(event) => update(product.sku, { revisionsPerReport: event.target.value })}/></label>
+             <label>{t('admin.console.pricing.storage')}<input aria-label={`${product.label} ${t('admin.console.pricing.storage')}`} type="number" min="1" max="102400" value={product.storageMb} onChange={(event) => update(product.sku, { storageMb: event.target.value })}/></label>
+             {product.sku !== 'free' && <label>{t('admin.console.pricing.discount')}<input aria-label={`${product.label} ${t('admin.console.pricing.discount')}`} type="number" min="0" max="90" value={product.discountPercent} onChange={(event) => update(product.sku, { discountPercent: event.target.value })}/></label>}
+             {product.sku !== 'free' && <label>{t('admin.console.pricing.discountExpiry')}<input aria-label={`${product.label} ${t('admin.console.pricing.discountExpiry')}`} type="datetime-local" value={product.discountExpiresAt ? product.discountExpiresAt.slice(0,16) : ''} onChange={(event) => update(product.sku, { discountExpiresAt: event.target.value })}/></label>}
           </div>
-           <label>Daftar fitur <span>Satu fitur per baris</span><textarea aria-label={`${product.label} daftar fitur`} rows="4" maxLength="1200" value={product.featuresText} onChange={(event) => update(product.sku, { featuresText: event.target.value })}/></label>
+           <label>{t('admin.console.pricing.features')} <span>{t('admin.console.pricing.onePerLine')}</span><textarea aria-label={t('admin.console.pricing.featuresAria', { label: product.label })} rows="4" maxLength="1200" value={product.featuresText} onChange={(event) => update(product.sku, { featuresText: event.target.value })}/></label>
         </article>)}
       </div>
-      <Button onClick={save} disabled={busy || products.length !== 4}><Save size={14}/>Simpan plan</Button>
+      <Button onClick={save} disabled={busy || products.length !== 4}><Save size={14}/>{t('admin.console.pricing.save')}</Button>
     </div>
   </section>;
 }

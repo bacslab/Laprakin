@@ -26,6 +26,9 @@ const workspaceCollectionsSource = await readFile(new URL('../src/pages/Workspac
 const workspaceSidebarSource = await readFile(new URL('../src/pages/Workspace/Sidebar/ChatSessionRow.jsx', import.meta.url), 'utf8');
 const identitySource = await readFile(new URL('../src/pages/Workspace/IdentityIntakeModal.jsx', import.meta.url), 'utf8');
 const adminConsoleSource = await readFile(new URL('../src/pages/Admin/LegacyAdminWorkspace.jsx', import.meta.url), 'utf8');
+const adminPricingSource = await readFile(new URL('../src/pages/Admin/AdminPricingPanel.jsx', import.meta.url), 'utf8');
+const adminAccessSource = await readFile(new URL('../src/pages/Admin/AdminAccessPanel.jsx', import.meta.url), 'utf8');
+const adminAppealsSource = await readFile(new URL('../src/pages/Admin/AdminAppealsPanel.jsx', import.meta.url), 'utf8');
 
 function keys(value, prefix = '') {
   return Object.entries(value).flatMap(([key, nested]) => {
@@ -152,6 +155,12 @@ test('admin console shell and operational panels consume keyed locale copy', () 
   assert.match(adminConsoleSource, /admin\.console\.alerts\.markResolved/);
   assert.match(adminConsoleSource, /admin\.console\.retention\.done/);
   assert.doesNotMatch(adminConsoleSource, /Privacy-first monitoring|Tambahkan kredit|Error operasional|Pembersihan retensi/);
+  assert.match(adminPricingSource, /admin\.console\.pricing\.planAndBenefits/);
+  assert.match(adminAccessSource, /admin\.console\.access\.restrictionApplied/);
+  assert.match(adminAppealsSource, /admin\.console\.appeals\.approvedNotice/);
+  assert.doesNotMatch(adminPricingSource, /Plan dan benefit|Simpan plan/);
+  assert.doesNotMatch(adminAccessSource, /Jenis pembatasan|Terapkan pembatasan/);
+  assert.doesNotMatch(adminAppealsSource, /Appeal akun|Belum ada appeal/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {
