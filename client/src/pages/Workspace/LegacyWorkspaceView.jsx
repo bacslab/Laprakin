@@ -44,7 +44,7 @@ export default function LegacyWorkspaceView({
   messages, attachments, documentState, activeJob, input, setInput, busy, actionBusy, attachmentKind,
   setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument,
   performChatAction, contextOpen, setContextOpen, config, updateConfig, pendingLandingFiles,
-  setPendingLandingFiles, pasteImagesIntoChat, addPendingFiles, aiMode, setAiMode, aiModeAccess, aiConsentData, enableExternalAiConsent, quizMode, setQuizMode,
+  setPendingLandingFiles, pasteImagesIntoChat, addPendingFiles, aiMode, setAiMode, aiModeAccess, aiConsentData, setAiConsentData, enableExternalAiConsent, quizMode, setQuizMode,
   startDocumentQuiz, submitDocumentQuiz, editingMessage, setEditingMessageId, reviseChatMessage,
   documents, loadDocuments, sessions, openSession, setNotice, projectEntries, projectParam, openProject,
   createProject, createProjectChat, setProjectPinned, documentAction, downloadExport, restoreDocumentVersion,
@@ -131,6 +131,6 @@ export default function LegacyWorkspaceView({
           </> : <div className="empty-config"><PanelRightOpen size={20} /><b>{t('workspace.shell.noActiveChat')}</b><p>{t('workspace.shell.promptToOpen')}</p></div>}
         </div>}
     </aside>}
-    {SETTINGS_MODAL_TABS[modal] && <SettingsModal initialTab={SETTINGS_MODAL_TABS[modal]} onClose={() => setModal(null)} onSaved={refreshSession} onArchivedChanged={loadSessions} onOpenBilling={() => { setModal(null); navigate('/pricing'); }} prefs={prefs} setPrefs={setPrefs} />}{modal === 'help' && <HelpModal onClose={() => setModal(null)} />}{modal === 'feedback' && <FeedbackModal onClose={() => setModal(null)} />}{modal === 'notifications' && <NotificationModal onClose={() => setModal(null)} />}{identityIntake && <IdentityIntakeModal user={user} busy={busy} onSave={completeIdentityIntake} onBack={() => setIdentityIntake(null)} />}{tutorialOpen && <WorkspaceTutorial onClose={closeTutorial} />}{productUpdate && <ProductUpdatePopup update={productUpdate} onReceipt={recordProductUpdate} onClose={closeProductUpdate} />}
+    {SETTINGS_MODAL_TABS[modal] && <SettingsModal initialTab={SETTINGS_MODAL_TABS[modal]} onClose={() => setModal(null)} onSaved={refreshSession} onArchivedChanged={loadSessions} onOpenBilling={() => { setModal(null); navigate('/pricing'); }} onAiConsentChange={setAiConsentData} prefs={prefs} setPrefs={setPrefs} />}{modal === 'help' && <HelpModal onClose={() => setModal(null)} />}{modal === 'feedback' && <FeedbackModal onClose={() => setModal(null)} />}{modal === 'notifications' && <NotificationModal onClose={() => setModal(null)} />}{identityIntake && <IdentityIntakeModal user={user} busy={busy} onSave={completeIdentityIntake} onBack={() => setIdentityIntake(null)} />}{tutorialOpen && <WorkspaceTutorial onClose={closeTutorial} />}{productUpdate && <ProductUpdatePopup update={productUpdate} onReceipt={recordProductUpdate} onClose={closeProductUpdate} />}
   </div>;
 }

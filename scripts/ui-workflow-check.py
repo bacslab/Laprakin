@@ -50,6 +50,35 @@ with sync_playwright() as playwright:
     page.locator(".composer textarea").wait_for()
     assert page.locator(".identity-intake-modal").count() == 0
 
+    page.locator(".workspace-tutorial").wait_for()
+    assert page.get_by_text("Langkah 1 dari 4").is_visible()
+    assert page.locator(".workspace-tutorial video").count() == 1
+    assert page.get_by_role("button", name="Sebelumnya").is_disabled()
+    page.get_by_role("button", name="Lanjut", exact=True).click()
+    assert page.get_by_text("Langkah 2 dari 4").is_visible()
+    page.get_by_role("button", name="Sebelumnya").click()
+    assert page.get_by_text("Langkah 1 dari 4").is_visible()
+    for expected_step in (2, 3, 4):
+        page.get_by_role("button", name="Lanjut", exact=True).click()
+        assert page.get_by_text(f"Langkah {expected_step} dari 4").is_visible()
+    page.get_by_role("button", name="Mulai chat").click()
+    page.locator(".workspace-tutorial").wait_for(state="detached")
+
+    page.get_by_role("button", name="Tinjau dan izinkan", exact=True).click()
+    page.get_by_role("button", name="Tinjau dan izinkan", exact=True).wait_for(state="detached")
+    composer = page.locator(".composer textarea")
+    composer.fill("Uji Shift Enter")
+    composer.press("Shift+Enter")
+    assert composer.input_value() == "Uji Shift Enter\n"
+    composer.dispatch_event("keydown", {"key": "Enter", "isComposing": True})
+    assert context.request.get(f"{BASE_URL}/api/chat/sessions").json()["sessions"] == []
+    composer.fill("")
+
+    page.get_by_role("button", name="Settings", exact=True).click()
+    page.get_by_role("button", name="Keyboard", exact=True).click()
+    page.get_by_label("Enter untuk kirim", exact=True).set_checked(False)
+    page.get_by_role("button", name="Tutup settings").click()
+
     page.evaluate(
         """() => {
           const target = document.querySelector('.chat-surface');
@@ -75,22 +104,16 @@ with sync_playwright() as playwright:
 
     page.locator(".composer textarea").fill("Gunakan bahan ini untuk laprak saya.")
     page.locator(".composer textarea").press("Enter")
+    assert page.locator(".composer textarea").input_value().endswith("\n")
+    assert context.request.get(f"{BASE_URL}/api/chat/sessions").json()["sessions"] == []
+    page.locator(".composer textarea").dispatch_event(
+        "keydown", {"key": "Enter", "ctrlKey": True, "isComposing": True}
+    )
+    assert context.request.get(f"{BASE_URL}/api/chat/sessions").json()["sessions"] == []
+    page.locator(".composer textarea").press("Control+Enter")
     page.locator(".identity-intake-modal").wait_for(state="detached")
     page.locator(".message.user").wait_for()
     assert page.get_by_text("Lengkapi identitas laprakmu").count() == 0
-    page.locator(".workspace-tutorial").wait_for()
-    assert page.get_by_text("Langkah 1 dari 4").is_visible()
-    assert page.locator(".workspace-tutorial video").count() == 1
-    assert page.get_by_role("button", name="Sebelumnya").is_disabled()
-    page.get_by_role("button", name="Lanjut", exact=True).click()
-    assert page.get_by_text("Langkah 2 dari 4").is_visible()
-    page.get_by_role("button", name="Sebelumnya").click()
-    assert page.get_by_text("Langkah 1 dari 4").is_visible()
-    for expected_step in (2, 3, 4):
-        page.get_by_role("button", name="Lanjut", exact=True).click()
-        assert page.get_by_text(f"Langkah {expected_step} dari 4").is_visible()
-    page.get_by_role("button", name="Mulai chat").click()
-    page.locator(".workspace-tutorial").wait_for(state="detached")
     page.locator(".message.user").wait_for()
     assert "Gunakan bahan ini" in page.locator(".message.user").inner_text()
     assert page.locator(".first-use-guidance").count() == 0
@@ -173,6 +196,11 @@ with sync_playwright() as playwright:
     assert dark_toast_colors["color"] == "rgb(20, 22, 20)", dark_toast_colors
     page.locator(".pending-file-chip button").click()
 
+    page.get_by_role("button", name="Settings", exact=True).click()
+    page.get_by_role("button", name="Keyboard", exact=True).click()
+    page.get_by_label("Enter untuk kirim", exact=True).set_checked(True)
+    page.get_by_role("button", name="Tutup settings").click()
+
     page.set_viewport_size({"width": 390, "height": 844})
     page.locator(".composer").wait_for()
     overflow = page.evaluate(
@@ -187,6 +215,12 @@ with sync_playwright() as playwright:
         "Ceritakan tugas dan topiknya. Bahan praktik bisa ditambahkan sekarang atau nanti."
     ).count() == 0
     page.locator(".composer textarea").fill("Buatkan laprak")
+    page.locator(".composer textarea").press("Shift+Enter")
+    assert page.locator(".composer textarea").input_value() == "Buatkan laprak\n"
+    page.locator(".composer textarea").dispatch_event(
+        "keydown", {"key": "Enter", "isComposing": True}
+    )
+    assert page.locator(".clarification-inline").count() == 0
     page.locator(".composer textarea").press("Enter")
     page.locator(".clarification-inline").wait_for()
     assert page.locator(".clarification-inline").count() == 1

@@ -50,6 +50,26 @@ test('locale files have identical keyed surfaces and Indonesian defaults', () =>
   for (const key of keys(id)) assert.ok(String(key.split('.').reduce((current, part) => current?.[part], id) || '').trim(), key);
 });
 
+test('workspace runtime namespaces resolve at the paths used by components', () => {
+  const runtimeNamespaces = [
+    'productUpdate',
+    'chatSurface',
+    'messageActions',
+    'brief',
+    'context',
+    'quiz',
+    'documentCard',
+    'account',
+    'institutionLogo',
+  ];
+  for (const namespace of runtimeNamespaces) {
+    assert.ok(id.workspace[namespace], `missing id workspace.${namespace}`);
+    assert.ok(en.workspace[namespace], `missing en workspace.${namespace}`);
+    assert.equal(id.workspace.settings[namespace], undefined, `workspace.${namespace} must not be nested under settings`);
+    assert.equal(en.workspace.settings[namespace], undefined, `workspace.${namespace} must not be nested under settings`);
+  }
+});
+
 test('translator falls back to Indonesian and interpolates values', () => {
   assert.match(source, /export function createTranslator/);
   assert.match(source, /language === 'en'/);
@@ -92,6 +112,9 @@ test('workspace tutorial and composer consume keyed locale copy', () => {
   assert.match(tutorialSource, /workspace\.tutorial\.steps\.0\.title/);
   assert.match(composerSource, /workspace\.composer\.placeholders\.centered/);
   assert.match(composerSource, /workspace\.aiMode\.thinking\.description/);
+  assert.match(composerSource, /workspace\.composer\.hintEnter/);
+  assert.match(composerSource, /workspace\.composer\.hintShortcut/);
+  assert.match(composerSource, /localizeAiDataClasses/);
   assert.doesNotMatch(tutorialSource, /Ceritakan tugasmu|Tutup tutorial|Mulai chat/);
   assert.doesNotMatch(composerSource, /Tulis tugasmu, tempel link|Deteksi otomatis|Tambahkan bahan/);
 });

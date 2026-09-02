@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, ClipboardList, FileText, GraduationCap, LayoutTemplate, LockKeyhole, Pencil, Plus, Send } from 'lucide-react';
 import { CustomSelect } from '../../components/CustomSelect';
 import { useI18n } from '../../i18n/context';
+import { localizeAiDataClasses } from '../../lib/ai-consent-labels';
 import { PendingAttachmentChip } from './AttachmentComponents';
 import { shouldSubmitComposerKey } from '../../lib/composer-keyboard';
 
@@ -51,6 +52,7 @@ export default function Composer({ input, setInput, busy, attachmentKind, setAtt
   const [consentBusy, setConsentBusy] = useState(false);
   const processors = aiConsentData?.manifest?.providers || [];
   const externalProcessingReady = !processors.length || aiConsentData?.consent?.active === true;
+  const consentDataClasses = localizeAiDataClasses(processors.flatMap((provider) => provider.dataClasses || []), t);
   const shortcutItems = [
     { key: 'laprak', label: t('workspace.composer.shortcuts.0.label'), icon: FileText, prompt: t('workspace.composer.shortcuts.0.prompt') },
     { key: 'proposal', label: t('workspace.composer.shortcuts.1.label'), icon: LayoutTemplate, prompt: t('workspace.composer.shortcuts.1.prompt') },
@@ -91,7 +93,7 @@ export default function Composer({ input, setInput, busy, attachmentKind, setAtt
   return <div className={`composer-zone ${centered ? 'composer-centered composer-claude' : ''}`}>
     {pendingFiles.length ? <div className="pending-files">{pendingFiles.map((file, index) => <PendingAttachmentChip file={file} index={index} key={`${file.name}-${index}`} onRemove={onRemovePending} />)}</div> : null}
     {editingMessage && <div className="composer-editing-banner" role="status" aria-live="polite"><span><Pencil size={13} />{t('workspace.composer.editBanner')}</span><button type="button" onClick={onCancelEdit} disabled={busy}>{t('workspace.composer.cancelEdit')}</button></div>}
-    {!externalProcessingReady && <div className="composer-consent" role="status"><div><b>{t('workspace.composer.aiConsentTitle', { providers: processors.map((provider) => provider.displayName).join(', ') })}</b><small>{t('workspace.composer.aiConsentDescription', { data: processors.flatMap((provider) => provider.dataClasses || []).join(', ') })}</small></div><button type="button" onClick={enableExternalProcessing} disabled={consentBusy}>{consentBusy ? t('workspace.composer.aiConsentSaving') : t('workspace.composer.aiConsentAllow')}</button></div>}
+    {!externalProcessingReady && <div className="composer-consent" role="status"><div><b>{t('workspace.composer.aiConsentTitle', { providers: processors.map((provider) => provider.displayName).join(', ') })}</b><small>{t('workspace.composer.aiConsentDescription', { data: consentDataClasses.join(', ') })}</small></div><button type="button" onClick={enableExternalProcessing} disabled={consentBusy}>{consentBusy ? t('workspace.composer.aiConsentSaving') : t('workspace.composer.aiConsentAllow')}</button></div>}
     <form className={`composer ${centered ? 'composer-style-reference' : ''}`} onSubmit={send}>
       <textarea ref={textareaRef} aria-label={placeholder || t('workspace.composer.chatMessage')} rows="2" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (shouldSubmitComposerKey({ key: event.key, shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey, isComposing: event.nativeEvent.isComposing, enterToSend })) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={placeholder} />
       <div className="composer-bottom-row">
@@ -107,6 +109,6 @@ export default function Composer({ input, setInput, busy, attachmentKind, setAtt
       </div>
     </form>
     {centered ? <div className="composer-shortcuts" aria-label={t('workspace.composer.documentType')}>{shortcutItems.map((item) => { const Icon = item.icon; return <button key={item.key} type="button" className="composer-shortcut" onClick={() => setInput(item.prompt)}><Icon size={14} /><span>{item.label}</span></button>; })}</div> : null}
-    {!centered ? <small>{t('workspace.composer.hint')}</small> : null}
+    {!centered ? <small>{t(enterToSend ? 'workspace.composer.hintEnter' : 'workspace.composer.hintShortcut')}</small> : null}
   </div>;
 }

@@ -255,7 +255,7 @@ Generate the request ID once before optimistic messages are added. Keep it throu
 
 Run the focused tests green, temporarily restore the old `return api(...)` fallback, prove the fetch-count test fails, restore the fix, and rerun green.
 
-- [ ] **Step 7: Commit client mutation lifecycle**
+- [x] **Step 7: Commit client mutation lifecycle**
 
 ```text
 git add client/src/api.js client/src/lib/request-lifecycle.js client/src/lib/read-sse-stream.js client/src/pages/Workspace/useLegacyWorkspaceController.js client/test/request-lifecycle.test.mjs client/test/api-stream-contract.test.mjs client/test/read-sse-stream.test.mjs
@@ -321,7 +321,7 @@ npm test
 
 Expected: consent and provider contracts pass with legacy behavior preserved.
 
-- [ ] **Step 7: Commit manifest and consent**
+- [x] **Step 7: Commit manifest and consent**
 
 ```text
 git add server/src/processor-manifest.js server/src/external-ai-consent.js server/src/db.js server/src/index.js server/src/integrations.js server/test/external-ai-consent.test.mjs server/test/provider-contract.test.mjs client/src/lib/workspace-helpers.js client/src/pages/Workspace/SettingsModal.jsx client/src/pages/Workspace/Composer.jsx client/src/pages/Admin/AdminLegacyContentPanels.jsx client/src/pages/Admin/LegacyAdminWorkspace.jsx client/src/i18n/id.json client/src/i18n/en.json
@@ -363,11 +363,11 @@ Expected: missing helper and current hard-coded behavior fail.
 
 Use both React's composition state and `nativeEvent.isComposing`. Call `requestSubmit()` only when the pure helper returns true. The send button remains independent of the keyboard preference.
 
-- [ ] **Step 4: Add rendered browser coverage**
+- [x] **Step 4: Add rendered browser coverage**
 
 In the existing workflow browser script, test both modes, Shift+Enter, Ctrl+Enter, and composition behavior at desktop and 390 px mobile width.
 
-- [ ] **Step 5: Run focused, browser, and client tests**
+- [x] **Step 5: Run focused, browser, and client tests**
 
 Run:
 
@@ -379,7 +379,7 @@ npm run test:e2e
 
 Expected: keyboard matrix and actual composer workflow pass.
 
-- [ ] **Step 6: Commit composer preference behavior**
+- [x] **Step 6: Commit composer preference behavior**
 
 ```text
 git add client/src/lib/composer-keyboard.js client/src/pages/Workspace/Composer.jsx client/src/pages/Workspace/LegacyWorkspaceView.jsx client/src/pages/Workspace/useLegacyWorkspaceController.js client/test/composer-keyboard.test.mjs scripts/ui-workflow-check.py

@@ -59,6 +59,17 @@ const verified = await request('/auth/verify', {
 csrf = verified.csrfToken;
 assert.equal(verified.user.emailVerified, true);
 
+const processorManifest = await request('/ai/processor-manifest');
+await request('/privacy/ai-consent', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    manifestVersion: processorManifest.manifestVersion,
+    policyVersion: processorManifest.policyVersion,
+    sourceSurface: 'onboarding',
+  }),
+});
+
 await request('/wallet/claim-welcome', { method: 'POST' });
 await request('/profile', {
   method: 'PUT',

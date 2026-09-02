@@ -845,7 +845,7 @@ export function useLegacyWorkspaceController() {
     leftCollapsed, setLeftCollapsed, rightOpen, setRightOpen, documentOpen, setDocumentOpen,
     quizMode, setQuizMode, modal, setModal, config, contextOpen, setContextOpen,
     attachmentKind, setAttachmentKind, documents, projectPins, billingPlan, aiMode, setAiMode,
-    aiModeAccess, aiConsentData, enableExternalAiConsent, recentSearchOpen, setRecentSearchOpen, recentSearchQuery, setRecentSearchQuery,
+    aiModeAccess, aiConsentData, setAiConsentData, enableExternalAiConsent, recentSearchOpen, setRecentSearchOpen, recentSearchQuery, setRecentSearchQuery,
     recentSearchInputRef, identityIntake, tutorialOpen, setTutorialFirstUse, setTutorialOpen,
     productUpdate, page, editingMessage, projectParam, updateConfig, closeMobileSidebar, setRoute,
     loadSessions, loadDocuments, openSession, groupLabel, moveSessionToGroup, projectEntries,

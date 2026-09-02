@@ -30,6 +30,8 @@ bench-results/
 .wrangler/
 *.log
 *.tgz
+__pycache__/
+*.py[cod]
 
 # Local operator notes
 docs/PUSH_DEPLOY_LOCAL.md
