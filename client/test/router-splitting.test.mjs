@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const mainSource = await readFile(new URL('../src/main.jsx', import.meta.url), 'utf8');
-const legacyWorkspaceSource = await readFile(new URL('../src/pages/Workspace/LegacyWorkspace.jsx', import.meta.url), 'utf8');
+const legacyWorkspaceSource = await readFile(new URL('../src/pages/Workspace/LegacyWorkspaceView.jsx', import.meta.url), 'utf8');
 const loaderSource = await readFile(new URL('../src/lib/load-page.js', import.meta.url), 'utf8');
 
 test('route modules are loaded through the shared page loader', () => {
