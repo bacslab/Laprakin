@@ -3,6 +3,7 @@ import { FileText, Plus, X } from 'lucide-react';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../../api';
 import { inferPendingAttachmentKind } from '../../lib/attachments';
+import { useI18n } from '../../i18n/context';
 
 function PdfThumbnail({ url = '', file = null, size = 58 }) {
   const canvasRef = useRef(null);
@@ -46,6 +47,7 @@ function PdfThumbnail({ url = '', file = null, size = 58 }) {
 }
 
 export function AttachmentThumbnail({ file }) {
+  const { t } = useI18n();
   const [previewFailed, setPreviewFailed] = useState(false);
   const [excerpt, setExcerpt] = useState('');
   const image = String(file.mime_type || file.detected_mime || '').startsWith('image/');
@@ -65,7 +67,8 @@ export function AttachmentThumbnail({ file }) {
     return <span className="attachment-thumb pdf"><PdfThumbnail url={`/api/chat/attachments/${file.id}/preview`} /></span>;
   }
   if (visualPreview) {
-    return <span className="attachment-thumb image"><img src={`/api/chat/attachments/${file.id}/preview`} alt={`Preview ${file.original_name || 'lampiran'}`} onError={() => setPreviewFailed(true)} /></span>;
+    const name = file.original_name || t('workspace.attachments.attachmentFallback');
+    return <span className="attachment-thumb image"><img src={`/api/chat/attachments/${file.id}/preview`} alt={t('workspace.attachments.attachmentAlt', { name })} onError={() => setPreviewFailed(true)} /></span>;
   }
   if (excerpt) {
     return <span className="attachment-thumb text-document"><i>{excerpt}</i><small>{extension}</small></span>;
@@ -74,6 +77,7 @@ export function AttachmentThumbnail({ file }) {
 }
 
 export function PendingAttachmentChip({ file, index, onRemove }) {
+  const { t } = useI18n();
   const [preview, setPreview] = useState('');
   const [excerpt, setExcerpt] = useState('');
   const pdf = file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name || '');
@@ -90,15 +94,17 @@ export function PendingAttachmentChip({ file, index, onRemove }) {
     }
     return undefined;
   }, [file]);
-  return <span className="pending-file-chip">{pdf ? <PdfThumbnail file={file} size={34} /> : preview ? <img src={preview} alt="" /> : excerpt ? <i>{excerpt}</i> : <FileText size={12} />}<b>{file.name}</b><button type="button" onClick={() => onRemove(index)} aria-label={`Hapus ${file.name}`}><X size={11} /></button></span>;
+  return <span className="pending-file-chip">{pdf ? <PdfThumbnail file={file} size={34} /> : preview ? <img src={preview} alt="" /> : excerpt ? <i>{excerpt}</i> : <FileText size={12} />}<b>{file.name}</b><button type="button" onClick={() => onRemove(index)} aria-label={t('workspace.attachments.removeFile', { name: file.name })}><X size={11} /></button></span>;
 }
 
 export function SourceBar({ attachments, onOpen, onAdd, compact = false }) {
-  return <section className={`source-bar ${compact ? 'message-source-bar' : ''} ${attachments.length > 1 ? 'has-many' : ''}`} aria-label="Bahan terlampir">
+  const { t } = useI18n();
+  return <section className={`source-bar ${compact ? 'message-source-bar' : ''} ${attachments.length > 1 ? 'has-many' : ''}`} aria-label={t('workspace.attachments.attachedMaterials')}>
     <div className="source-preview-list">{attachments.map((file) => {
       const detectedKind = ['module', 'unknown'].includes(file.kind) ? inferPendingAttachmentKind({ name: file.original_name, type: file.mime_type }) : file.kind;
-      return <button type="button" className="source-preview-item" key={file.id} onClick={() => onOpen(file)} title={`Preview ${file.original_name}`}><AttachmentThumbnail file={file} /><span><b>{file.original_name}</b><small>{detectedKind === 'practice_evidence' || detectedKind === 'evidence' ? 'Bukti praktik' : detectedKind === 'module' ? 'Modul' : 'Bahan'}</small></span></button>;
+      const kindLabel = detectedKind === 'practice_evidence' || detectedKind === 'evidence' ? t('workspace.attachments.evidence') : detectedKind === 'module' ? t('workspace.attachments.module') : t('workspace.attachments.material');
+      return <button type="button" className="source-preview-item" key={file.id} onClick={() => onOpen(file)} title={t('workspace.attachments.previewFile', { name: file.original_name })}><AttachmentThumbnail file={file} /><span><b>{file.original_name}</b><small>{kindLabel}</small></span></button>;
     })}</div>
-    {onAdd && <div className="source-bar-actions"><button type="button" onClick={onAdd}><Plus size={13} />Tambah file</button></div>}
+    {onAdd && <div className="source-bar-actions"><button type="button" onClick={onAdd}><Plus size={13} />{t('workspace.attachments.addFile')}</button></div>}
   </section>;
 }

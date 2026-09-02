@@ -4,6 +4,7 @@ import { renderAsync as renderDocx } from 'docx-preview';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../../api';
 import { IconButton } from '../../components/IconButton';
+import { useI18n } from '../../i18n/context';
 
 /**
  * Preview PDF yang seluruh halamannya dirender berurutan ke bawah.
@@ -12,6 +13,7 @@ import { IconButton } from '../../components/IconButton';
  * masih tertunda ditangani saat modal ditutup dan tidak menjadi unhandled rejection.
  */
 function PdfAttachmentPreview({ file }) {
+  const { t } = useI18n();
   const containerRef = useRef(null);
   const [pageCount, setPageCount] = useState(0);
   const [error, setError] = useState('');
@@ -43,7 +45,7 @@ function PdfAttachmentPreview({ file }) {
           await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
         }
       } catch (previewError) {
-        if (!disposed && previewError?.name !== 'RenderingCancelledException') setError('PDF tidak dapat ditampilkan.');
+        if (!disposed && previewError?.name !== 'RenderingCancelledException') setError(t('workspace.attachments.pdfError'));
       }
     };
     renderAll();
@@ -57,11 +59,12 @@ function PdfAttachmentPreview({ file }) {
 
   return <div className="attachment-pdf-preview">
     {error && <div className="attachment-preview-error"><CircleAlert size={17}/>{error}</div>}
-    <div ref={containerRef} className="attachment-pdf-pages" aria-label={pageCount ? `Dokumen ${pageCount} halaman` : 'Memuat dokumen'} />
+    <div ref={containerRef} className="attachment-pdf-pages" aria-label={pageCount ? t('workspace.attachments.pagesLabel', { count: pageCount }) : t('workspace.attachments.loadingPages')} />
   </div>;
 }
 
 function DocxAttachmentPreview({ file }) {
+  const { t } = useI18n();
   const hostRef = useRef(null);
   const renderRef = useRef(null);
   const [status, setStatus] = useState('loading');
@@ -72,7 +75,7 @@ function DocxAttachmentPreview({ file }) {
       try {
         setStatus('loading');
         const response = await fetch(`/api/chat/attachments/${file.id}/file`, { credentials: 'same-origin', signal: controller.signal });
-        if (!response.ok) throw new Error('Dokumen Word tidak dapat dimuat.');
+        if (!response.ok) throw new Error(t('workspace.attachments.documentLoadError'));
         const blob = await response.blob();
         if (disposed || !renderRef.current) return;
         renderRef.current.replaceChildren();
@@ -87,7 +90,7 @@ function DocxAttachmentPreview({ file }) {
         });
         if (!disposed) setStatus('ready');
       } catch (error) {
-        if (!disposed && error.name !== 'AbortError') setStatus(error.message || 'Dokumen Word tidak dapat ditampilkan.');
+        if (!disposed && error.name !== 'AbortError') setStatus(error.message || t('workspace.attachments.documentError'));
       }
     };
     render();
@@ -105,13 +108,14 @@ function DocxAttachmentPreview({ file }) {
     return () => observer.disconnect();
   }, [status]);
   return <div className="attachment-docx-preview" ref={hostRef}>
-    {status === 'loading' && <div className="attachment-preview-loading"><LoaderCircle className="spin" size={17}/>Memuat dokumen Word asli...</div>}
+    {status === 'loading' && <div className="attachment-preview-loading"><LoaderCircle className="spin" size={17}/>{t('workspace.attachments.loadingDocument')}</div>}
     {status !== 'loading' && status !== 'ready' && <div className="attachment-preview-error"><CircleAlert size={17}/>{status}</div>}
     <div className={status === 'ready' ? 'is-ready' : 'is-loading'} ref={renderRef} />
   </div>;
 }
 
 function TextAttachmentPreview({ file, extension }) {
+  const { t } = useI18n();
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
   useEffect(() => {
@@ -128,24 +132,25 @@ function TextAttachmentPreview({ file, extension }) {
         const text = await response.text();
         if (!disposed) setContent(text.slice(0, 200000));
       } catch {
-        if (!disposed) setError('Isi file tidak dapat ditampilkan.');
+        if (!disposed) setError(t('workspace.attachments.fileError'));
       }
     };
     load();
     return () => { disposed = true; };
   }, [extension, file.id]);
   if (error) return <div className="attachment-preview-error"><CircleAlert size={17}/>{error}</div>;
-  if (!content) return <div className="attachment-preview-loading"><LoaderCircle className="spin" size={17}/>Memuat isi file...</div>;
+  if (!content) return <div className="attachment-preview-loading"><LoaderCircle className="spin" size={17}/>{t('workspace.attachments.loadingFile')}</div>;
   return <pre className="attachment-text-preview">{content}</pre>;
 }
 
 export default function AttachmentPreviewModal({ file, onClose }) {
+  const { t } = useI18n();
   const extension = String(file.original_name || '').split('.').pop()?.toUpperCase() || '';
   const mimeType = String(file.detected_mime || file.mime_type || '');
   const image = mimeType.startsWith('image/') || ['PNG', 'JPG', 'JPEG', 'WEBP'].includes(extension);
   return <div className="attachment-preview-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="attachment-preview-modal" role="dialog" aria-modal="true" aria-label={`Preview ${file.original_name}`}>
-      <header><div><small>Preview file asli</small><b>{file.original_name}</b></div><IconButton label="Tutup preview" onClick={onClose}><X size={17}/></IconButton></header>
+    <section className="attachment-preview-modal" role="dialog" aria-modal="true" aria-label={t('workspace.attachments.previewTitle', { name: file.original_name })}>
+      <header><div><small>{t('workspace.attachments.originalPreview')}</small><b>{file.original_name}</b></div><IconButton label={t('workspace.attachments.closePreview')} onClick={onClose}><X size={17}/></IconButton></header>
       <div className="attachment-preview-body">
         {extension === 'PDF' || mimeType === 'application/pdf'
           ? <PdfAttachmentPreview file={file} />

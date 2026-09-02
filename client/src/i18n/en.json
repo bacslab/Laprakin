@@ -406,6 +406,28 @@
         "description": "The deepest reasoning",
         "unlock": "Max only"
       }
+    },
+    "attachments": {
+      "pdfError": "The PDF could not be displayed.",
+      "documentLoadError": "The Word document could not be loaded.",
+      "documentError": "The Word document could not be displayed.",
+      "loadingDocument": "Loading the original Word document...",
+      "fileError": "The file contents could not be displayed.",
+      "loadingFile": "Loading file contents...",
+      "pagesLabel": "{{count}}-page document",
+      "loadingPages": "Loading document",
+      "previewTitle": "Preview {{name}}",
+      "originalPreview": "Original file preview",
+      "closePreview": "Close preview",
+      "attachmentAlt": "Preview {{name}}",
+      "attachmentFallback": "attachment",
+      "removeFile": "Remove {{name}}",
+      "attachedMaterials": "Attached materials",
+      "previewFile": "Preview {{name}}",
+      "evidence": "Practice evidence",
+      "module": "Module",
+      "material": "Material",
+      "addFile": "Add file"
     }
   },
   "accessibility": {

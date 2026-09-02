@@ -406,6 +406,28 @@
         "description": "Penalaran paling mendalam",
         "unlock": "Khusus Max"
       }
+    },
+    "attachments": {
+      "pdfError": "PDF tidak dapat ditampilkan.",
+      "documentLoadError": "Dokumen Word tidak dapat dimuat.",
+      "documentError": "Dokumen Word tidak dapat ditampilkan.",
+      "loadingDocument": "Memuat dokumen Word asli...",
+      "fileError": "Isi file tidak dapat ditampilkan.",
+      "loadingFile": "Memuat isi file...",
+      "pagesLabel": "Dokumen {{count}} halaman",
+      "loadingPages": "Memuat dokumen",
+      "previewTitle": "Preview {{name}}",
+      "originalPreview": "Preview file asli",
+      "closePreview": "Tutup preview",
+      "attachmentAlt": "Preview {{name}}",
+      "attachmentFallback": "lampiran",
+      "removeFile": "Hapus {{name}}",
+      "attachedMaterials": "Bahan terlampir",
+      "previewFile": "Preview {{name}}",
+      "evidence": "Bukti praktik",
+      "module": "Modul",
+      "material": "Bahan",
+      "addFile": "Tambah file"
     }
   },
   "accessibility": {
