@@ -5,23 +5,22 @@ import { api } from '../../api';
 import { useI18n } from '../../i18n/context';
 import './status.css';
 
-const CHECK_LABELS = {
-  database: 'Database',
-  ai: 'AI provider',
-  worker: 'Background worker',
+const CHECK_KEYS = {
+  database: 'status.checks.database',
+  ai: 'status.checks.ai',
+  worker: 'status.checks.worker',
 };
 
-function checkLabel(key, language) {
-  if (language !== 'en') return key === 'database' ? 'Database' : key === 'ai' ? 'Provider AI' : 'Worker background';
-  return CHECK_LABELS[key] || key;
+function checkLabel(key, t) {
+  return CHECK_KEYS[key] ? t(CHECK_KEYS[key]) : key;
 }
 
-function checkCopy(value, language) {
+function checkCopy(value, t) {
   const normalized = String(value || 'unknown');
-  const labels = language === 'en'
-    ? { ok: 'Operational', idle: 'Idle', busy: 'Busy', unavailable: 'Unavailable', not_configured: 'Not configured', unknown: 'Unknown' }
-    : { ok: 'Berjalan normal', idle: 'Idle', busy: 'Sibuk', unavailable: 'Tidak tersedia', not_configured: 'Belum dikonfigurasi', unknown: 'Belum diketahui' };
-  return labels[normalized] || normalized;
+  const key = ['ok', 'idle', 'busy', 'unavailable', 'not_configured', 'unknown'].includes(normalized)
+    ? `status.values.${normalized}`
+    : '';
+  return key ? t(key) : normalized;
 }
 
 export default function StatusPage() {
@@ -91,7 +90,7 @@ export default function StatusPage() {
         <button type="button" className="status-page-refresh" onClick={() => loadStatus(true)} disabled={refreshing} aria-label={t('status.refresh')} title={t('status.refresh')}><RefreshCw className={refreshing ? 'spin' : ''} size={16} /></button>
       </section>
       <div className="status-page-meta"><span>{t('status.lastChecked')}: {checkedLabel}</span>{snapshot?.version && <span>{t('status.version')} {snapshot.version}</span>}</div>
-      <section className="status-page-checks" aria-labelledby="status-checks-title"><h2 id="status-checks-title">{t('status.components')}</h2>{checks.length ? checks.map(([key, value]) => <article key={key}><div><span className="status-page-check-dot" aria-hidden="true" /><b>{checkLabel(key, language)}</b></div><span className={`status-page-check-value status-${value}`}>{checkCopy(value, language)}</span></article>) : <p>{t('status.noComponents')}</p>}</section>
+      <section className="status-page-checks" aria-labelledby="status-checks-title"><h2 id="status-checks-title">{t('status.components')}</h2>{checks.length ? checks.map(([key, value]) => <article key={key}><div><span className="status-page-check-dot" aria-hidden="true" /><b>{checkLabel(key, t)}</b></div><span className={`status-page-check-value status-${value}`}>{checkCopy(value, t)}</span></article>) : <p>{t('status.noComponents')}</p>}</section>
       <p className="status-page-footnote">{t('status.privacy')}</p>
     </section>
   </main>;

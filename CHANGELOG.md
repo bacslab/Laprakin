@@ -4,6 +4,7 @@
 - Menjadikan audit admin queryable dengan filter aman dan pencatatan mutation terstruktur yang konsisten tanpa raw IP, token, atau isi dokumen.
 - Menambahkan pemeriksaan password opsional berbasis range query k-anonim serta memigrasikan surface Auth ke translation key Indonesia/Inggris.
 - Memigrasikan seluruh copy publik Landing, termasuk navigasi, workflow, sumber, fitur, FAQ, CTA, footer, dan label aksesibilitas, ke translation key Indonesia/Inggris.
+- Memindahkan label komponen dan nilai status layanan yang dinamis ke translation key Indonesia/Inggris.
 - Memindahkan override khusus Auth ke layer stylesheet terpisah dan menurunkan budget compatibility `!important` secara terukur.
 
 ## 21.0.6 - 2026-09-02

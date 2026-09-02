@@ -113,6 +113,19 @@
     "version": "Versi",
     "components": "Komponen layanan",
     "noComponents": "Belum ada data komponen.",
+    "checks": {
+      "database": "Database",
+      "ai": "Provider AI",
+      "worker": "Worker background"
+    },
+    "values": {
+      "ok": "Berjalan normal",
+      "idle": "Idle",
+      "busy": "Sibuk",
+      "unavailable": "Tidak tersedia",
+      "not_configured": "Belum dikonfigurasi",
+      "unknown": "Belum diketahui"
+    },
     "privacy": "Halaman ini hanya menampilkan status operasional umum dan tidak memuat credential, token, isi dokumen, atau data akun.",
     "backHome": "Kembali ke beranda"
   },

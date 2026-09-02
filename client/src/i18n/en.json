@@ -113,6 +113,19 @@
     "version": "Version",
     "components": "Service components",
     "noComponents": "No component data yet.",
+    "checks": {
+      "database": "Database",
+      "ai": "AI provider",
+      "worker": "Background worker"
+    },
+    "values": {
+      "ok": "Operational",
+      "idle": "Idle",
+      "busy": "Busy",
+      "unavailable": "Unavailable",
+      "not_configured": "Not configured",
+      "unknown": "Unknown"
+    },
     "privacy": "This page only shows general operational status and contains no credentials, tokens, document content, or account data.",
     "backHome": "Back to homepage"
   },
