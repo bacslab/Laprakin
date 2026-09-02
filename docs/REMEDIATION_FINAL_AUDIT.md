@@ -25,11 +25,11 @@ passing tests.
 | Error tracking and status surface | Foundation complete | Structured redacted logs, DSN-gated Sentry adapter, and `/api/status` exist; production DSN/alert routing still requires deployment configuration. |
 | CSS token/layer foundation | Complete | Token, layer, and landing ownership contracts pass. |
 | CSS section migration and `!important` target | Incomplete | The compatibility stylesheet remains large and above the target budget; scoped section files, contrast checks, and the measurable guard exist, but section-by-section migration and all required visual breakpoints remain. |
-| Client modularization | Incomplete | Domain providers, utilities, leaves, workspace helpers, and page boundaries exist; Admin orchestration and ChatSurface are extracted/lazy, but `main.jsx` is still 1,205 lines and legacy Workspace orchestration plus the JSX size gate remain. |
+| Client modularization | Incomplete | Domain providers, utilities, leaves, workspace helpers, and page boundaries exist; Admin orchestration, Workspace orchestration, and ChatSurface are extracted/lazy, and `main.jsx` is down to 294 lines. The extracted `LegacyWorkspace.jsx` remains 933 lines, so the per-file JSX size gate and full domain ownership migration remain. |
 | Workspace state split | Foundation complete | Chat, document, and UI provider contracts plus state boundary tests pass; full reducer/page ownership migration remains. |
 | True progressive AI streaming | Complete for current provider scope | Provider relay emits deltas and heartbeats with cancellation, retries before the first delta, progressive output moderation, canonical persistence, and a tested JSON fallback. |
-| Route-based code splitting | Foundation complete | Lazy boundaries build separate Landing/Auth/Workspace/Admin, `LegacyAdminWorkspace`, `ChatSurface`, Status, and Pricing chunks. The shared vendor chunk remains large. |
-| Proper i18n migration | Incomplete | `id.json`/`en.json` and keyed translator exist, but legacy `EN_UI` and `translateUiText` string matching remain in `main.jsx`; no full component migration or pluralization library is active. |
+| Route-based code splitting | Foundation complete | Lazy boundaries build separate Landing/Auth/Workspace, `LegacyWorkspace`, Admin, `LegacyAdminWorkspace`, `ChatSurface`, Status, and Pricing chunks. The shared vendor chunk remains large. |
+| Proper i18n migration | Incomplete | `id.json`/`en.json` and keyed translator exist, but the legacy DOM walker still calls `translateUiText` from `main.jsx`; no full component migration or pluralization library is active. |
 | Keyboard and dialog accessibility | Foundation complete | CustomSelect keyboard model, focus trap/return hooks, dialog attributes, loading live region, and contract tests pass. |
 | Accessibility acceptance gate | Incomplete | `eslint-plugin-jsx-a11y` is active with 0 errors and 0 warnings, and contrast automation passes; the full image-alt audit and mobile/tablet visual checks remain. |
 | Security headers/CORS | Complete for this gate | `helmet` owns CSP, frame, cross-origin, referrer, and production HSTS headers; `cors` owns credentialed explicit-origin handling, while the application keeps a separate origin guard that returns `ORIGIN_DENIED` for unlisted origins. Runtime allow/deny smoke check passed. |
@@ -42,13 +42,14 @@ passing tests.
 ## Verification evidence
 
 - Server suite: 107 passed, 0 failed.
-- Client contract suite: 26 passed, 0 failed.
+- Client contract suite: 30 passed, 0 failed.
 - Clean-data E2E: passed for auth, profile, evidence, timeline, quality gate,
   template DOCX, restore, and verified password changes.
 - Workflow API and admin operations checks: passed.
 - Full build: passed. The build emitted separate lazy route chunks, including
-  `LegacyAdminWorkspace` (48.15 kB) and `ChatSurface` (29.19 kB), while also
-  warning about the large shared/vendor chunk.
+  `LegacyWorkspace` (104.56 kB), `LegacyAdminWorkspace` (48.26 kB), and
+  `ChatSurface` (29.34 kB), while also warning about the large shared/vendor
+  chunk.
 - Lint and typecheck: passed under the repository's existing configured
   targets; JSX accessibility lint reports 0 warnings.
 - Fresh desktop browser checks at 1280×720: landing, auth, workspace tutorial,
@@ -60,7 +61,7 @@ passing tests.
 This branch is safe to review as an incremental remediation checkpoint. The
 original product gaps prioritized for private beta are implemented and
 verified; the broader supplied UX roadmap remains open for CSS section
-migration, full Workspace page extraction, complete keyed i18n migration, and
-mobile/tablet visual evidence. SQLite/Postgres, queue, and multi-instance
-deployment migration remain intentionally out of scope until traffic warrants
-a separate operational design.
+migration, the remaining Workspace domain/JSX-size cleanup, complete keyed
+i18n migration, and mobile/tablet visual evidence. SQLite/Postgres, queue, and
+multi-instance deployment migration remain intentionally out of scope until
+traffic warrants a separate operational design.
