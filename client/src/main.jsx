@@ -51,6 +51,7 @@ import AdminAccessPanel from './pages/Admin/AdminAccessPanel';
 import AdminPricingPanel from './pages/Admin/AdminPricingPanel';
 import AdminAppealsPanel from './pages/Admin/AdminAppealsPanel';
 import AdminBroadcastPanel from './pages/Admin/AdminBroadcastPanel';
+import LegacyAdminWorkspace from './pages/Admin/LegacyAdminWorkspace';
 import BillingPage from './pages/Billing/BillingPage';
 import SettingsModal from './pages/Workspace/SettingsModal';
 import { DocumentLibrary, ProjectsPage } from './pages/Workspace/WorkspaceCollections';
@@ -61,7 +62,7 @@ import AttachmentPreviewModal from './pages/Workspace/AttachmentPreview';
 import Composer from './pages/Workspace/Composer';
 import { ThinkingRail, WorkPlanRail, WorkflowPanel } from './pages/Workspace/WorkspaceWorkflow';
 import DocumentSidePanel from './pages/Workspace/DocumentSidePanel';
-import { AssistantMessageActions, ChatBriefPanel, DocumentCard, DocumentQuiz, InlineContext, MessageContent, ReportPreview, UserMessageActions } from './pages/Workspace/ChatComponents';
+import { AssistantMessageActions, ChatBriefPanel, DocumentCard, DocumentQuiz, InlineContext, MessageContent, UserMessageActions } from './pages/Workspace/ChatComponents';
 
 const LandingRoutePage = loadPage(() => import('./pages/Landing/LandingPage'));
 const AuthPageModule = loadPage(() => import('./pages/Auth/AuthPage'));
@@ -1389,157 +1390,6 @@ function ChatSurface({ active, messages, attachments, documentState, workflow, a
     </div>}</div>
     {!quizMode && <Composer input={input} setInput={setInput} busy={busy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} centered={blankChat} pendingFiles={pendingFiles} onPasteImages={onPasteImages} onAddPendingFiles={onAddPendingFiles} onRemovePending={onRemovePending} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={onUpgrade} editingMessage={editingMessage} onCancelEdit={onCancelEdit} />}
     {previewFile && <AttachmentPreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />}
-  </div>;
-}
-
-function LegacyAdminWorkspace() {
-  const { user, refreshSession, setNotice, prefs, setPrefs } = useApp();
-  const navigate = useNavigate();
-  const adminTheme = useResolvedTheme(prefs.theme || 'system');
-  const setAdminTheme = (next) => setPrefs((value) => ({ ...value, theme: typeof next === 'function' ? next(resolveTheme(value.theme || 'system')) : next }));
-  const [tab, setTab] = useState('overview');
-  const [overview, setOverview] = useState(null);
-  const [feedback, setFeedback] = useState([]);
-  const [audit, setAudit] = useState([]);
-  const [landing, setLanding] = useState(null);
-  const [aiUsage, setAiUsage] = useState(null);
-  const [adminUsers, setAdminUsers] = useState([]);
-  const [adminAlerts, setAdminAlerts] = useState([]);
-  const [creditForm, setCreditForm] = useState({ audience: 'user', userId: '', amount: 1, reason: 'Kredit tambahan dari admin' });
-  const [integrationStatus, setIntegrationStatus] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [reply, setReply] = useState({});
-  const load = async () => {
-    try {
-      const [nextOverview, nextFeedback, nextAudit, nextCms, nextAiUsage, nextUsers, nextAlerts] = await Promise.all([
-        api('/admin/overview'), api('/admin/feedback'), api('/admin/audit'), api('/admin/cms/landing'), api('/admin/ai/usage?days=30'),
-        api('/admin/users?limit=100'), api('/admin/alerts?status=all'),
-      ]);
-      setOverview(nextOverview); setFeedback(nextFeedback.items || []); setAudit(nextAudit.events || []); setLanding(nextCms.landing || null); setAiUsage(nextAiUsage);
-      setAdminUsers(nextUsers.users || []); setAdminAlerts(nextAlerts.alerts || []);
-    } catch (error) { setNotice(error.message); }
-  };
-  useEffect(() => { load(); }, []);
-  useEffect(() => {
-    const stream = new EventSource('/api/admin/events');
-    const refreshOperationalData = () => {
-      Promise.all([api('/admin/overview'), api('/admin/alerts?status=all')])
-        .then(([nextOverview, nextAlerts]) => { setOverview(nextOverview); setAdminAlerts(nextAlerts.alerts || []); })
-        .catch(() => {});
-    };
-    stream.addEventListener('alert', refreshOperationalData);
-    stream.addEventListener('alert-updated', refreshOperationalData);
-    stream.addEventListener('credit', () => { load(); });
-    return () => stream.close();
-  }, []);
-  const reviewRisk = async (id, status) => {
-    try { await api(`/admin/risk-events/${id}`, { method: 'PUT', body: { status } }); await load(); setNotice('Status kejadian diperbarui.'); } catch (error) { setNotice(error.message); }
-  };
-  const updateFeedback = async (id, status) => {
-    try { await api(`/admin/feedback/${id}/status`, { method: 'PUT', body: { status, adminNote: '' } }); await load(); } catch (error) { setNotice(error.message); }
-  };
-  const sendReply = async (id) => {
-    const body = (reply[id] || '').trim(); if (!body) return;
-    setBusy(true);
-    try { await api(`/admin/feedback/${id}/reply`, { method: 'POST', body: { body } }); setReply((prev) => ({ ...prev, [id]: '' })); await load(); setNotice('Balasan dikirim ke user lewat notifikasi aplikasi.'); } catch (error) { setNotice(error.message); } finally { setBusy(false); }
-  };
-  const saveLanding = async () => {
-    if (!landing) return;
-    setBusy(true);
-    try { const data = await api('/admin/cms/landing', { method: 'PUT', body: landing }); setLanding(data.landing); setNotice('Konten landing dipublikasikan.'); } catch (error) { setNotice(error.message); } finally { setBusy(false); }
-  };
-  const runRetention = async () => { setBusy(true); try { const data = await api('/admin/retention/run', { method: 'POST', body: {} }); setNotice(`Pembersihan selesai: ${data.deletedDocuments || 0} dokumen, ${data.deletedObjects || 0} objek.`); await load(); } catch (error) { setNotice(error.message); } finally { setBusy(false); } };
-  const checkIntegrations = async () => {
-    setBusy(true);
-    try {
-      const result = await api('/admin/integrations/check', { method: 'POST', body: {} });
-      setIntegrationStatus(result); setNotice('Gemini dan Google OIDC terhubung dengan benar.');
-    } catch (error) {
-      if (error.payload?.gemini || error.payload?.googleOidc) setIntegrationStatus(error.payload);
-      setNotice('Ada integrasi yang belum siap. Lihat detail pada tab AI & Login.');
-    } finally { setBusy(false); }
-  };
-  const grantAdminCredit = async () => {
-    setBusy(true);
-    try {
-      const result = await api('/admin/credits/grant', {
-        method: 'POST',
-        body: {
-          ...creditForm,
-          amount: Number(creditForm.amount),
-          idempotencyKey: `admin-credit:${crypto.randomUUID()}`,
-        },
-      });
-      setNotice(`${result.recipientCount} user menerima ${result.amount} kredit.`);
-      await load();
-    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
-  };
-  const updateAdminAlert = async (id, status) => {
-    try {
-      await api(`/admin/alerts/${id}`, { method: 'PUT', body: { status } });
-      const next = await api('/admin/alerts?status=all');
-      setAdminAlerts(next.alerts || []);
-    } catch (error) { setNotice(error.message); }
-  };
-  const updateLandingMedia = (patch) => setLanding((prev) => ({ ...prev, media: { ...(prev.media || {}), ...patch } }));
-  const uploadLandingMedia = async (event, target, index = null) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    setBusy(true);
-    try {
-      const form = new FormData(); form.append('file', file);
-      const result = await api('/admin/cms/landing-media', { method: 'POST', body: form, form: true });
-      if (target === 'hero') updateLandingMedia({ heroImageUrl: result.media.url });
-      if (target === 'compare-ai' || target === 'compare-basic-ai') updateLandingMedia({ compareAiPdfUrl: result.media.url, compareBasicAiPdfUrl: result.media.url });
-      if (target === 'compare-laprakin' || target === 'compare-basic-laprakin') updateLandingMedia({ compareLaprakinPdfUrl: result.media.url, compareBasicLaprakinPdfUrl: result.media.url });
-      if (target === 'compare-thinking-ai') updateLandingMedia({ compareThinkingAiPdfUrl: result.media.url });
-      if (target === 'compare-thinking-laprakin') updateLandingMedia({ compareThinkingLaprakinPdfUrl: result.media.url });
-      if (target === 'compare-xtrathink-ai') updateLandingMedia({ compareXtraThinkAiPdfUrl: result.media.url });
-      if (target === 'compare-xtrathink-laprakin') updateLandingMedia({ compareXtraThinkLaprakinPdfUrl: result.media.url });
-      if (target === 'compare-video') updateLandingMedia({ compareVideoUrl: result.media.url });
-      if (target === 'tutorial-video') updateLandingMedia({ tutorialVideoUrl: result.media.url });
-      setNotice('Media berhasil diupload. Klik Simpan CMS untuk mempublikasikan perubahan.');
-    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
-  };
-  const tabs = [
-    ['overview', 'Monitoring', LayoutDashboard], ['credits', 'Kredit user', CreditCard], ['pricing', 'Harga & diskon', CreditCard], ['alerts', 'Error realtime', BellRing], ['integrations', 'AI & Login', Sparkles], ['updates', 'Updates', BellRing], ['broadcasts', 'Email user', Mail], ['feedback', 'Feedback', MessageSquareText], ['users', 'Akses user', Shield], ['appeals', 'Appeal', MessageCircle], ['risk', 'Risk review', AlertTriangle], ['cms', 'Landing CMS', Megaphone], ['audit', 'Audit log', ClipboardList], ['retention', 'Retensi', FileCog],
-  ];
-  const tabGroups = [
-    ['Operasional', ['overview', 'credits', 'pricing', 'alerts', 'integrations']],
-    ['Konten', ['updates', 'broadcasts', 'feedback', 'cms']],
-    ['Keamanan', ['users', 'appeals', 'risk', 'audit', 'retention']],
-  ];
-  if (!overview || !landing) return <div className="admin-loading-state"><LoaderCircle className="spin" size={20} /><b>Memuat Admin Console…</b><span>Jika data belum masuk, gunakan tombol muat ulang setelah beberapa saat.</span><Button variant="secondary" onClick={load}>Coba muat ulang</Button></div>;
-  return <div className={`admin-workspace ${adminTheme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
-    <aside className="admin-sidebar"><div className="admin-brand"><BrandMark alt=""/><div><b>Laprakin</b><small>Admin console</small></div></div><nav>{tabGroups.map(([group, keys]) => <div className="admin-nav-group" key={group}><small>{group}</small>{keys.map((key) => { const [, label, Icon] = tabs.find(([tabKey]) => tabKey === key); return <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)} title={label}><Icon size={16} /><span>{label}</span></button>; })}</div>)}</nav><div className="admin-sidebar-foot"><div><span>{(user.email || 'A').slice(0,1).toUpperCase()}</span><small>{user.email}</small></div><button onClick={async () => { await api('/auth/logout', { method: 'POST', body: {} }); await refreshSession(); navigate('/'); }}><LogOut size={15} />Keluar</button></div></aside>
-    <main className="admin-main"><header className="admin-header"><div><p>Admin console</p><h1>{tabs.find(([key]) => key === tab)?.[1]}</h1></div><div className="admin-header-actions"><button className="admin-theme-toggle" onClick={() => setAdminTheme((value) => value === 'dark' ? 'light' : 'dark')} title="Ubah tema admin" aria-label="Ubah tema admin">{adminTheme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}</button><button className="admin-refresh" onClick={load}><RefreshCw size={15} /><span>Muat ulang</span></button></div></header>
-      {tab === 'overview' && <section className="admin-content"><div className="admin-privacy-note"><ShieldCheck size={17} /><div><b>Privacy-first monitoring</b><span>Hanya metadata operasional. Isi chat, dokumen, file, NIM, IP, fingerprint, prompt, dan output AI tidak ditampilkan.</span></div></div><div className="admin-metric-grid">{[['User aktif',overview.stats.users,Users],['Dokumen aktif',overview.stats.documents,FileText],['Job berjalan',overview.stats.queuedJobs,Activity],['AI call 24j',overview.stats.aiCalls24h,Sparkles],['Token AI 24j',Number(overview.stats.aiTokens24h || 0).toLocaleString('id-ID'),Activity],['Error AI 24j',overview.stats.aiErrors24h,AlertTriangle],['Alert terbuka',overview.stats.openAdminAlerts || 0,BellRing],['Feedback terbuka',overview.stats.openFeedback,MessageCircle],['Risk terbuka',overview.stats.openRiskEvents,AlertTriangle],['Storage',formatBytes(overview.storageBytes),Database]].map(([label,value,Icon]) => <article key={label}><Icon size={16}/><span>{label}</span><b>{value}</b></article>)}</div><div className="admin-grid"><section className="admin-panel"><div className="admin-panel-head"><h2>Aktivitas 7 hari</h2><small>Event agregat</small></div><div className="activity-bars">{overview.dailyActivity?.length ? overview.dailyActivity.map((day) => <div key={day.day}><i style={{height:`${Math.max(8, Math.min(100, day.count * 12))}%`}} /><span>{day.day.slice(5)}</span><b>{day.count}</b></div>) : <p>Belum ada aktivitas.</p>}</div></section><section className="admin-panel"><div className="admin-panel-head"><h2>Job terbaru</h2><small>Tanpa isi dokumen</small></div><div className="admin-list">{overview.jobs?.length ? overview.jobs.map((job) => <article key={job.id}><div><b>{job.job_type}</b><small>{job.message || 'Memproses'}</small></div><span className={`status-${job.status}`}>{job.status}</span></article>) : <p>Belum ada job.</p>}</div></section></div></section>}
-       {tab === 'credits' && <section className="admin-content"><div className="admin-grid"><section className="admin-panel admin-credit-panel"><div className="admin-panel-head"><h2>Tambahkan kredit</h2><small>Tercatat di wallet dan audit log</small></div><label htmlFor="admin-credit-audience">Target<CustomSelect id="admin-credit-audience" ariaLabel="Target kredit" value={creditForm.audience} onChange={(audience) => setCreditForm((value) => ({ ...value, audience }))} options={[{value:'user',label:'Satu user'},{value:'all',label:'Semua user terverifikasi'},{value:'paid',label:'Semua user paid'}]} /></label>{creditForm.audience === 'user' && <label htmlFor="admin-credit-user">User<CustomSelect id="admin-credit-user" ariaLabel="User penerima kredit" value={creditForm.userId} onChange={(userId) => setCreditForm((value) => ({ ...value, userId }))} options={[{value:'',label:'Pilih user'},...adminUsers.map((item)=>({value:item.id,label:`${item.email} · ${item.credits} kredit`}))]} /></label>}<label>Jumlah<input aria-label="Jumlah kredit" type="number" min="1" max="100" value={creditForm.amount} onChange={(event) => setCreditForm((value) => ({ ...value, amount: event.target.value }))} /></label><label>Alasan<input aria-label="Alasan pemberian kredit" maxLength="160" value={creditForm.reason} onChange={(event) => setCreditForm((value) => ({ ...value, reason: event.target.value }))} /></label><Button onClick={grantAdminCredit} disabled={busy || (creditForm.audience === 'user' && !creditForm.userId)}><CreditCard size={14}/>Tambahkan kredit</Button></section><section className="admin-panel"><div className="admin-panel-head"><h2>User terbaru</h2><small>{adminUsers.length} akun</small></div><div className="admin-list admin-user-list">{adminUsers.slice(0,30).map((item)=><article key={item.id}><div><b>{item.fullName || item.email}</b><small>{item.email} · {item.plan}</small></div><span>{item.credits} kredit</span></article>)}</div></section></div></section>}
-      {tab === 'pricing' && <AdminPricingPanel setNotice={setNotice}/>}
-      {tab === 'users' && <AdminAccessPanel users={adminUsers} setNotice={setNotice} onRefresh={load}/>}
-      {tab === 'appeals' && <AdminAppealsPanel setNotice={setNotice} onRefresh={load}/>}
-      {tab === 'broadcasts' && <AdminBroadcastPanel users={adminUsers} setNotice={setNotice}/>}
-      {tab === 'alerts' && <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Error operasional</h2><small>Diperbarui realtime, tanpa isi dokumen</small></div><div className="admin-list admin-alert-list">{adminAlerts.length ? adminAlerts.map((alert)=><article key={alert.id} className={`admin-alert-${alert.severity}`}><div><b>{alert.summary}</b><small>{alert.userEmail || 'Sistem'} · {alert.kind}{alert.errorCode ? ` · ${alert.errorCode}` : ''} · {formatDate(alert.createdAt)}</small></div><div className="admin-actions"><span className={`status-${alert.status === 'resolved' ? 'completed' : 'failed'}`}>{alert.status}</span><button onClick={()=>updateAdminAlert(alert.id,alert.status === 'open' ? 'resolved' : 'open')}>{alert.status === 'open' ? 'Tandai selesai' : 'Buka lagi'}</button></div></article>) : <p className="empty-admin">Belum ada error operasional.</p>}</div></div></section>}
-      {tab === 'integrations' && <section className="admin-content"><div className="admin-privacy-note"><ShieldCheck size={17}/><div><b>Credential tetap di server</b><span>Health check hanya menampilkan status model dan metadata OIDC. API key, client secret, prompt, serta output AI tidak pernah dikirim ke browser.</span></div></div><div className="admin-metric-grid">{[['Call 30 hari',aiUsage?.totals?.calls || 0,Sparkles],['Berhasil',aiUsage?.totals?.successful || 0,CheckCircle2],['Gagal',aiUsage?.totals?.failed || 0,AlertTriangle],['Input token',Number(aiUsage?.totals?.input_tokens || 0).toLocaleString('id-ID'),Activity],['Output token',Number(aiUsage?.totals?.output_tokens || 0).toLocaleString('id-ID'),Activity],['Latency rata-rata',`${aiUsage?.totals?.average_latency_ms || 0} ms`,Activity]].map(([label,value,Icon])=><article key={label}><Icon size={16}/><span>{label}</span><b>{value}</b></article>)}</div><div className="admin-grid"><section className="admin-panel"><div className="admin-panel-head"><h2>Status integrasi</h2><Button variant="secondary" onClick={checkIntegrations} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14}/> : <RefreshCw size={14}/>}Cek sekarang</Button></div><div className="admin-list"><article><div><b>Gemini API</b><small>{integrationStatus?.gemini?.models?.length ? integrationStatus.gemini.models.map((item)=>`${item.model}: ${item.ok?'ready':'gagal'}`).join(' · ') : 'Jalankan pengecekan menggunakan credential server.'}</small></div><span className={integrationStatus?.gemini?.ok?'status-completed':integrationStatus?'status-failed':''}>{integrationStatus?.gemini?.ok?'ready':integrationStatus?'belum siap':'belum dicek'}</span></article><article><div><b>Azure Blob Storage</b><small>{integrationStatus?.azureBlob?.containerName ? `Container: ${integrationStatus.azureBlob.containerName}` : 'Container tersambung untuk dokumen pengguna.'}</small></div><span className={integrationStatus?.azureBlob?.ok?'status-completed':integrationStatus?'status-failed':''}>{integrationStatus?.azureBlob?.ok?'ready':integrationStatus?'belum siap':'belum dicek'}</span></article></div></section><section className="admin-panel"><div className="admin-panel-head"><h2>Pemakaian per model</h2><small>30 hari</small></div><div className="admin-list">{aiUsage?.breakdown?.length?aiUsage.breakdown.slice(0,10).map((item)=><article key={`${item.purpose}-${item.mode}-${item.model}-${item.status}`}><div><b>{item.purpose} · {item.mode}</b><small>{item.model} · {Number(item.total_tokens || 0).toLocaleString('id-ID')} token · {item.average_latency_ms || 0} ms</small></div><span className={`status-${item.status==='success'?'completed':'failed'}`}>{item.calls} call</span></article>):<p>Belum ada pemakaian AI.</p>}</div></section></div></section>}
-      {tab === 'integrations' && <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Pemakaian AI per user</h2><small>Metadata 30 hari, tanpa prompt dan output</small></div><div className="admin-list admin-user-usage">{aiUsage?.byUser?.length ? aiUsage.byUser.map((item)=><article key={item.userId}><div><b>{item.fullName || item.email}</b><small>{item.email} · {item.errors} error · rata-rata {item.averageLatencyMs} ms</small></div><span>{item.calls} call · {Number(item.totalTokens || 0).toLocaleString('id-ID')} token</span></article>) : <p>Belum ada pemakaian per user.</p>}</div></div></section>}
-      {tab === 'updates' && <FeatureUpdatesAdmin setNotice={setNotice} />}
-       {tab === 'feedback' && <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Feedback pengguna</h2><small>Referensi akun dianonimkan.</small></div><div className="admin-list feedback-admin-list">{feedback.length ? feedback.map((item) => <article key={item.id}><div className="feedback-admin-body"><div><b>{item.category} · {item.rating || '—'}/5</b><small>{item.userRef} · {formatDate(item.updatedAt)}</small></div><p>{item.body}</p>{item.replies?.map((itemReply) => <small key={itemReply.id} className="admin-reply">Tim: {itemReply.body}</small>)}<div className="admin-inline"><input aria-label={`Balasan feedback ${item.userRef}`} value={reply[item.id] || ''} onChange={(event) => setReply((prev)=>({...prev,[item.id]:event.target.value}))} placeholder="Tulis balasan untuk user..." /><Button onClick={() => sendReply(item.id)} disabled={busy}>Kirim</Button></div></div><div className="admin-actions"><CustomSelect ariaLabel={`Status feedback ${item.userRef}`} value={item.status} onChange={(value) => updateFeedback(item.id, value)} options={[{value:'open',label:'Open'},{value:'reviewing',label:'Reviewing'},{value:'resolved',label:'Resolved'},{value:'closed',label:'Closed'}]} /></div></article>) : <p className="empty-admin">Belum ada feedback.</p>}</div></div></section>}
-      {tab === 'risk' && <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Kejadian perlu ditinjau</h2><small>Tidak otomatis menuduh atau memblokir akun.</small></div><div className="admin-list">{overview.events?.length ? overview.events.map((event) => <article key={event.id}><div><b>{event.summary}</b><small>{event.userRef} · {event.category} · {event.severity} · {formatDate(event.createdAt)}</small></div><div className="admin-risk-actions"><span className={`risk-${event.status}`}>{event.status}</span>{event.status === 'open' && <><button onClick={() => reviewRisk(event.id,'reviewed')}>Tinjau</button><button onClick={() => reviewRisk(event.id,'dismissed')}>Tutup</button></>}</div></article>) : <p className="empty-admin">Belum ada kejadian yang perlu ditinjau.</p>}</div></div></section>}
-       {tab === 'cms' && <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Landing CMS</h2><small>Atur teks, testimoni berizin, dan visual landing.</small></div><div className="cms-form"><Toggle checked={Boolean(landing.announcement?.enabled)} onChange={(checked)=>setLanding((prev)=>({...prev,announcement:{...prev.announcement,enabled:checked}}))} title="Tampilkan announcement" description="Muncul di bagian atas hero." /><label>Teks announcement<input aria-label="Teks announcement" value={landing.announcement?.text || ''} onChange={(event)=>setLanding((prev)=>({...prev,announcement:{...prev.announcement,text:event.target.value}}))} maxLength="180" /></label><label>CTA announcement<input aria-label="CTA announcement" value={landing.announcement?.ctaLabel || ''} onChange={(event)=>setLanding((prev)=>({...prev,announcement:{...prev.announcement,ctaLabel:event.target.value}}))} maxLength="32" /></label><div className="cms-copy-section"><div><b>Copy landing</b><small>Ubah judul dan teks utama landing tanpa menyentuh layout.</small></div><div className="cms-copy-grid"><label>Judul hero<input aria-label="Judul hero" value={landing.copy?.heroTitle || 'Laprakin'} onChange={(event)=>setLanding((prev)=>({...prev,copy:{...(prev.copy || {}),heroTitle:event.target.value}}))} maxLength="60" /></label><label>Deskripsi hero<textarea aria-label="Deskripsi hero" value={landing.copy?.heroSubtitle || ''} onChange={(event)=>setLanding((prev)=>({...prev,copy:{...(prev.copy || {}),heroSubtitle:event.target.value}}))} maxLength="280" /></label><label>Judul layanan<input aria-label="Judul layanan" value={landing.copy?.servicesTitle || ''} onChange={(event)=>setLanding((prev)=>({...prev,copy:{...(prev.copy || {}),servicesTitle:event.target.value}}))} maxLength="120" /></label><label>Deskripsi layanan<textarea aria-label="Deskripsi layanan" value={landing.copy?.servicesSubtitle || ''} onChange={(event)=>setLanding((prev)=>({...prev,copy:{...(prev.copy || {}),servicesSubtitle:event.target.value}}))} maxLength="280" /></label><label>Judul perbedaan<input aria-label="Judul perbedaan" value={landing.copy?.compareTitle || ''} onChange={(event)=>setLanding((prev)=>({...prev,copy:{...(prev.copy || {}),compareTitle:event.target.value}}))} maxLength="120" /></label><label>Deskripsi perbedaan<textarea aria-label="Deskripsi perbedaan" value={landing.copy?.compareSubtitle || ''} onChange={(event)=>setLanding((prev)=>({...prev,copy:{...(prev.copy || {}),compareSubtitle:event.target.value}}))} maxLength="280" /></label><label>Judul tutorial<input aria-label="Judul tutorial" value={landing.copy?.tutorialTitle || ''} onChange={(event)=>setLanding((prev)=>({...prev,copy:{...(prev.copy || {}),tutorialTitle:event.target.value}}))} maxLength="120" /></label><label>Deskripsi tutorial<textarea aria-label="Deskripsi tutorial" value={landing.copy?.tutorialSubtitle || ''} onChange={(event)=>setLanding((prev)=>({...prev,copy:{...(prev.copy || {}),tutorialSubtitle:event.target.value}}))} maxLength="280" /></label><label>Deskripsi footer<textarea aria-label="Deskripsi footer" value={landing.copy?.footerText || ''} onChange={(event)=>setLanding((prev)=>({...prev,copy:{...(prev.copy || {}),footerText:event.target.value}}))} maxLength="280" /></label></div></div><div className="cms-media-grid cms-media-grid-expanded">
-   <article className="cms-media-card"><b>Gambar latar hero</b><small>Opsional. PNG, JPG, atau WEBP. Gradient tetap menjaga teks hero terbaca.</small><div className="cms-media-preview">{landing.media?.heroImageUrl ? <img src={landing.media.heroImageUrl} alt="Preview hero" /> : 'Belum ada gambar'}</div><input aria-label="Upload gambar latar hero" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event)=>uploadLandingMedia(event,'hero')} disabled={busy}/><input aria-label="URL gambar latar hero" value={landing.media?.heroImageUrl || ''} onChange={(event)=>updateLandingMedia({heroImageUrl:event.target.value})} placeholder="Atau tempel URL gambar" /></article>
-   <article className="cms-media-card"><b>Compare Basic — AI lain</b><small>PDF sisi kiri untuk tab Basic.</small><div className={`cms-media-preview ${(landing.media?.compareBasicAiPdfUrl || landing.media?.compareAiPdfUrl) ? 'pdf' : ''}`}>{(landing.media?.compareBasicAiPdfUrl || landing.media?.compareAiPdfUrl) ? 'PDF tersambung' : 'Pakai PDF demo bawaan'}</div><input aria-label="Upload PDF compare Basic AI lain" type="file" accept="application/pdf" onChange={(event)=>uploadLandingMedia(event,'compare-basic-ai')} disabled={busy}/><input aria-label="URL PDF compare Basic AI lain" value={landing.media?.compareBasicAiPdfUrl || landing.media?.compareAiPdfUrl || ''} onChange={(event)=>updateLandingMedia({compareAiPdfUrl:event.target.value,compareBasicAiPdfUrl:event.target.value})} placeholder="Atau tempel URL PDF" /></article>
-   <article className="cms-media-card"><b>Compare Basic — Laprakin</b><small>PDF sisi kanan untuk tab Basic.</small><div className={`cms-media-preview ${(landing.media?.compareBasicLaprakinPdfUrl || landing.media?.compareLaprakinPdfUrl) ? 'pdf' : ''}`}>{(landing.media?.compareBasicLaprakinPdfUrl || landing.media?.compareLaprakinPdfUrl) ? 'PDF tersambung' : 'Pakai PDF demo bawaan'}</div><input aria-label="Upload PDF compare Basic Laprakin" type="file" accept="application/pdf" onChange={(event)=>uploadLandingMedia(event,'compare-basic-laprakin')} disabled={busy}/><input aria-label="URL PDF compare Basic Laprakin" value={landing.media?.compareBasicLaprakinPdfUrl || landing.media?.compareLaprakinPdfUrl || ''} onChange={(event)=>updateLandingMedia({compareLaprakinPdfUrl:event.target.value,compareBasicLaprakinPdfUrl:event.target.value})} placeholder="Atau tempel URL PDF" /></article>
-   <article className="cms-media-card"><b>Compare Thinking — AI lain</b><small>PDF sisi kiri untuk tab Thinking.</small><div className={`cms-media-preview ${landing.media?.compareThinkingAiPdfUrl ? 'pdf' : ''}`}>{landing.media?.compareThinkingAiPdfUrl ? 'PDF tersambung' : 'Belum ada PDF'}</div><input aria-label="Upload PDF compare Thinking AI lain" type="file" accept="application/pdf" onChange={(event)=>uploadLandingMedia(event,'compare-thinking-ai')} disabled={busy}/><input aria-label="URL PDF compare Thinking AI lain" value={landing.media?.compareThinkingAiPdfUrl || ''} onChange={(event)=>updateLandingMedia({compareThinkingAiPdfUrl:event.target.value})} placeholder="Atau tempel URL PDF" /></article>
-   <article className="cms-media-card"><b>Compare Thinking — Laprakin</b><small>PDF sisi kanan untuk tab Thinking.</small><div className={`cms-media-preview ${landing.media?.compareThinkingLaprakinPdfUrl ? 'pdf' : ''}`}>{landing.media?.compareThinkingLaprakinPdfUrl ? 'PDF tersambung' : 'Belum ada PDF'}</div><input aria-label="Upload PDF compare Thinking Laprakin" type="file" accept="application/pdf" onChange={(event)=>uploadLandingMedia(event,'compare-thinking-laprakin')} disabled={busy}/><input aria-label="URL PDF compare Thinking Laprakin" value={landing.media?.compareThinkingLaprakinPdfUrl || ''} onChange={(event)=>updateLandingMedia({compareThinkingLaprakinPdfUrl:event.target.value})} placeholder="Atau tempel URL PDF" /></article>
-   <article className="cms-media-card"><b>Compare XtraThink — AI lain</b><small>PDF sisi kiri untuk tab XtraThink.</small><div className={`cms-media-preview ${landing.media?.compareXtraThinkAiPdfUrl ? 'pdf' : ''}`}>{landing.media?.compareXtraThinkAiPdfUrl ? 'PDF tersambung' : 'Belum ada PDF'}</div><input aria-label="Upload PDF compare XtraThink AI lain" type="file" accept="application/pdf" onChange={(event)=>uploadLandingMedia(event,'compare-xtrathink-ai')} disabled={busy}/><input aria-label="URL PDF compare XtraThink AI lain" value={landing.media?.compareXtraThinkAiPdfUrl || ''} onChange={(event)=>updateLandingMedia({compareXtraThinkAiPdfUrl:event.target.value})} placeholder="Atau tempel URL PDF" /></article>
-   <article className="cms-media-card"><b>Compare XtraThink — Laprakin</b><small>PDF sisi kanan untuk tab XtraThink.</small><div className={`cms-media-preview ${landing.media?.compareXtraThinkLaprakinPdfUrl ? 'pdf' : ''}`}>{landing.media?.compareXtraThinkLaprakinPdfUrl ? 'PDF tersambung' : 'Belum ada PDF'}</div><input aria-label="Upload PDF compare XtraThink Laprakin" type="file" accept="application/pdf" onChange={(event)=>uploadLandingMedia(event,'compare-xtrathink-laprakin')} disabled={busy}/><input aria-label="URL PDF compare XtraThink Laprakin" value={landing.media?.compareXtraThinkLaprakinPdfUrl || ''} onChange={(event)=>updateLandingMedia({compareXtraThinkLaprakinPdfUrl:event.target.value})} placeholder="Atau tempel URL PDF" /></article>
-    <article className="cms-media-card cms-video-card"><b>Video perbandingan</b><small>MP4 atau WEBM yang membandingkan AI umum dengan Laprakin dalam satu video.</small><div className="cms-media-preview">{landing.media?.compareVideoUrl ? <video aria-label="Preview video perbandingan" src={landing.media.compareVideoUrl} muted playsInline preload="metadata" /> : 'Belum ada video'}</div><input aria-label="Upload video perbandingan" type="file" accept="video/mp4,video/webm" onChange={(event)=>uploadLandingMedia(event,'compare-video')} disabled={busy}/><input aria-label="URL video perbandingan" value={landing.media?.compareVideoUrl || ''} onChange={(event)=>updateLandingMedia({compareVideoUrl:event.target.value})} placeholder="Atau tempel URL video" /></article>
-    <article className="cms-media-card cms-video-card"><b>Video product demo</b><small>MP4 atau WEBM. Diputar otomatis di hero tanpa suara dan berulang.</small><div className="cms-media-preview">{landing.media?.tutorialVideoUrl ? <video aria-label="Preview video product demo" src={landing.media.tutorialVideoUrl} muted playsInline preload="metadata" /> : 'Belum ada video'}</div><input aria-label="Upload video product demo" type="file" accept="video/mp4,video/webm" onChange={(event)=>uploadLandingMedia(event,'tutorial-video')} disabled={busy}/><input aria-label="URL video product demo" value={landing.media?.tutorialVideoUrl || ''} onChange={(event)=>updateLandingMedia({tutorialVideoUrl:event.target.value})} placeholder="Atau tempel URL video" /></article>
-</div><div className="cms-testimonials"><b>Testimoni</b>{(landing.testimonials || []).length ? landing.testimonials.map((item,index)=><article key={item.id || index}><div><b>{item.name}</b><small>{item.label}</small><p>{item.quote}</p></div><Toggle checked={Boolean(item.published)} onChange={(checked)=>setLanding((prev)=>({...prev,testimonials:prev.testimonials.map((row,i)=>i===index?{...row,published:checked}:row)}))} title="Publish" /></article>) : <p className="muted-note">Belum ada testimoni berizin.</p>}</div><Button onClick={saveLanding} disabled={busy}><Save size={14}/>Simpan CMS</Button></div></div></section>}
-      {tab === 'audit' && <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Audit log</h2><small>Metadata event, tanpa isi chat/file.</small></div><div className="admin-list">{audit.map((event)=><article key={event.id}><div><b>{event.action}</b><small>{event.actorRef} · {event.targetType} · {formatDate(event.createdAt)}</small></div></article>)}</div></div></section>}
-      {tab === 'retention' && <section className="admin-content"><div className="admin-panel admin-wide retention-panel"><FileCog size={24}/><h2>Pembersihan retensi</h2><p>Menghapus resource sementara atau melewati masa retensi sesuai kebijakan. Tidak membaca isi file pengguna.</p><Button onClick={runRetention} disabled={busy}><RefreshCw size={14}/>Jalankan pembersihan</Button></div></section>}
-    </main>
   </div>;
 }
 

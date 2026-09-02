@@ -1,8 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Check, CheckCircle2, ChevronDown, CircleAlert, CodeXml, Copy, Eye, FileText, LoaderCircle, Pencil, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, CodeXml, Copy, FileText, LoaderCircle, Pencil, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { useApp } from '../../state/ui-context';
-import { departments, programs } from '../../data';
 
 export function InlineMessageText({ text }) {
   return String(text || '').split(/(`[^`\n]+`)/g).map((part, index) => (
@@ -92,45 +91,6 @@ export function ChatBriefPanel({ config, updateConfig, workflow, busy, onSubmit 
 
 export function InlineContext({ config, updateConfig, onClose }) {
   return <form className="inline-context" onSubmit={(event) => { event.preventDefault(); onClose(); }}><div className="context-title"><div><b>Konteks laprak</b><p>Isi seperlunya agar bahan lebih mudah dibaca.</p></div><button type="button" onClick={onClose} aria-label="Tutup form konteks"><X size={14} /></button></div><div className="context-fields"><label>Mata kuliah<input aria-label="Mata kuliah" value={config.configuration.courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Jaringan Komputer" /></label><label>Judul materi <small>Opsional</small><input aria-label="Judul materi" value={config.configuration.moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Routing Protocol" /></label><Button type="submit" variant="secondary">Simpan</Button></div></form>;
-}
-
-export function ReportPreview({ documentState, user, embedded = false }) {
-  const [open, setOpen] = useState(true);
-  const [logoFailed, setLogoFailed] = useState(false);
-  useEffect(() => setLogoFailed(false), [user.institutionLogoUrl]);
-  const studyProgram = programs.find((item) => item.key === user.studyProgramKey)?.label || 'Program studi';
-  const department = departments.find((item) => item.key === user.departmentKey)?.label || 'Jurusan / fakultas';
-  const mappingsBySection = (documentState.mappings || []).reduce((result, mapping, index) => {
-    const candidates = (documentState.sections || []).filter((section) => section.section_type === mapping.section_type);
-    const target = candidates.length ? candidates[Math.max(0, Number(mapping.step_number || mapping.display_order || index + 1) - 1) % candidates.length] : null;
-    if (target) (result[target.id] ||= []).push(mapping);
-    return result;
-  }, {});
-  return <section className={`report-preview ${open || embedded ? 'is-open' : ''} ${embedded ? 'is-embedded' : ''}`}>
-    {!embedded && <button type="button" className="report-preview-toggle" onClick={() => setOpen((value) => !value)}><span><Eye size={15} /><b>Preview laporan</b><small>Versi yang akan dipakai untuk quiz dan export</small></span><ChevronDown size={16} /></button>}
-    {(open || embedded) && <div className="report-paper-stack">
-      <article className="report-paper report-cover">
-        <p className="report-cover-kicker">LAPORAN PRAKTIKUM</p>
-        <h2>{documentState.course_name || 'MATA KULIAH'}</h2>
-        <h3>{documentState.module_title || documentState.title}</h3>
-        {user.institutionLogoUrl && !logoFailed && <img className="report-cover-logo" src={user.institutionLogoUrl} alt={`Logo ${user.institutionName || 'institusi'}`} onError={() => setLogoFailed(true)} />}
-        <div className="report-cover-lecturer"><small>Dosen Pengampu:</small><b>{documentState.lecturer_name || '-'}</b><span>NIP : -</span></div>
-        <div className="report-cover-identity"><small>Disusun Oleh:</small><b>{user.fullName || 'Nama mahasiswa'} ({user.nim || 'NPM / NIM'})</b><span>{user.className || 'Kelas'}</span></div>
-        <div className="report-cover-institution"><b>PROGRAM STUDI {studyProgram.toUpperCase()}</b><span>{department.toUpperCase()}</span><span>POLITEKNIK NEGERI CILACAP</span><span>TAHUN AKADEMIK {documentState.academic_year || '2025/2026'}</span></div>
-      </article>
-      <article className="report-paper report-body-preview">
-        <h2>Langkah Latihan Soal Praktikum</h2>
-        {(documentState.sections || []).map((section) => <section key={section.id}>
-          <h3>{section.title}</h3>
-          {String(section.content || '').split(/\n{2,}/).filter(Boolean).map((paragraph, index) => <p key={`${section.id}-${index}`}>{paragraph}</p>)}
-          {(mappingsBySection[section.id] || []).map((mapping, index) => <figure key={mapping.id}>
-            <img src={`/api/files/${mapping.file_id}/preview`} alt={mapping.caption || mapping.original_name || `Bukti ${index + 1}`} />
-            <figcaption>{mapping.caption || `Gambar ${index + 1}. ${mapping.original_name || 'Bukti praktikum'}`}</figcaption>
-          </figure>)}
-        </section>)}
-      </article>
-    </div>}
-  </section>;
 }
 
 export function DocumentQuiz({ access, busy, onStart, onSubmit }) {
