@@ -23,6 +23,7 @@ import {
   TextRun,
 } from 'docx';
 import { config } from './config.js';
+import { isPrivilegedUser } from './admin-capabilities.js';
 import { ArchiveSafetyError, openSafeZip } from './archive-safety.js';
 import { generateAiContent, isAiConfigured } from './ai.js';
 import { moderationMessage, moderateText, sanitizeUntrustedDocumentText, wrapUntrustedDocumentText } from './content-safety.js';
@@ -654,7 +655,7 @@ export function setSession(res, user, { mfaVerifiedAt = null } = {}) {
   }
   const csrfToken = randomToken(24);
   const row = db.prepare('SELECT session_version FROM users WHERE id = ?').get(user.id);
-  const isAdmin = user.role === 'admin';
+  const isAdmin = isPrivilegedUser(user);
   const expiresIn = isAdmin ? `${config.adminSessionHours}h` : `${config.sessionDays}d`;
   const maxAge = isAdmin
     ? config.adminSessionHours * 60 * 60 * 1000
@@ -722,7 +723,7 @@ export function activeAccessRestriction(req, userId) {
   `).run(timestamp);
 
   const user = userId ? db.prepare('SELECT role FROM users WHERE id = ? AND deleted_at IS NULL').get(userId) : null;
-  if (userId && (!user || user.role === 'admin')) return null;
+  if (userId && (!user || isPrivilegedUser(user))) return null;
 
   const suppliedDevice = req.laprakinDeviceToken || req.get?.('x-laprakin-device') || `missing:${userId || 'anonymous'}`;
   const deviceHash = hmac(suppliedDevice, config.deviceSecret);

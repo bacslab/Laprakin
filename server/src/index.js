@@ -35,6 +35,7 @@ import { CHAT_MESSAGE_OPERATION, runCanonicalChatMutation } from './chat-message
 import { getMutationSnapshot } from './mutation-requests.js';
 import { getMessageReactionAnalytics, removeMessageReaction, setMessageReaction } from './message-reactions.js';
 import { listAdminAudit, recordAdminAudit } from './admin-audit.js';
+import { capabilitiesForUser, isPrivilegedUser, requireCapability } from './admin-capabilities.js';
 import { createTotpSecret, getAdminMfaStatus, verifyTotpCode, adminMfaRequired } from './mfa.js';
 import { checkPasswordBreach } from './password-breach.js';
 import {
@@ -4968,8 +4969,10 @@ app.delete('/api/me', requireAuth, requireCsrf, (req, res) => {
   res.status(204).end();
 });
 
-function requireAdmin(req, _res, next) {
-  if (req.user.role !== 'admin') return next(new HttpError(403, 'Khusus admin.', 'ADMIN_ONLY'));
+function requirePrivilegedUser(req, _res, next) {
+  if (!isPrivilegedUser(req.user)) {
+    return next(new HttpError(403, 'Akses tidak tersedia untuk tugas admin ini.', 'ADMIN_CAPABILITY_REQUIRED'));
+  }
   return next();
 }
 
@@ -4984,7 +4987,9 @@ function adminMfaState(req) {
 
 function requireAdminMfa(req, _res, next) {
   if (/^\/mfa\/(?:status|enroll|verify)$/.test(req.path)) return next();
-  if (!req.user || req.user.role !== 'admin') return next(new HttpError(403, 'Khusus admin.', 'ADMIN_ONLY'));
+  if (!isPrivilegedUser(req.user)) {
+    return next(new HttpError(403, 'Akses tidak tersedia untuk tugas admin ini.', 'ADMIN_CAPABILITY_REQUIRED'));
+  }
   const state = adminMfaState(req);
   if (!state.required || state.verified) return next();
   if (!state.enrolled) {
@@ -5006,7 +5011,7 @@ function adminMutationAction(req) {
 app.use('/api/admin', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   res.on('finish', () => {
-    if (req.user?.role !== 'admin') return;
+    if (!isPrivilegedUser(req.user)) return;
     try {
       recordAdminAudit({
         actorUserId: req.user.id,
@@ -5102,11 +5107,11 @@ function exposeRestriction(row) {
   };
 }
 
-app.get('/api/admin/mfa/status', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/mfa/status', requireAuth, requirePrivilegedUser, (req, res) => {
   return res.json({ mfa: adminMfaState(req) });
 });
 
-app.post('/api/admin/mfa/enroll', requireAuth, requireCsrf, requireAdmin, (req, res) => {
+app.post('/api/admin/mfa/enroll', requireAuth, requireCsrf, requirePrivilegedUser, (req, res) => {
   const secret = createTotpSecret(req.user.id);
   const label = encodeURIComponent(`Laprakin:${req.user.email}`);
   const issuer = encodeURIComponent('Laprakin');
@@ -5118,7 +5123,7 @@ app.post('/api/admin/mfa/enroll', requireAuth, requireCsrf, requireAdmin, (req, 
   });
 });
 
-app.post('/api/admin/mfa/verify', requireAuth, requireCsrf, requireAdmin, (req, res) => {
+app.post('/api/admin/mfa/verify', requireAuth, requireCsrf, requirePrivilegedUser, (req, res) => {
   const code = String(req.body?.code || '').trim();
   const status = getAdminMfaStatus(req.user.id);
   if (!status.enrolled) throw new HttpError(409, 'Buat enrollment verifikasi dua langkah terlebih dahulu.', 'ADMIN_MFA_NOT_ENROLLED');
@@ -5128,7 +5133,11 @@ app.post('/api/admin/mfa/verify', requireAuth, requireCsrf, requireAdmin, (req, 
   return res.json({ csrfToken, mfa: adminMfaState({ ...req, session: { ...req.session, mfaVerifiedAt: Date.now() } }) });
 });
 
-app.get('/api/admin/events', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/capabilities', requireAuth, requirePrivilegedUser, (req, res) => {
+  res.json({ role: req.user.role, capabilities: capabilitiesForUser(req.user) });
+});
+
+app.get('/api/admin/events', requireAuth, requireCapability('incidents.manage'), (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -5144,7 +5153,7 @@ app.get('/api/admin/events', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
-app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/users', requireAuth, requireCapability('users.view'), (req, res) => {
   const query = z.string().trim().max(120).catch('').parse(req.query.q);
   const limit = z.coerce.number().int().min(1).max(100).catch(50).parse(req.query.limit);
   const pattern = `%${query.replace(/[%_]/g, '\\$&')}%`;
@@ -5187,7 +5196,7 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   res.json({ users });
 });
 
-app.put('/api/admin/users/:id/plan', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, (req, res) => {
+app.put('/api/admin/users/:id/plan', requireAuth, requireCsrf, requireCapability('billing.manage'), adminMutationLimiter, (req, res) => {
   const input = adminUserPlanSchema.parse(req.body || {});
   const user = db.prepare("SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND role != 'admin'").get(req.params.id);
   if (!user) throw new HttpError(404, 'User tidak ditemukan.', 'ADMIN_USER_NOT_FOUND');
@@ -5243,7 +5252,7 @@ app.put('/api/admin/users/:id/plan', requireAuth, requireCsrf, requireAdmin, adm
   });
 });
 
-app.get('/api/admin/users/:id/rooms', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/users/:id/rooms', requireAuth, requireCapability('users.view'), (req, res) => {
   const user = db.prepare("SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND role != 'admin'").get(req.params.id);
   if (!user) throw new HttpError(404, 'User tidak ditemukan.', 'ADMIN_USER_NOT_FOUND');
   const rooms = db.prepare(`
@@ -5274,7 +5283,7 @@ app.get('/api/admin/users/:id/rooms', requireAuth, requireAdmin, (req, res) => {
   res.json({ rooms });
 });
 
-app.get('/api/admin/users/:id/restrictions', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/users/:id/restrictions', requireAuth, requireCapability('users.restrict'), (req, res) => {
   db.prepare(`
     UPDATE access_restrictions SET status = 'expired'
     WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at <= ?
@@ -5286,7 +5295,7 @@ app.get('/api/admin/users/:id/restrictions', requireAuth, requireAdmin, (req, re
   res.json({ restrictions: rows });
 });
 
-app.post('/api/admin/users/:id/restrictions', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, asyncHandler(async (req, res) => {
+app.post('/api/admin/users/:id/restrictions', requireAuth, requireCsrf, requireCapability('users.restrict'), adminMutationLimiter, asyncHandler(async (req, res) => {
   const input = adminRestrictionSchema.parse(req.body || {});
   const user = db.prepare("SELECT id, email, full_name FROM users WHERE id = ? AND deleted_at IS NULL AND role != 'admin'").get(req.params.id);
   if (!user) throw new HttpError(404, 'User tidak ditemukan.', 'ADMIN_USER_NOT_FOUND');
@@ -5371,7 +5380,7 @@ app.post('/api/admin/users/:id/restrictions', requireAuth, requireCsrf, requireA
   });
 }));
 
-app.delete('/api/admin/users/:id/restrictions/:restrictionId', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, (req, res) => {
+app.delete('/api/admin/users/:id/restrictions/:restrictionId', requireAuth, requireCsrf, requireCapability('users.restrict'), adminMutationLimiter, (req, res) => {
   const result = db.prepare(`
     UPDATE access_restrictions SET status = 'revoked', revoked_by_user_id = ?, revoked_at = ?
     WHERE id = ? AND user_id = ? AND status = 'active'
@@ -5381,7 +5390,7 @@ app.delete('/api/admin/users/:id/restrictions/:restrictionId', requireAuth, requ
   res.status(204).end();
 });
 
-app.get('/api/admin/appeals', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/appeals', requireAuth, requireCapability('appeals.review'), (req, res) => {
   const status = z.enum(['open', 'approved', 'rejected', 'all']).catch('open').parse(req.query.status);
   const appeals = db.prepare(`
     SELECT appeal.*, user.email, user.full_name
@@ -5404,7 +5413,7 @@ app.get('/api/admin/appeals', requireAuth, requireAdmin, (req, res) => {
   res.json({ appeals });
 });
 
-app.put('/api/admin/appeals/:id', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, asyncHandler(async (req, res) => {
+app.put('/api/admin/appeals/:id', requireAuth, requireCsrf, requireCapability('appeals.review'), adminMutationLimiter, asyncHandler(async (req, res) => {
   const input = adminAppealReviewSchema.parse(req.body || {});
   const appeal = db.prepare(`
     SELECT appeal.*, user.email, user.full_name
@@ -5452,7 +5461,7 @@ app.put('/api/admin/appeals/:id', requireAuth, requireCsrf, requireAdmin, adminM
   res.json({ ok: true });
 }));
 
-app.get('/api/admin/broadcasts', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/broadcasts', requireAuth, requireCapability('cms.publish'), (req, res) => {
   const broadcasts = db.prepare(`
     SELECT id, audience, subject, image_url, recipient_count, delivered_count, created_at
     FROM admin_broadcasts ORDER BY created_at DESC LIMIT 100
@@ -5468,7 +5477,7 @@ app.get('/api/admin/broadcasts', requireAuth, requireAdmin, (req, res) => {
   res.json({ broadcasts });
 });
 
-app.post('/api/admin/broadcasts/image', requireAuth, requireCsrf, requireAdmin, uploadLimiter, emailMediaUpload.single('file'), asyncHandler(async (req, res) => {
+app.post('/api/admin/broadcasts/image', requireAuth, requireCsrf, requireCapability('cms.publish'), uploadLimiter, emailMediaUpload.single('file'), asyncHandler(async (req, res) => {
   if (!req.file) throw new HttpError(400, 'Pilih gambar terlebih dahulu.', 'EMAIL_IMAGE_REQUIRED');
   const detectedMime = detectBufferType(req.file.buffer);
   if (detectedMime !== req.file.mimetype || !['image/png', 'image/jpeg', 'image/webp'].includes(detectedMime)) {
@@ -5485,7 +5494,7 @@ app.post('/api/admin/broadcasts/image', requireAuth, requireCsrf, requireAdmin, 
   res.status(201).json({ imageUrl: `/api/public/email-media/${filename}` });
 }));
 
-app.post('/api/admin/broadcasts', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, asyncHandler(async (req, res) => {
+app.post('/api/admin/broadcasts', requireAuth, requireCsrf, requireCapability('cms.publish'), adminMutationLimiter, asyncHandler(async (req, res) => {
   const input = adminBroadcastSchema.parse(req.body || {});
   const recipients = broadcastRecipients(input);
   if (!recipients.length) throw new HttpError(404, 'Tidak ada user yang cocok dengan target email.', 'BROADCAST_TARGET_EMPTY');
@@ -5527,11 +5536,11 @@ app.post('/api/admin/broadcasts', requireAuth, requireCsrf, requireAdmin, adminM
   res.status(201).json({ id, recipientCount: recipients.length, deliveredCount });
 }));
 
-app.get('/api/admin/pricing', requireAuth, requireAdmin, (_req, res) => {
+app.get('/api/admin/pricing', requireAuth, requireCapability('pricing.manage'), (_req, res) => {
   res.json(pricingPayload());
 });
 
-app.put('/api/admin/pricing', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, (req, res) => {
+app.put('/api/admin/pricing', requireAuth, requireCsrf, requireCapability('pricing.manage'), adminMutationLimiter, (req, res) => {
   const input = adminPricingSchema.parse(req.body || {});
   const timestamp = now();
   db.exec('BEGIN IMMEDIATE');
@@ -5583,7 +5592,7 @@ app.put('/api/admin/pricing', requireAuth, requireCsrf, requireAdmin, adminMutat
   res.json(pricingPayload());
 });
 
-app.post('/api/admin/credits/grant', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, asyncHandler(async (req, res) => {
+app.post('/api/admin/credits/grant', requireAuth, requireCsrf, requireCapability('credits.grant'), adminMutationLimiter, asyncHandler(async (req, res) => {
   const input = adminCreditGrantSchema.parse(req.body || {});
   const prior = db.prepare('SELECT * FROM admin_credit_grants WHERE idempotency_key = ?').get(input.idempotencyKey);
   if (prior) {
@@ -5683,7 +5692,7 @@ app.post('/api/admin/credits/grant', requireAuth, requireCsrf, requireAdmin, adm
   return res.status(201).json({ grantId, recipientCount: recipients.length, amount: input.amount, duplicate: false });
 }));
 
-app.get('/api/admin/alerts', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/alerts', requireAuth, requireCapability('incidents.manage'), (req, res) => {
   const status = z.enum(['open', 'resolved', 'all']).catch('open').parse(req.query.status);
   const alerts = db.prepare(`
     SELECT alert.*, user.email, user.full_name
@@ -5711,7 +5720,7 @@ app.get('/api/admin/alerts', requireAuth, requireAdmin, (req, res) => {
   res.json({ alerts });
 });
 
-app.put('/api/admin/alerts/:id', requireAuth, requireCsrf, requireAdmin, adminMutationLimiter, (req, res) => {
+app.put('/api/admin/alerts/:id', requireAuth, requireCsrf, requireCapability('incidents.manage'), adminMutationLimiter, (req, res) => {
   const input = adminAlertStatusSchema.parse(req.body || {});
   const result = db.prepare(`
     UPDATE admin_alerts
@@ -5725,7 +5734,7 @@ app.put('/api/admin/alerts/:id', requireAuth, requireCsrf, requireAdmin, adminMu
   res.json({ ok: true });
 });
 
-app.get('/api/admin/overview', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/overview', requireAuth, requireCapability('audit.view'), (req, res) => {
   const stats = {
     users: Number(db.prepare('SELECT COUNT(*) AS count FROM users WHERE deleted_at IS NULL').get().count),
     documents: Number(db.prepare('SELECT COUNT(*) AS count FROM documents WHERE deleted_at IS NULL').get().count),
@@ -5766,7 +5775,7 @@ app.get('/api/admin/overview', requireAuth, requireAdmin, (req, res) => {
   res.json({ stats, storageBytes: Number(storage?.bytes || 0), dailyActivity, events, jobs });
 });
 
-app.get('/api/admin/ai/usage', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/ai/usage', requireAuth, requireCapability('ai.health.view'), (req, res) => {
   const query = z.object({
     days: z.coerce.number().int().min(1).max(90).catch(30),
     userId: z.string().trim().max(80).catch(''),
@@ -5854,13 +5863,13 @@ app.get('/api/admin/ai/usage', requireAuth, requireAdmin, (req, res) => {
   res.json({ days, since, userId: userFilter || null, totals, breakdown, daily, byUser, recent });
 });
 
-app.get('/api/admin/ai/reactions', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/ai/reactions', requireAuth, requireCapability('ai.health.view'), (req, res) => {
   const query = z.object({ days: z.coerce.number().int().min(1).max(90).catch(30) }).parse(req.query);
   const since = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000).toISOString();
   res.json({ days: query.days, since, ...getMessageReactionAnalytics({ since }) });
 });
 
-app.post('/api/admin/integrations/check', requireAuth, requireCsrf, requireAdmin, integrationCheckLimiter, asyncHandler(async (req, res) => {
+app.post('/api/admin/integrations/check', requireAuth, requireCsrf, requireCapability('ai.health.view'), integrationCheckLimiter, asyncHandler(async (req, res) => {
   const result = await verifyProductionIntegrations();
   audit(req.user.id, 'admin.integrations_checked', 'system', 'integrations', {
     ok: result.ok,
@@ -5870,7 +5879,7 @@ app.post('/api/admin/integrations/check', requireAuth, requireCsrf, requireAdmin
   res.status(result.ok ? 200 : 503).json(result);
 }));
 
-app.get('/api/admin/feedback', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/feedback', requireAuth, requireCapability('cms.edit'), (req, res) => {
   const items = db.prepare(`
     SELECT * FROM feedback_items ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'reviewing' THEN 1 ELSE 2 END, updated_at DESC LIMIT 100
   `).all().map((row) => ({
@@ -5891,7 +5900,7 @@ app.get('/api/admin/feedback', requireAuth, requireAdmin, (req, res) => {
   res.json({ items });
 });
 
-app.put('/api/admin/feedback/:id/status', requireAuth, requireCsrf, requireAdmin, asyncHandler(async (req, res) => {
+app.put('/api/admin/feedback/:id/status', requireAuth, requireCsrf, requireCapability('cms.edit'), asyncHandler(async (req, res) => {
   const input = feedbackStatusSchema.parse(req.body || {});
   const feedback = db.prepare('SELECT * FROM feedback_items WHERE id = ?').get(req.params.id);
   if (!feedback) throw new HttpError(404, 'Feedback tidak ditemukan.', 'FEEDBACK_NOT_FOUND');
@@ -5906,7 +5915,7 @@ app.put('/api/admin/feedback/:id/status', requireAuth, requireCsrf, requireAdmin
   res.json({ item: feedbackForOwner(db.prepare('SELECT * FROM feedback_items WHERE id = ?').get(feedback.id)) });
 }));
 
-app.post('/api/admin/feedback/:id/reply', requireAuth, requireCsrf, requireAdmin, asyncHandler(async (req, res) => {
+app.post('/api/admin/feedback/:id/reply', requireAuth, requireCsrf, requireCapability('cms.edit'), asyncHandler(async (req, res) => {
   const input = feedbackReplySchema.parse(req.body || {});
   const feedback = db.prepare('SELECT * FROM feedback_items WHERE id = ?').get(req.params.id);
   if (!feedback) throw new HttpError(404, 'Feedback tidak ditemukan.', 'FEEDBACK_NOT_FOUND');
@@ -5919,7 +5928,7 @@ app.post('/api/admin/feedback/:id/reply', requireAuth, requireCsrf, requireAdmin
   res.status(201).json({ reply: { id: replyId, body: input.body, createdAt: now() } });
 }));
 
-app.post('/api/admin/feedback/:id/promote-testimonial', requireAuth, requireCsrf, requireAdmin, asyncHandler(async (req, res) => {
+app.post('/api/admin/feedback/:id/promote-testimonial', requireAuth, requireCsrf, requireCapability('cms.publish'), asyncHandler(async (req, res) => {
   const feedback = db.prepare('SELECT * FROM feedback_items WHERE id = ?').get(req.params.id);
   if (!feedback) throw new HttpError(404, 'Feedback tidak ditemukan.', 'FEEDBACK_NOT_FOUND');
   if (!feedback.allow_public_quote) throw new HttpError(400, 'User belum memberi izin untuk mempublikasikan kutipan feedback.', 'TESTIMONIAL_CONSENT_REQUIRED');
@@ -5937,7 +5946,7 @@ app.post('/api/admin/feedback/:id/promote-testimonial', requireAuth, requireCsrf
   res.json({ landing: saved });
 }));
 
-app.post('/api/admin/cms/landing-media', requireAuth, requireCsrf, requireAdmin, uploadLimiter, landingMediaUpload.single('file'), asyncHandler(async (req, res) => {
+app.post('/api/admin/cms/landing-media', requireAuth, requireCsrf, requireCapability('cms.edit'), uploadLimiter, landingMediaUpload.single('file'), asyncHandler(async (req, res) => {
   if (!req.file) throw new HttpError(400, 'Pilih file media terlebih dahulu.', 'LANDING_MEDIA_REQUIRED');
   const detectedMime = detectBufferType(req.file.buffer);
   if (detectedMime !== req.file.mimetype) throw new HttpError(400, 'Isi file media tidak cocok dengan format yang dipilih.', 'LANDING_MEDIA_SIGNATURE');
@@ -5955,11 +5964,11 @@ app.post('/api/admin/cms/landing-media', requireAuth, requireCsrf, requireAdmin,
   res.status(201).json({ media });
 }));
 
-app.get('/api/admin/cms/landing', requireAuth, requireAdmin, (_req, res) => {
+app.get('/api/admin/cms/landing', requireAuth, requireCapability('cms.edit'), (_req, res) => {
   res.json({ landing: getLandingContent() });
 });
 
-app.put('/api/admin/cms/landing', requireAuth, requireCsrf, requireAdmin, asyncHandler(async (req, res) => {
+app.put('/api/admin/cms/landing', requireAuth, requireCsrf, requireCapability('cms.publish'), asyncHandler(async (req, res) => {
   // Merge partial CMS updates to keep older production clients from erasing newer landing fields.
   const current = getLandingContent();
   const raw = req.body || {};
@@ -5976,7 +5985,7 @@ app.put('/api/admin/cms/landing', requireAuth, requireCsrf, requireAdmin, asyncH
   res.json({ landing });
 }));
 
-app.get('/api/admin/feature-updates', requireAuth, requireAdmin, (_req, res) => {
+app.get('/api/admin/feature-updates', requireAuth, requireCapability('cms.edit'), (_req, res) => {
   const updates = db.prepare(`
     SELECT feature_updates.*,
       (SELECT COUNT(*) FROM feature_update_receipts receipt WHERE receipt.update_id = feature_updates.id AND receipt.seen_at IS NOT NULL) AS seen_count,
@@ -5988,7 +5997,7 @@ app.get('/api/admin/feature-updates', requireAuth, requireAdmin, (_req, res) => 
   res.json({ updates });
 });
 
-app.post('/api/admin/feature-updates', requireAuth, requireCsrf, requireAdmin, asyncHandler(async (req, res) => {
+app.post('/api/admin/feature-updates', requireAuth, requireCsrf, requireCapability('cms.edit'), asyncHandler(async (req, res) => {
   const input = normalizedFeatureUpdate(featureUpdateSchema.parse(req.body || {}));
   const id = nanoid();
   const timestamp = now();
@@ -6007,7 +6016,7 @@ app.post('/api/admin/feature-updates', requireAuth, requireCsrf, requireAdmin, a
   res.status(201).json({ update: exposeFeatureUpdate(db.prepare('SELECT * FROM feature_updates WHERE id = ?').get(id)) });
 }));
 
-app.put('/api/admin/feature-updates/:id', requireAuth, requireCsrf, requireAdmin, asyncHandler(async (req, res) => {
+app.put('/api/admin/feature-updates/:id', requireAuth, requireCsrf, requireCapability('cms.publish'), asyncHandler(async (req, res) => {
   const current = db.prepare('SELECT * FROM feature_updates WHERE id = ?').get(req.params.id);
   if (!current) throw new HttpError(404, 'Update fitur tidak ditemukan.', 'FEATURE_UPDATE_NOT_FOUND');
   const input = normalizedFeatureUpdate(featureUpdateSchema.parse(req.body || {}));
@@ -6026,7 +6035,7 @@ app.put('/api/admin/feature-updates/:id', requireAuth, requireCsrf, requireAdmin
   res.json({ update: exposeFeatureUpdate(db.prepare('SELECT * FROM feature_updates WHERE id = ?').get(current.id)) });
 }));
 
-app.delete('/api/admin/feature-updates/:id', requireAuth, requireCsrf, requireAdmin, (req, res) => {
+app.delete('/api/admin/feature-updates/:id', requireAuth, requireCsrf, requireCapability('cms.publish'), (req, res) => {
   const update = db.prepare('SELECT * FROM feature_updates WHERE id = ?').get(req.params.id);
   if (!update) throw new HttpError(404, 'Update fitur tidak ditemukan.', 'FEATURE_UPDATE_NOT_FOUND');
   db.prepare("UPDATE feature_updates SET status = 'archived', updated_by_user_id = ?, updated_at = ? WHERE id = ?").run(req.user.id, now(), update.id);
@@ -6034,7 +6043,7 @@ app.delete('/api/admin/feature-updates/:id', requireAuth, requireCsrf, requireAd
   res.status(204).end();
 });
 
-app.post('/api/admin/feature-updates/:id/image', requireAuth, requireCsrf, requireAdmin, uploadLimiter, featureUpdateMediaUpload.single('file'), asyncHandler(async (req, res) => {
+app.post('/api/admin/feature-updates/:id/image', requireAuth, requireCsrf, requireCapability('cms.edit'), uploadLimiter, featureUpdateMediaUpload.single('file'), asyncHandler(async (req, res) => {
   const update = db.prepare('SELECT * FROM feature_updates WHERE id = ?').get(req.params.id);
   if (!update) throw new HttpError(404, 'Simpan draft update sebelum mengunggah gambar.', 'FEATURE_UPDATE_NOT_FOUND');
   if (!req.file) throw new HttpError(400, 'Pilih gambar terlebih dahulu.', 'FEATURE_UPDATE_IMAGE_REQUIRED');
@@ -6055,7 +6064,7 @@ app.post('/api/admin/feature-updates/:id/image', requireAuth, requireCsrf, requi
   res.status(201).json({ update: exposeFeatureUpdate(db.prepare('SELECT * FROM feature_updates WHERE id = ?').get(update.id)) });
 }));
 
-app.put('/api/admin/risk-events/:id', requireAuth, requireCsrf, requireAdmin, asyncHandler(async (req, res) => {
+app.put('/api/admin/risk-events/:id', requireAuth, requireCsrf, requireCapability('incidents.manage'), asyncHandler(async (req, res) => {
   const input = riskStatusSchema.parse(req.body || {});
   const event = db.prepare('SELECT * FROM risk_events WHERE id = ?').get(req.params.id);
   if (!event) throw new HttpError(404, 'Kejadian tidak ditemukan.', 'RISK_EVENT_NOT_FOUND');
@@ -6064,7 +6073,7 @@ app.put('/api/admin/risk-events/:id', requireAuth, requireCsrf, requireAdmin, as
   res.json({ id: event.id, status: input.status });
 }));
 
-app.get('/api/admin/audit', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/audit', requireAuth, requireCapability('audit.view'), (req, res) => {
   const rows = listAdminAudit({
     actorUserId: String(req.query.actorUserId || '').trim() || null,
     action: String(req.query.action || '').trim(),
@@ -6083,7 +6092,7 @@ app.get('/api/admin/audit', requireAuth, requireAdmin, (req, res) => {
   res.json({ events });
 });
 
-app.post('/api/admin/retention/run', requireAuth, requireCsrf, requireAdmin, asyncHandler(async (req, res) => {
+app.post('/api/admin/retention/run', requireAuth, requireCsrf, requireCapability('retention.execute'), asyncHandler(async (req, res) => {
   const result = await cleanupExpiredResources();
   audit(req.user.id, 'retention.cleanup_run', 'system', 'retention', result);
   res.json(result);

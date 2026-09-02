@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { config } from './config.js';
 import { db } from './db.js';
+import { isPrivilegedUser } from './admin-capabilities.js';
 import { now } from './utils.js';
 
 const secrets = new Map();
@@ -87,8 +88,8 @@ export function createTotpSecret(userId, { store = db, persist = true } = {}) {
   secrets.set(String(userId), secret);
   if (persist) {
     ensureSchema(store);
-    const user = store.prepare('SELECT id FROM users WHERE id = ? AND role = \'admin\' AND deleted_at IS NULL').get(String(userId));
-    if (user) {
+    const user = store.prepare('SELECT id, role FROM users WHERE id = ? AND deleted_at IS NULL').get(String(userId));
+    if (isPrivilegedUser(user)) {
       store.prepare(`
         INSERT INTO admin_mfa_secrets (user_id, secret_ciphertext, enrolled_at, last_verified_step)
         VALUES (?, ?, ?, NULL)
@@ -126,7 +127,7 @@ export function getAdminMfaStatus(userId, { store = db } = {}) {
 }
 
 export function adminMfaRequired(user, { enforced = false } = {}) {
-  return user?.role === 'admin' && (enforced || Boolean(user.mfaEnrolled ?? user.mfa_enrolled));
+  return isPrivilegedUser(user) && (enforced || Boolean(user.mfaEnrolled ?? user.mfa_enrolled));
 }
 
 export { codeFor as totpCodeForTest };

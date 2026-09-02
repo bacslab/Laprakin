@@ -33,12 +33,12 @@
 - `capabilitiesForUser(user)`: returns the effective server-side set.
 - `requireCapability(capability)`: Express middleware; denial is `403 ADMIN_CAPABILITY_REQUIRED` without resource disclosure.
 
-- [ ] Write a failing matrix test for every required capability and role.
-- [ ] Implement immutable role-to-capability mappings with `admin` retaining legacy access while narrower operational roles can be added without client trust.
-- [ ] Add `GET /api/admin/capabilities` and protect representative AI, user, billing, CMS, audit, retention, incident, and role routes with named capabilities.
-- [ ] Prove frontend visibility is irrelevant by calling protected routes directly as unauthorized users.
-- [ ] Run focused authorization and existing admin MFA tests.
-- [ ] Commit: `feat: enforce admin capabilities server side`.
+- [x] Write a failing matrix test for every required capability and role.
+- [x] Implement immutable role-to-capability mappings with `admin` retaining legacy access while narrower operational roles can be added without client trust.
+- [x] Add `GET /api/admin/capabilities` and protect representative AI, user, billing, CMS, audit, retention, incident, and role routes with named capabilities.
+- [x] Prove frontend visibility is irrelevant by calling protected routes directly as unauthorized users.
+- [x] Run focused authorization and existing admin MFA tests.
+- [x] Commit: `feat: enforce admin capabilities server side`.
 
 ## Task 2: Build authenticated secret storage
 

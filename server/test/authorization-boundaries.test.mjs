@@ -342,13 +342,13 @@ test('authorization boundaries isolate two users, admin routes, and CSRF mutatio
 
     const studentAdminRead = await userAClient.raw('/admin/overview');
     assert.equal(studentAdminRead.status, 403);
-    assert.equal(studentAdminRead.payload?.error?.code, 'ADMIN_ONLY');
+    assert.equal(studentAdminRead.payload?.error?.code, 'ADMIN_CAPABILITY_REQUIRED');
     const studentAdminMutation = await userAClient.raw(`/admin/users/${userB.id}/plan`, {
       method: 'PUT',
       body: JSON.stringify({ planKey: 'free', durationDays: 30 }),
     });
     assert.equal(studentAdminMutation.status, 403);
-    assert.equal(studentAdminMutation.payload?.error?.code, 'ADMIN_ONLY');
+    assert.equal(studentAdminMutation.payload?.error?.code, 'ADMIN_CAPABILITY_REQUIRED');
     await adminClient.request('/admin/overview');
 
     const serverSource = await readFile(path.join(root, 'server/src/index.js'), 'utf8');
@@ -357,7 +357,7 @@ test('authorization boundaries isolate two users, admin routes, and CSRF mutatio
     for (const route of adminRoutes) {
       const declarationEnd = serverSource.indexOf('\n', route.index);
       const declaration = serverSource.slice(route.index, declarationEnd === -1 ? undefined : declarationEnd);
-      assert.match(declaration, /requireAdmin/, `${route[1]} wajib memakai requireAdmin`);
+      assert.match(declaration, /requireCapability|requirePrivilegedUser/, `${route[1]} wajib memakai capability server-side`);
     }
 
     const adminMutations = [...serverSource.matchAll(/app\.(?:post|put|patch|delete)\(\s*['"](\/api\/admin[^'"]*)['"]/g)];
