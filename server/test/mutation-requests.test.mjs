@@ -86,3 +86,14 @@ test('failed mutations expose a typed snapshot without raw input', () => {
   assert.equal(snapshot.errorCode, 'AI_TIMEOUT');
   assert.equal(JSON.stringify(snapshot).includes('private prompt'), false);
 });
+
+test('a retryable failure can reacquire the same request ID without changing its identity', () => {
+  const requestId = `req-${randomUUID()}`;
+  const first = beginMutation({ ownerUserId, operation: 'chat.message', requestId, input: { content: 'A' } });
+  failMutation({ ownerUserId, operation: 'chat.message', requestId, retryable: true, errorCode: 'AI_TIMEOUT' });
+  const retry = beginMutation({ ownerUserId, operation: 'chat.message', requestId, input: { content: 'A' } });
+  assert.equal(retry.disposition, 'started');
+  assert.equal(retry.mutation.id, first.mutation.id);
+  assert.equal(retry.mutation.state, 'processing');
+  assert.equal(retry.mutation.errorCode, '');
+});

@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS wallet_entries (
   reason TEXT NOT NULL,
   reference_type TEXT,
   reference_id TEXT,
+  request_id TEXT NOT NULL DEFAULT '',
   available_at TEXT,
   expires_at TEXT,
   created_at TEXT NOT NULL,
@@ -1098,6 +1099,7 @@ CREATE INDEX IF NOT EXISTS idx_mutation_requests_state_updated
 ensureColumn('chat_messages', 'request_id', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('ai_usage_events', 'request_id', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('jobs', 'request_id', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('wallet_entries', 'request_id', "TEXT NOT NULL DEFAULT ''");
 db.exec(`
 CREATE INDEX IF NOT EXISTS idx_chat_messages_request
   ON chat_messages(owner_user_id, request_id, role)
@@ -1107,6 +1109,9 @@ CREATE INDEX IF NOT EXISTS idx_ai_usage_request
   WHERE request_id != '';
 CREATE INDEX IF NOT EXISTS idx_jobs_request
   ON jobs(request_id)
+  WHERE request_id != '';
+CREATE INDEX IF NOT EXISTS idx_wallet_request
+  ON wallet_entries(user_id, request_id)
   WHERE request_id != '';
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_usage_context ON ai_usage_events(context_type, context_id, created_at);`);

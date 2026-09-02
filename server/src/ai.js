@@ -205,7 +205,7 @@ export function aiThinkingConfigFor({ model, mode = 'basic', purpose = 'chat' })
   return { model: model || '', reasoning_effort: effort };
 }
 
-function reserveUsage({ userId, purpose, mode, model, contextType = '', contextId = '' }) {
+function reserveUsage({ userId, purpose, mode, model, contextType = '', contextId = '', requestId = '' }) {
   const id = nanoid();
   let transactionOpen = false;
   try {
@@ -222,9 +222,9 @@ function reserveUsage({ userId, purpose, mode, model, contextType = '', contextI
       }
     }
     db.prepare(`
-      INSERT INTO ai_usage_events (id, user_id, purpose, mode, provider, model, status, input_tokens, output_tokens, reasoning_tokens, total_tokens, latency_ms, error_code, fallback_count, fallback_reason, created_at, context_type, context_id)
-      VALUES (?, ?, ?, ?, 'nararouter', ?, 'pending', 0, 0, 0, 0, 0, '', 0, '', ?, ?, ?)
-    `).run(id, userId || null, String(purpose || 'chat').slice(0, 32), String(mode || 'basic').slice(0, 24), String(model || 'unresolved').slice(0, 100), now(), String(contextType || '').slice(0, 32), String(contextId || '').slice(0, 120));
+      INSERT INTO ai_usage_events (id, user_id, purpose, mode, provider, model, status, input_tokens, output_tokens, reasoning_tokens, total_tokens, latency_ms, error_code, fallback_count, fallback_reason, created_at, context_type, context_id, request_id)
+      VALUES (?, ?, ?, ?, 'nararouter', ?, 'pending', 0, 0, 0, 0, 0, '', 0, '', ?, ?, ?, ?)
+    `).run(id, userId || null, String(purpose || 'chat').slice(0, 32), String(mode || 'basic').slice(0, 24), String(model || 'unresolved').slice(0, 100), now(), String(contextType || '').slice(0, 32), String(contextId || '').slice(0, 120), String(requestId || '').slice(0, 120));
     db.exec('COMMIT');
     transactionOpen = false;
     return id;
@@ -565,13 +565,13 @@ export async function* streamOpenAiCompatible({
   yield { type: 'error', code: lastError?.code || 'AI_PROVIDER_ERROR' };
 }
 
-export async function generateAiContent({ userId = null, contextType = '', contextId = '', purpose = 'chat', mode = 'basic', contents, systemInstruction = '', maxOutputTokens = 1200, responseMimeType = 'text/plain', responseJsonSchema, requiresVision = false, requestTimeoutMs = config.aiRequestTimeoutMs, onDelta = null, signal = null }) {
+export async function generateAiContent({ userId = null, contextType = '', contextId = '', requestId = '', purpose = 'chat', mode = 'basic', contents, systemInstruction = '', maxOutputTokens = 1200, responseMimeType = 'text/plain', responseJsonSchema, requiresVision = false, requestTimeoutMs = config.aiRequestTimeoutMs, onDelta = null, signal = null }) {
   if (!config.naraRouterApiKey) throw new HttpError(503, 'Provider AI belum dikonfigurasi.', 'AI_NOT_CONFIGURED');
   if (!modelRegistry.length) await initializeAiModelRegistry();
   const route = selectAiRoute({ purpose, mode, requiresVision, contents, requiresStructuredOutput: Boolean(responseJsonSchema) });
   const visual = route.requiresVision;
   const candidates = route.candidates.length ? route.candidates : [config.cloudflareAiModel];
-  const usageEventId = reserveUsage({ userId, purpose, mode, model: route.model, contextType, contextId });
+  const usageEventId = reserveUsage({ userId, purpose, mode, model: route.model, contextType, contextId, requestId });
   const startedAt = Date.now();
   let fallbackCount = 0;
   let fallbackReason = '';

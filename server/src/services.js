@@ -858,6 +858,7 @@ export function grantCredit({
   reason,
   referenceType = null,
   referenceId = null,
+  requestId = '',
   availableAt = null,
   expiresInDays = null,
 }) {
@@ -865,8 +866,8 @@ export function grantCredit({
   db.prepare(`
     INSERT INTO wallet_entries (
       id, user_id, bucket, amount, reason, reference_type, reference_id,
-      available_at, expires_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      request_id, available_at, expires_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     entryId,
     userId,
@@ -875,6 +876,7 @@ export function grantCredit({
     reason,
     referenceType,
     referenceId,
+    requestId,
     availableAt,
     expiresInDays ? addDays(expiresInDays) : null,
     now(),
@@ -1052,7 +1054,7 @@ export function hasLaprakCredit(userId) {
   return getWallet(userId).balances.total > 0;
 }
 
-export function reserveLaprakCredit(userId, sessionId) {
+export function reserveLaprakCredit(userId, sessionId, requestId = '') {
   db.exec('BEGIN IMMEDIATE');
   try {
     const session = db.prepare(`
@@ -1080,6 +1082,7 @@ export function reserveLaprakCredit(userId, sessionId) {
       reason: 'Mulai satu Laprak',
       referenceType: 'chat_session',
       referenceId: sessionId,
+      requestId,
     });
     db.prepare(`
       UPDATE chat_sessions
@@ -1095,7 +1098,7 @@ export function reserveLaprakCredit(userId, sessionId) {
   }
 }
 
-export function refundLaprakCredit(userId, sessionId) {
+export function refundLaprakCredit(userId, sessionId, requestId = '') {
   db.exec('BEGIN IMMEDIATE');
   try {
     const session = db.prepare(`
@@ -1113,6 +1116,7 @@ export function refundLaprakCredit(userId, sessionId) {
       reason: 'Kredit dikembalikan karena proses Laprak gagal',
       referenceType: 'chat_session',
       referenceId: sessionId,
+      requestId,
     });
     db.prepare(`
       UPDATE chat_sessions
@@ -1383,6 +1387,7 @@ function mergeMessageMeta(baseMeta = {}, patchMeta = {}) {
 export function persistChatExchange({
   sessionId,
   ownerUserId,
+  requestId = '',
   userMessage,
   assistantMessage,
   sessionConfigurationJson = null,
@@ -1431,18 +1436,18 @@ export function persistChatExchange({
     }
 
     db.prepare(`
-      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
-      VALUES (?, ?, ?, 'user', ?, ?, ?)
-    `).run(userMessageId, sessionId, ownerUserId, userMessage.content, userMetaJson, userCreatedAt);
+      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at, request_id)
+      VALUES (?, ?, ?, 'user', ?, ?, ?, ?)
+    `).run(userMessageId, sessionId, ownerUserId, userMessage.content, userMetaJson, userCreatedAt, requestId);
     db.prepare(`
       UPDATE chat_attachments
       SET message_id = ?
       WHERE session_id = ? AND owner_user_id = ? AND message_id IS NULL AND deleted_at IS NULL
     `).run(userMessageId, sessionId, ownerUserId);
     db.prepare(`
-      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
-      VALUES (?, ?, ?, 'assistant', ?, ?, ?)
-    `).run(assistantMessageId, sessionId, ownerUserId, assistantMessage.content, assistantMetaJson, assistantCreatedAt);
+      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at, request_id)
+      VALUES (?, ?, ?, 'assistant', ?, ?, ?, ?)
+    `).run(assistantMessageId, sessionId, ownerUserId, assistantMessage.content, assistantMetaJson, assistantCreatedAt, requestId);
     if (sessionConfigurationJson !== null) {
       db.prepare(`
         UPDATE chat_sessions SET configuration_json = ?, updated_at = ? WHERE id = ?
@@ -1608,7 +1613,7 @@ export function isCodeOnlyChatRequest(content = '') {
     .test(String(content || ''));
 }
 
-export async function answerWorkspaceChat({ session, user, content, aiMode = 'basic', historyRowsOverride = null, attachmentRowsOverride = null, onDelta = null, signal = null }) {
+export async function answerWorkspaceChat({ session, user, content, aiMode = 'basic', requestId = '', historyRowsOverride = null, attachmentRowsOverride = null, onDelta = null, signal = null }) {
   const historyRows = Array.isArray(historyRowsOverride)
     ? historyRowsOverride.map((message) => ({
       role: message.role,
@@ -1730,6 +1735,7 @@ Mode respons: ${modeInstruction}`;
     userId: user.id,
     contextType: 'chat_session',
     contextId: session.id,
+    requestId,
     purpose: 'chat',
     mode: aiMode,
     systemInstruction,

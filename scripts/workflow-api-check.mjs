@@ -218,9 +218,11 @@ try {
     body: JSON.stringify({ title: 'Laprak baru', configuration: { allowExternalAi: true } }),
   }, 201);
   assert.equal(chat.messages.length, 0);
+  const firstChatRequestId = `chat-${randomUUID()}`;
   const result = await request(`/chat/sessions/${chat.session.id}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content: 'Asep', aiMode: 'basic', allowExternalAi: true }),
+    headers: { 'idempotency-key': firstChatRequestId },
+    body: JSON.stringify({ requestId: firstChatRequestId, content: 'Asep', aiMode: 'basic', allowExternalAi: true }),
   });
   assert.equal(result.session.title, 'Laprak baru');
   assert.equal(result.workflow.state, 'CLARIFICATION_REQUIRED');
@@ -237,9 +239,12 @@ try {
     method: 'POST',
     body: JSON.stringify({ title: 'Laprak baru', configuration: { allowExternalAi: true } }),
   }, 201);
+  const briefRequestId = `chat-${randomUUID()}`;
   const briefResult = await request(`/chat/sessions/${briefChat.session.id}/messages`, {
     method: 'POST',
+    headers: { 'idempotency-key': briefRequestId },
     body: JSON.stringify({
+      requestId: briefRequestId,
       content: 'Buatkan saya laprak untuk mata kuliah Jaringan Komputer, dengan materi Static Routing.',
       aiMode: 'basic',
       allowExternalAi: true,
@@ -270,9 +275,11 @@ try {
     body: exhaustedForm,
   }, 402);
   assert.equal(blockedUpload.error.code, 'INSUFFICIENT_CREDIT');
+  const exhaustedRequestId = `chat-${randomUUID()}`;
   const blockedMessage = await request(`/chat/sessions/${exhaustedChat.session.id}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content: 'Mata kuliah Sistem Operasi', aiMode: 'basic', allowExternalAi: true }),
+    headers: { 'idempotency-key': exhaustedRequestId },
+    body: JSON.stringify({ requestId: exhaustedRequestId, content: 'Mata kuliah Sistem Operasi', aiMode: 'basic', allowExternalAi: true }),
   }, 402);
   assert.equal(blockedMessage.error.code, 'INSUFFICIENT_CREDIT');
   const exhaustedRefresh = await request(`/chat/sessions/${exhaustedChat.session.id}`);
@@ -308,9 +315,11 @@ try {
     method: 'POST',
     body: JSON.stringify({ title: 'Laprak baru', configuration: { allowExternalAi: true } }),
   }, 201);
+  const genericRequestId = `chat-${randomUUID()}`;
   const genericResult = await request(`/chat/sessions/${genericChat.session.id}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content: 'Buatkan laprak', aiMode: 'basic', allowExternalAi: true }),
+    headers: { 'idempotency-key': genericRequestId },
+    body: JSON.stringify({ requestId: genericRequestId, content: 'Buatkan laprak', aiMode: 'basic', allowExternalAi: true }),
   });
   assert.equal(genericResult.workflow.state, 'CLARIFICATION_REQUIRED');
   assert.equal(genericResult.workflow.clarificationCount, 1);
@@ -359,9 +368,12 @@ try {
     content: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
     finalize: false,
   });
+  const completeFilesRequestId = `chat-${randomUUID()}`;
   const completeFilesResult = await request(`/chat/sessions/${completeFilesChat.session.id}/messages`, {
     method: 'POST',
+    headers: { 'idempotency-key': completeFilesRequestId },
     body: JSON.stringify({
+      requestId: completeFilesRequestId,
       content: 'Buatkan laprak untuk mata kuliah Jaringan Komputer, dengan materi Static Routing.',
       aiMode: 'basic',
       allowExternalAi: true,

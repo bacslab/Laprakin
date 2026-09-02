@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
 
 async function availablePort() {
   return new Promise((resolve, reject) => {
@@ -39,6 +40,7 @@ test('chat API relays provider deltas before returning the canonical response', 
   });
   const splitAt = modelOutput.indexOf('progresif');
   let sawStreamRequest = false;
+  let completionCalls = 0;
   const provider = http.createServer(async (request, response) => {
     if (request.url === '/v1/models') {
       response.writeHead(200, { 'content-type': 'application/json' });
@@ -53,6 +55,7 @@ test('chat API relays provider deltas before returning the canonical response', 
     let raw = '';
     for await (const chunk of request) raw += chunk;
     const body = JSON.parse(raw || '{}');
+    completionCalls += 1;
     if (body.stream) {
       sawStreamRequest = true;
       response.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache' });
@@ -150,10 +153,11 @@ test('chat API relays provider deltas before returning the canonical response', 
     assert.equal(created.response.status, 201, logs);
     const sessionId = created.payload.session.id;
     await request('/wallet/claim-welcome', { method: 'POST', body: '{}' });
+    const requestId = `chat-${randomUUID()}`;
     const streamed = await request(`/chat/sessions/${sessionId}/messages`, {
       method: 'POST',
-      headers: { accept: 'text/event-stream' },
-      body: JSON.stringify({ content: 'Jelaskan Static Routing.', aiMode: 'basic', allowExternalAi: true }),
+      headers: { accept: 'text/event-stream', 'idempotency-key': requestId },
+      body: JSON.stringify({ requestId, content: 'Jelaskan Static Routing.', aiMode: 'basic', allowExternalAi: true }),
     });
     assert.equal(streamed.response.status, 200, streamed.payload);
     assert.match(streamed.response.headers.get('content-type') || '', /text\/event-stream/);
@@ -165,6 +169,31 @@ test('chat API relays provider deltas before returning the canonical response', 
     assert.equal(events.at(-1).message.session.id, sessionId);
     assert.equal(events.at(-1).message.messages.at(-1).role, 'assistant');
     assert.equal(sawStreamRequest, true);
+    const callsAfterFirstCompletion = completionCalls;
+
+    const replayed = await request(`/chat/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      headers: { accept: 'text/event-stream', 'idempotency-key': requestId },
+      body: JSON.stringify({ requestId, content: 'Jelaskan Static Routing.', aiMode: 'basic', allowExternalAi: true }),
+    });
+    const replayEvents = replayed.payload.split('\n\n')
+      .filter((block) => block.startsWith('data: '))
+      .map((block) => JSON.parse(block.slice(6)));
+    assert.equal(replayed.response.status, 200);
+    assert.equal(completionCalls, callsAfterFirstCompletion);
+    assert.deepEqual(
+      replayEvents.at(-1).message.messages.map((message) => message.id),
+      events.at(-1).message.messages.map((message) => message.id),
+    );
+
+    const database = new DatabaseSync(path.join(sandbox, 'data', 'laprakin.sqlite'), { readOnly: true });
+    try {
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM chat_messages WHERE request_id = ?').get(requestId).count, 2);
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM ai_usage_events WHERE request_id = ?').get(requestId).count, 1);
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM wallet_entries WHERE request_id = ?').get(requestId).count, 1);
+    } finally {
+      database.close();
+    }
   } finally {
     await closeProcess(server);
     await new Promise((resolve) => provider.close(resolve));

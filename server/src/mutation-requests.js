@@ -100,6 +100,17 @@ export function beginMutation({ ownerUserId, operation, requestId: rawRequestId,
       if (existing.request_hash !== requestHash) {
         throw new MutationRequestError('Request ID sudah dipakai untuk input berbeda.', 'IDEMPOTENCY_KEY_REUSED', 409);
       }
+      if (existing.state === 'retryable_failed') {
+        store.prepare(`
+          UPDATE mutation_requests
+          SET state = 'processing', error_code = '', updated_at = ?, completed_at = NULL
+          WHERE id = ? AND state = 'retryable_failed'
+        `).run(timestamp, existing.id);
+        return {
+          disposition: 'started',
+          mutation: exposeMutation(selectMutation(store, { ownerUserId, operation, requestId })),
+        };
+      }
       return {
         disposition: existing.state === 'completed' ? 'replay' : 'in_progress',
         mutation: exposeMutation(existing),

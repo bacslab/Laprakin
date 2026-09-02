@@ -236,9 +236,12 @@ test('revision API replaces only the trailing branch and returns the canonical p
       }),
     }, 201);
 
+    const initialRequestId = `chat-${randomUUID()}`;
     const initial = await client.request(`/chat/sessions/${conversation.session.id}/messages`, {
       method: 'POST',
+      headers: { 'idempotency-key': initialRequestId },
       body: JSON.stringify({
+        requestId: initialRequestId,
         content: 'Untuk mata kuliah Jaringan Komputer dengan materi Static Routing, jelaskan dua langkah konfigurasi paling penting.',
         aiMode: 'basic',
         allowExternalAi: true,
@@ -346,9 +349,12 @@ test('revision API returns typed 4xx errors for invalid revision requests', { ti
       }),
     }, 201);
 
+    const initialRequestId = `chat-${randomUUID()}`;
     const initial = await client.request(`/chat/sessions/${conversation.session.id}/messages`, {
       method: 'POST',
+      headers: { 'idempotency-key': initialRequestId },
       body: JSON.stringify({
+        requestId: initialRequestId,
         content: 'Untuk mata kuliah Basis Data dengan materi Trigger, jelaskan satu risiko utama saat membuat trigger.',
         aiMode: 'basic',
         allowExternalAi: true,

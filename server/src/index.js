@@ -29,6 +29,8 @@ import { buildRevisionPlan, RevisionError, validateRevisionRequest } from './cha
 import { moderationMessage, moderateText } from './content-safety.js';
 import { createLogger, reportException, statusSnapshot } from './observability.js';
 import { createSseChannel } from './chat-stream.js';
+import { CHAT_MESSAGE_OPERATION, runCanonicalChatMutation } from './chat-message-mutation.js';
+import { getMutationSnapshot } from './mutation-requests.js';
 import { listAdminAudit, recordAdminAudit } from './admin-audit.js';
 import { createTotpSecret, getAdminMfaStatus, verifyTotpCode, adminMfaRequired } from './mfa.js';
 import { checkPasswordBreach } from './password-breach.js';
@@ -369,6 +371,7 @@ const chatConfigUpdateSchema = z.object({
   configuration: chatConfigSchema.optional(),
 });
 const chatMessageSchema = z.object({
+  requestId: z.string().trim().min(12).max(120).regex(/^[a-zA-Z0-9._:-]+$/),
   content: z.string().trim().min(1).max(1800),
   aiMode: z.enum(['basic', 'thinking', 'xtrathink']).optional().default('basic'),
   allowExternalAi: z.boolean().optional().default(false),
@@ -3473,21 +3476,32 @@ app.post('/api/chat/sessions/:id/actions', requireAuth, requireCsrf, asyncHandle
 
 app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimiter, asyncHandler(async (req, res) => {
   const input = chatMessageSchema.parse(req.body || {});
+  const idempotencyKey = String(req.get('idempotency-key') || '').trim();
+  if (idempotencyKey && idempotencyKey !== input.requestId) {
+    throw new HttpError(400, 'Idempotency-Key harus sama dengan requestId.', 'IDEMPOTENCY_KEY_MISMATCH');
+  }
   const wantsStream = String(req.headers.accept || '').includes('text/event-stream');
-  const sseChannel = wantsStream ? createSseChannel(res) : null;
-  if (sseChannel) res.locals.sseChannel = sseChannel;
+  let sseChannel = null;
   let streamedText = false;
-  const onDelta = sseChannel
-    ? (text) => {
+  let onDelta = null;
+  const mutationResult = await runCanonicalChatMutation({
+    ownerUserId: req.user.id,
+    requestId: input.requestId,
+    input: {
+      sessionId: req.params.id,
+      content: input.content,
+      aiMode: input.aiMode,
+      allowExternalAi: input.allowExternalAi,
+    },
+    execute: async () => {
+      if (wantsStream) {
+        sseChannel = createSseChannel(res);
+        res.locals.sseChannel = sseChannel;
+        onDelta = (text) => {
       streamedText = true;
       sseChannel.writeDelta(text);
-    }
-    : null;
-  const respond = (payload, text) => {
-    if (!sseChannel) return res.json(payload);
-    if (!streamedText && text) sseChannel.writeDelta(text);
-    return sseChannel.finish(payload);
-  };
+        };
+      }
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
   enforceContentPolicy({ text: input.content, userId: req.user.id, sessionId: session.id, direction: 'input' });
@@ -3503,7 +3517,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     throw new HttpError(403, message, 'AI_MODE_LOCKED');
   }
   const hadCreditReservation = Boolean(session.processing_credit_bucket && !session.processing_credit_refunded_at);
-  reserveLaprakCredit(req.user.id, session.id);
+  reserveLaprakCredit(req.user.id, session.id, input.requestId);
   if (!session.document_id) {
     const previousState = session.workflow_state || 'NEW_CHAT';
     const priorUserMessages = listChatMessages(session.id, req.user.id)
@@ -3531,9 +3545,9 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     const timestamp = now();
     const userMessageId = nanoid();
     db.prepare(`
-      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
-      VALUES (?, ?, ?, 'user', ?, ?, ?)
-    `).run(userMessageId, session.id, req.user.id, input.content, JSON.stringify({ links, aiMode: input.aiMode }), timestamp);
+      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at, request_id)
+      VALUES (?, ?, ?, 'user', ?, ?, ?, ?)
+    `).run(userMessageId, session.id, req.user.id, input.content, JSON.stringify({ links, aiMode: input.aiMode }), timestamp, input.requestId);
     db.prepare(`
       UPDATE chat_attachments SET message_id = ?
       WHERE session_id = ? AND owner_user_id = ? AND message_id IS NULL AND deleted_at IS NULL
@@ -3544,10 +3558,10 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     let assistant;
     try {
       assistant = isAiConfigured()
-        ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode, onDelta, signal: sseChannel?.signal })
+        ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode, requestId: input.requestId, onDelta, signal: sseChannel?.signal })
         : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
     } catch (error) {
-      if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
+      if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id, input.requestId);
       throw error;
     }
     enforceContentPolicy({ text: assistant.text, userId: req.user.id, sessionId: session.id, direction: 'output' });
@@ -3582,8 +3596,8 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     if (!autoGenerate) {
       const finishedAt = now();
       db.prepare(`
-        INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
-        VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+        INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at, request_id)
+        VALUES (?, ?, ?, 'assistant', ?, ?, ?, ?)
       `).run(
         nanoid(),
         session.id,
@@ -3601,6 +3615,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
           isClarification,
         }),
         finishedAt,
+        input.requestId,
       );
     }
     const workflow = chatWorkflow(refreshed, req.user);
@@ -3608,7 +3623,13 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       workflowState: workflow.state,
       documentType: workflow.documentType,
     });
-    return respond(chatConversationPayload(refreshed, req.user, { autoGenerate }), assistant.text);
+    return {
+      statusCode: 200,
+      response: chatConversationPayload(refreshed, req.user, { autoGenerate }),
+      resourceId: refreshed.id,
+      providerId: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+      modelId: assistant.model || '',
+    };
   }
   const priorUserMessages = db.prepare(`
     SELECT role, content FROM chat_messages
@@ -3628,10 +3649,10 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   let assistant;
   try {
     assistant = isAiConfigured()
-      ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode, onDelta, signal: sseChannel?.signal })
+      ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode, requestId: input.requestId, onDelta, signal: sseChannel?.signal })
       : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
   } catch (error) {
-    if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
+    if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id, input.requestId);
     throw error;
   }
   enforceContentPolicy({ text: assistant.text, userId: req.user.id, sessionId: session.id, direction: 'output' });
@@ -3639,6 +3660,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   persistChatExchange({
     sessionId: session.id,
     ownerUserId: req.user.id,
+    requestId: input.requestId,
     userMessage: {
       content: input.content,
       meta: { links, aiMode: input.aiMode },
@@ -3666,7 +3688,42 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   audit(req.user.id, 'ai.chat_completed', 'chat_session', session.id, { mode: input.aiMode, model: assistant.model, provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local') });
   const messages = db.prepare('SELECT id, role, content, meta_json, created_at FROM chat_messages WHERE session_id = ? AND owner_user_id = ? ORDER BY created_at ASC').all(session.id, req.user.id).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) }));
   const refreshedSession = exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id));
-  respond({ session: refreshedSession, messages, attachments: listChatAttachments(session.id, req.user.id), workflow: chatWorkflow(refreshedSession, req.user) }, assistant.text);
+  return {
+    statusCode: 200,
+    response: { session: refreshedSession, messages, attachments: listChatAttachments(session.id, req.user.id), workflow: chatWorkflow(refreshedSession, req.user) },
+    resourceId: session.id,
+    providerId: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+    modelId: assistant.model || '',
+  };
+    },
+  });
+  if (!wantsStream) return res.status(mutationResult.statusCode).json(mutationResult.response);
+  if (!sseChannel) {
+    sseChannel = createSseChannel(res);
+    res.locals.sseChannel = sseChannel;
+  }
+  const assistantText = [...(mutationResult.response?.messages || [])]
+    .reverse()
+    .find((message) => message.role === 'assistant')?.content || '';
+  if (!streamedText && assistantText) sseChannel.writeDelta(assistantText);
+  return sseChannel.finish(mutationResult.response);
+}));
+
+app.get('/api/mutations/:requestId', requireAuth, asyncHandler(async (req, res) => {
+  const mutation = getMutationSnapshot({
+    ownerUserId: req.user.id,
+    operation: CHAT_MESSAGE_OPERATION,
+    requestId: req.params.requestId,
+  });
+  if (!mutation) throw new HttpError(404, 'Mutasi tidak ditemukan.', 'MUTATION_NOT_FOUND');
+  const statusByState = {
+    completed: 200,
+    processing: 202,
+    retryable_failed: 409,
+    terminal_failed: 422,
+    canceled: 410,
+  };
+  return res.status(statusByState[mutation.state] || 200).json(mutation);
 }));
 
 app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requireCsrf, aiChatLimiter, asyncHandler(async (req, res) => {
