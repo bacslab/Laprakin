@@ -14,6 +14,7 @@ import { api, apiStream, clearCsrfToken, download, setCsrfToken } from './api';
 import { buildRevisionRequest, getEditableMessage, getRegenerationTarget } from './lib/chat-message-actions';
 import { canonicalCourseLabel, courseAcronym, courseTokens, editDistance, normalizedCourseKey } from './lib/academic';
 import { formatBytes, formatCurrency, formatDate } from './lib/formatters';
+import { redirectToMidtransCheckout, validatedMidtransCheckoutUrl } from './lib/payment-redirect';
 import { resolveTheme, useResolvedTheme } from './lib/theme';
 import { departments, programs } from './data';
 import { pricingFallback, pricingFeatures } from './data/pricing';
@@ -42,10 +43,13 @@ import { FeatureUpdatesAdmin, ProductUpdatePopup } from './FeatureUpdates';
 import { ChatSessionRow, SessionGroup } from './pages/Workspace/Sidebar/ChatSessionRow';
 import AccountPopover from './pages/Workspace/Sidebar/AccountPopover';
 import { AppDialog, Modal } from './components/Dialog';
+import Toggle from './components/Toggle';
+import { FeedbackModal, HelpModal, NotificationModal } from './components/WorkspaceOverlays';
 import AdminAccessPanel from './pages/Admin/AdminAccessPanel';
 import AdminPricingPanel from './pages/Admin/AdminPricingPanel';
 import AdminAppealsPanel from './pages/Admin/AdminAppealsPanel';
 import AdminBroadcastPanel from './pages/Admin/AdminBroadcastPanel';
+import BillingPage from './pages/Billing/BillingPage';
 import { renderAsync as renderDocx } from 'docx-preview';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -288,10 +292,6 @@ function HeroFileChip({ file, index, onRemove }) {
 function readPrefs() {
   try { return { ...defaultPrefs, ...JSON.parse(localStorage.getItem('laprakin-preferences') || '{}') }; }
   catch { return defaultPrefs; }
-}
-
-function Toggle({ checked, onChange, title, description }) {
-  return <label className="toggle-control"><input type="checkbox" aria-label={title} checked={checked} onChange={(event) => onChange(event.target.checked)} /><span className="toggle-dot" /><span><b>{title}</b>{description && <small>{description}</small>}</span></label>;
 }
 
 function AppProvider({ children }) {
@@ -2780,207 +2780,6 @@ function BillingSettingsPane({ onOpenBilling }) {
   </div>;
 }
 
-function validatedMidtransCheckoutUrl(checkoutUrl) {
-  if (!checkoutUrl) return '';
-  try {
-    const target = new URL(checkoutUrl);
-    const allowedHosts = new Set(['app.midtrans.com', 'app.sandbox.midtrans.com']);
-    if (target.protocol !== 'https:' || !allowedHosts.has(target.hostname)) return '';
-    return target.href;
-  } catch {
-    return '';
-  }
-}
-
-function redirectToMidtransCheckout(checkoutUrl) {
-  const target = validatedMidtransCheckoutUrl(checkoutUrl);
-  if (!target) return false;
-  try {
-    window.location.assign(target);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function BillingPage() {
-  const { user, setNotice, refreshSession, prefs } = useApp();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const selectedPlanFromLink = new URLSearchParams(location.search).get('plan') || '';
-  const [data, setData] = useState(null);
-  const [pricing, setPricing] = useState(pricingFallback);
-  const [gateway, setGateway] = useState(null);
-  const [subscriptionChoice, setSubscriptionChoice] = useState('none');
-  const billingPrefs = prefs;
-  const billingTheme = useResolvedTheme(billingPrefs.theme || 'system');
-  const [quote, setQuote] = useState(null);
-  const [quoteBusy, setQuoteBusy] = useState(false);
-  const [activeOrder, setActiveOrder] = useState(null);
-  const [checkoutRecoveryUrl, setCheckoutRecoveryUrl] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const load = async () => {
-    try {
-      const [billing, nextPricing, paymentConfig] = await Promise.all([
-        api('/billing'),
-        api('/pricing', { includeCsrf: false }),
-        api('/payments/config', { includeCsrf: false }),
-      ]);
-      setData(billing);
-      setPricing(nextPricing || pricingFallback);
-      setGateway(paymentConfig);
-      const pending = (billing.orders || []).find((order) => ['created', 'pending'].includes(order.status));
-      if (pending) setActiveOrder((current) => current?.id === pending.id ? current : { ...pending, canRefresh: true });
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  useEffect(() => { load(); }, []);
-  useEffect(() => {
-    if (['monthly', 'pro'].includes(selectedPlanFromLink)) setSubscriptionChoice(selectedPlanFromLink);
-  }, [selectedPlanFromLink]);
-
-  // Snap may use a full-page redirect on some browsers. Remember the internal
-  // order id locally so the billing page can show an authoritative status after
-  // the customer returns; the server still performs the verification.
-  useEffect(() => {
-    const orderId = window.sessionStorage.getItem('laprakin:active-payment-order');
-    if (!orderId) return;
-    const returnedFromSnap = new URLSearchParams(window.location.search).get('payment') === 'finished';
-    if (returnedFromSnap) getOrder(orderId, true);
-    else getOrder(orderId, false);
-  }, []);
-
-  const cartItems = useMemo(() => {
-    if (subscriptionChoice === 'monthly' || subscriptionChoice === 'pro') return [{ sku: subscriptionChoice, quantity: 1 }];
-    return [];
-  }, [subscriptionChoice]);
-  const cartKey = cartItems.map((item) => `${item.sku}:${item.quantity}`).join('|');
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!cartItems.length) { setQuote(null); return undefined; }
-    setQuoteBusy(true);
-    api('/pricing/quote', { method: 'POST', body: { items: cartItems } })
-      .then((next) => { if (!cancelled) setQuote(next); })
-      .catch((err) => { if (!cancelled) { setQuote(null); setError(err.message); } })
-      .finally(() => { if (!cancelled) setQuoteBusy(false); });
-    return () => { cancelled = true; };
-  }, [cartKey]);
-
-  const plan = data?.currentPlan || { key: 'free', label: 'Gratis', status: 'active', credits: 0, endsAt: null, description: 'Paket awal untuk mencoba Laprakin.' };
-  const catalogue = {
-    free: { key: 'free', label: 'Gratis', price: 0, description: 'Mulai dan pahami alur kerja Laprakin.', features: pricingFeatures(pricing.free, pricingFallback.free.features) },
-    monthly: { key: 'monthly', label: 'Pro', price: pricing.monthly?.price || 29900, description: 'Untuk kebutuhan praktikum yang rutin.', features: pricingFeatures(pricing.monthly, pricingFallback.monthly.features) },
-    pro: { key: 'pro', label: 'Max', price: pricing.pro?.price || 45900, description: 'Untuk semester padat dan revisi intensif.', features: pricingFeatures(pricing.pro, pricingFallback.pro.features) },
-  };
-  const paymentStatusCopy = {
-    created: 'Menyiapkan checkout QRIS.',
-    pending: 'Menunggu pembayaran. Scan QRIS yang muncul di checkout Midtrans.',
-    paid: 'Pembayaran berhasil. Credit atau plan telah diaktifkan oleh server.',
-    failed: 'Pembayaran ditolak. Pilih checkout QRIS baru bila ingin mencoba lagi.',
-    expired: 'Kode QRIS sudah kedaluwarsa. Buat checkout QRIS baru.',
-    canceled: 'Checkout dibatalkan. Belum ada credit atau plan yang ditambahkan.',
-    refunded: 'Refund tercatat. Status entitlement ditinjau sesuai kebijakan refund.',
-  };
-
-  const updateOrder = async (order, successNotice = '') => {
-    setActiveOrder(order);
-    if (order?.id && ['created', 'pending'].includes(order.status)) {
-      window.sessionStorage.setItem('laprakin:active-payment-order', order.id);
-    }
-    if (order?.id && ['paid', 'failed', 'expired', 'canceled', 'refunded'].includes(order.status)) {
-      window.sessionStorage.removeItem('laprakin:active-payment-order');
-    }
-    if (order?.status === 'paid') {
-      await refreshSession();
-      await load();
-      setNotice(successNotice || 'Pembayaran QRIS berhasil diverifikasi. Plan atau credit sudah aktif.');
-      navigate('/app', { replace: true });
-    }
-  };
-
-  const getOrder = async (orderId, verifyWithGateway = false) => {
-    try {
-      setBusy(verifyWithGateway);
-      const response = verifyWithGateway
-        ? await api(`/payments/orders/${orderId}/refresh`, { method: 'POST', body: {} })
-        : await api(`/payments/orders/${orderId}`, { includeCsrf: false });
-      await updateOrder(response.order, verifyWithGateway && response.order?.status === 'paid' ? 'Pembayaran QRIS berhasil diverifikasi.' : 'Status pembayaran diperbarui.');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!activeOrder?.id || !['created', 'pending'].includes(activeOrder.status)) return undefined;
-    const timer = window.setInterval(() => { getOrder(activeOrder.id, false); }, 10_000);
-    return () => window.clearInterval(timer);
-  }, [activeOrder?.id, activeOrder?.status]);
-
-  const checkout = async () => {
-    if (!cartItems.length) { setError('Tambahkan plan atau credit ke keranjang terlebih dahulu.'); return; }
-    if (!user?.emailVerified) { setError('Verifikasi email sebelum melakukan pembayaran.'); return; }
-    setBusy(true);
-    setError('');
-    setCheckoutRecoveryUrl('');
-    try {
-      const payload = await api('/payments/checkout', { method: 'POST', body: { items: cartItems } });
-      if (payload.mode === 'manual') {
-        await updateOrder(payload.order, 'Checkout QRIS lokal diproses untuk pengujian.');
-        return;
-      }
-      await updateOrder(payload.order);
-      window.sessionStorage.setItem('laprakin:active-payment-order', payload.orderId);
-      const checkoutUrl = validatedMidtransCheckoutUrl(payload.checkoutUrl);
-      if (!checkoutUrl) {
-        throw new Error('URL checkout QRIS dari gateway tidak valid.');
-      }
-      setCheckoutRecoveryUrl(checkoutUrl);
-      if (!redirectToMidtransCheckout(checkoutUrl)) {
-        throw new Error('Navigasi otomatis diblokir browser. Buka checkout QRIS lewat tombol di bawah.');
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const selectSubscription = (key) => { setSubscriptionChoice(key === 'free' ? 'none' : key); setError(''); };
-  return <div className={`billing-portal pricing-only ${billingTheme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
-    <header className="pricing-only-nav"><button className="billing-back" onClick={() => navigate('/app')} aria-label="Kembali ke workspace"><ArrowLeft size={18} /></button></header>
-    <main className="pricing-only-main">
-      <section className="pricing-only-copy"><h1>Pilih plan yang pas untukmu.</h1><p>Naikkan kapasitas Laprakin saat kamu membutuhkannya.</p></section>
-      <section className="pricing-only-grid">
-        {['free', 'monthly', 'pro'].map((key) => {
-          const item = catalogue[key];
-          const current = plan.key === key;
-          const isSelected = subscriptionChoice === key;
-          const paid = key !== 'free';
-          return <article key={key} className={`pricing-only-card ${current ? 'current' : ''} ${isSelected ? 'selected' : ''}`} onClick={() => paid && selectSubscription(key)}>
-            <div className="pricing-only-card-top"><span className="pricing-only-marker" aria-hidden="true" /><small>{current ? 'Plan aktif' : key === 'free' ? 'Mulai gratis' : 'Individual'}</small></div>
-            <h2>{item.label}</h2><p>{item.description}</p>
-            <div className="pricing-only-price"><b>{key === 'free' ? 'Rp0' : formatCurrency(item.price)}</b>{key !== 'free' && <span>/ 30 hari</span>}</div>
-            <button type="button" className={current || !paid ? 'muted' : ''} onClick={(event) => { event.stopPropagation(); if (paid) selectSubscription(key); }}>
-              {current ? `${item.label} aktif` : !paid ? 'Plan dasar' : isSelected ? 'Dipilih' : `Pilih ${item.label}`}
-            </button>
-            <ul>{item.features.map((feature) => <li key={feature}><Check size={14}/>{feature}</li>)}</ul>
-          </article>;
-        })}
-      </section>
-      {subscriptionChoice !== 'none' && <section className="pricing-only-checkout"><div><small>Checkout QRIS</small><b>{quoteBusy ? 'Menghitung…' : quote?.displayTotal || 'Rp0'}</b><span>{quote?.items?.[0]?.label || 'Plan pilihanmu'} · berlaku 30 hari</span></div><Button onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>{busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? 'Bayar dengan QRIS' : 'Gateway belum aktif'}</Button></section>}
-      {activeOrder && <div className={`pricing-only-status ${activeOrder.status || 'pending'}`}><div><b>{activeOrder.statusLabel || paymentStatusCopy[activeOrder.status] || 'Status pembayaran'}</b><p>{paymentStatusCopy[activeOrder.status] || 'Status pembayaran sedang diproses.'}</p></div>{activeOrder.canRefresh !== false && ['created', 'pending'].includes(activeOrder.status) ? <Button variant="secondary" onClick={() => getOrder(activeOrder.id, true)} disabled={busy}><RefreshCw size={14}/> Refresh status</Button> : <CheckCircle2 size={20}/>}</div>}
-      {error && <div className="billing-inline-error"><CircleAlert size={16}/><span>{error}</span>{checkoutRecoveryUrl && <a href={checkoutRecoveryUrl}>Buka checkout QRIS</a>}</div>}
-    </main>
-  </div>;
-}
-
 function AccentPicker({ value, onChange, resolvedTheme = 'dark' }) {
   const lightMode = resolvedTheme === 'light';
   return <div className="accent-picker" role="radiogroup" aria-label="Warna aksen workspace">
@@ -3158,48 +2957,6 @@ function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, pre
     </div>
   </Modal>;
 }
-
-function HelpModal({ onClose }) {
-  const { setNotice } = useApp();
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
-  const quickTopics = ['File gagal diunggah', 'Export DOCX', 'Billing dan credit', 'Privasi file'];
-  useEffect(() => { api('/support/thread').then((data) => setMessages(data.messages || [])).catch((err) => setNotice(err.message)); }, []);
-  const send = async (event) => { event.preventDefault(); if (!input.trim()) return; setBusy(true); try { const data = await api('/support/message', { method: 'POST', body: { content: input.trim() } }); setMessages(data.messages || []); setInput(''); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
-  return <Modal title="Bantuan" onClose={onClose} className="support-modal support-modal-v2">
-    <div className="support-intro"><span><HelpCircle size={20}/></span><div><h2>Apa yang bisa kami bantu?</h2><p>Tanyakan soal akun, bahan, export, billing, atau kendala workspace.</p></div><small><i/>Support aktif</small></div>
-    <div className="support-quick-topics">{quickTopics.map((topic) => <button type="button" key={topic} onClick={() => setInput(topic)}>{topic}<ArrowRight size={13}/></button>)}</div>
-    <div className="modal-thread support-thread" aria-live="polite">{messages.length ? messages.map((item) => <article key={item.id} className={`support-message ${item.role}`}><span>{item.role === 'assistant' ? <BrandMark alt=""/> : 'K'}</span><div><small>{item.role === 'assistant' ? 'Tim Laprakin' : 'Kamu'}</small><p>{item.content}</p></div></article>) : <div className="support-empty"><MessageCircle size={20}/><div><b>Belum ada percakapan</b><p>Pilih topik di atas atau ceritakan kendalanya secara singkat.</p></div></div>}</div>
-     <form className="support-composer" onSubmit={send}><textarea aria-label="Pesan bantuan" rows="2" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Tulis kendalamu..."/><div><small>Jangan kirim kata sandi atau data sensitif.</small><button type="submit" disabled={busy || !input.trim()}>{busy ? <LoaderCircle className="spin" size={15}/> : <Send size={15}/>}Kirim</button></div></form>
-  </Modal>;
-}
-
-function FeedbackModal({ onClose }) {
-  const { setNotice } = useApp();
-  const [items, setItems] = useState([]);
-  const emptyForm = { category: 'idea', rating: null, body: '', contactAllowed: false, allowPublicQuote: false, publicAlias: '' };
-  const [form, setForm] = useState(emptyForm);
-  const [busy, setBusy] = useState(false);
-  const categories = [{ value: 'idea', label: 'Ide fitur' }, { value: 'bug', label: 'Bug' }, { value: 'experience', label: 'Pengalaman' }, { value: 'other', label: 'Lainnya' }];
-  useEffect(() => { api('/feedback').then((data) => setItems(data.items || [])).catch((err) => setNotice(err.message)); }, []);
-  const submit = async (event) => { event.preventDefault(); if (busy || form.body.trim().length < 12 || (form.allowPublicQuote && !form.publicAlias.trim())) return; setBusy(true); try { const data = await api('/feedback', { method: 'POST', body: { ...form, body: form.body.trim(), publicAlias: form.publicAlias.trim() } }); setItems((old) => [data.item, ...old]); setForm(emptyForm); setNotice('Feedback terkirim.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
-  return <Modal title="Feedback" onClose={onClose} className="feedback-modal feedback-modal-v2">
-    <div className="feedback-layout">
-      <form className="feedback-form" onSubmit={submit}>
-        <header><span>Masukan produk</span><h2>Ceritakan yang perlu kami perbaiki.</h2><p>Jelaskan kendala atau hasil yang kamu harapkan. Tim akan membaca riwayatnya di panel sebelah.</p></header>
-        <fieldset className="feedback-category"><legend>Jenis masukan</legend><div>{categories.map((item) => <button type="button" key={item.value} aria-pressed={form.category === item.value} className={form.category === item.value ? 'active' : ''} onClick={() => setForm({ ...form, category: item.value })}>{item.label}</button>)}</div></fieldset>
-        <fieldset className="feedback-rating"><legend>Nilai pengalaman <small>opsional</small></legend><div>{[1,2,3,4,5].map((rating) => <button type="button" key={rating} aria-pressed={form.rating === rating} aria-label={`Nilai ${rating} dari 5`} className={form.rating === rating ? 'active' : ''} onClick={() => setForm({ ...form, rating: form.rating === rating ? null : rating })}><b>{rating}</b><span>{rating === 1 ? 'Buruk' : rating === 5 ? 'Bagus' : ''}</span></button>)}</div></fieldset>
-         <label className="feedback-body"><span>Masukan</span><textarea aria-label="Masukan" minLength="12" maxLength="1200" required value={form.body} onChange={(event) => setForm({ ...form, body: event.target.value })} placeholder="Apa yang terjadi, dan seperti apa hasil yang kamu harapkan?"/><small>{form.body.length} / 1200</small></label>
-         <div className="feedback-consent"><Toggle checked={form.contactAllowed} onChange={(checked) => setForm({ ...form, contactAllowed: checked })} title="Boleh dihubungi" description="Tim dapat membalas lewat akun ini."/><Toggle checked={form.allowPublicQuote} onChange={(checked) => setForm({ ...form, allowPublicQuote: checked, publicAlias: checked ? form.publicAlias : '' })} title="Boleh dijadikan testimoni" description="Tidak dipublikasikan tanpa alias dan persetujuanmu."/>{form.allowPublicQuote && <label><span>Alias publik <small>wajib</small></span><input aria-label="Alias publik" required value={form.publicAlias} onChange={(event) => setForm({ ...form, publicAlias: event.target.value })} placeholder="Contoh: Mahasiswa TI semester 4"/></label>}</div>
-        <button className="feedback-submit" type="submit" disabled={busy || form.body.trim().length < 12 || (form.allowPublicQuote && !form.publicAlias.trim())}>{busy ? <LoaderCircle className="spin" size={15}/> : <Send size={15}/>}Kirim masukan</button>
-      </form>
-      <aside className="feedback-history"><header><div><b>Riwayat</b><small>{items.length} masukan</small></div><MessageSquareText size={17}/></header>{items.length ? <div>{items.map((item) => <article key={item.id}><div><span>{item.category} · {item.rating ? `${item.rating}/5` : 'tanpa rating'}</span><small>{formatDate(item.updatedAt)}</small></div><p>{item.body}</p><em>{item.status}</em>{item.replies?.map((reply) => <div className="feedback-reply" key={reply.id}><b>Tim Laprakin</b><p>{reply.body}</p></div>)}</article>)}</div> : <div className="feedback-empty"><MessageSquareText size={18}/><b>Belum ada feedback</b><p>Masukan yang dikirim akan tersimpan dan balasan tim muncul di sini.</p></div>}</aside>
-    </div>
-  </Modal>;
-}
-
-function NotificationModal({ onClose }) { const { setNotice } = useApp(); const [data, setData] = useState({ notifications: [], unread: 0 }); const ref = useRef(null); useEffect(() => { api('/notifications').then(setData).catch((err) => setNotice(err.message)); }, []); useEffect(() => { const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose(); }; window.addEventListener('mousedown', closeOutside); return () => window.removeEventListener('mousedown', closeOutside); }, [onClose]); useEffect(() => { const timer = window.setTimeout(onClose, 5000); return () => window.clearTimeout(timer); }, [onClose]); const markRead = async () => { try { setData(await api('/notifications/read', { method: 'PUT', body: {} })); } catch (err) { setNotice(err.message); } }; return <aside ref={ref} className="notification-popover" role="dialog" aria-modal="true" aria-label="Notifikasi"><header><div><b>Notifikasi</b><small>{data.unread ? `${data.unread} baru` : 'Semua sudah dibaca'}</small></div><IconButton label="Tutup" onClick={onClose}><X size={16} /></IconButton></header>{data.unread ? <button className="notification-read" onClick={markRead}>Tandai semua dibaca</button> : null}<div className="notification-list">{data.notifications.length ? data.notifications.map((note) => <article key={note.id} className={note.is_read ? 'is-read' : ''}><span /> <div><b>{note.title}</b><p>{note.body}</p><small>{formatDate(note.created_at)}</small></div></article>) : <p className="muted-note">Belum ada notifikasi.</p>}</div></aside>; }
 
 function LegacyAdminWorkspace() {
   const { user, refreshSession, setNotice, prefs, setPrefs } = useApp();
