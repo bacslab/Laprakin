@@ -3,6 +3,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { nanoid } from 'nanoid';
 import { config } from './config.js';
+import { ensureAiConfigurationSchema } from './ai-configuration-schema.js';
 import { now } from './utils.js';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -1179,4 +1180,5 @@ CREATE TABLE IF NOT EXISTS ai_provider_secrets (
 CREATE INDEX IF NOT EXISTS idx_ai_provider_secrets_provider
   ON ai_provider_secrets(provider_id, secret_version DESC);
 `);
+ensureAiConfigurationSchema(db);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_user_devices_profile ON user_devices(profile_hash, user_id);`);

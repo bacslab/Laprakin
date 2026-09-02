@@ -100,12 +100,12 @@
 - Route assignments for every mission route with primary, ordered fallbacks, requirements, limits, reasoning effort, cost class, and plan availability.
 - Atomic active and last-known-good revision pointers.
 
-- [ ] Write red migration/repository tests proving drafts are immutable, secrets are references only, catalogs are per-provider, and pointer swaps are atomic.
-- [ ] Implement provider states `draft`, `tested`, `active`, `degraded`, `disabled`, and `archived` with legal transition validation.
-- [ ] Validate routes: verified vision/schema evidence, enabled provider/model, no duplicate fallback, and complete production-required coverage.
-- [ ] Map all product/purpose combinations to the mission route IDs without exposing model IDs to users.
-- [ ] Run focused repository/routing/migration tests.
-- [ ] Commit: `feat: persist revisioned ai configuration`.
+- [x] Write red migration/repository tests proving drafts are immutable, secrets are references only, catalogs are per-provider, and pointer swaps are atomic.
+- [x] Implement provider states `draft`, `tested`, `active`, `degraded`, `disabled`, and `archived` with legal transition validation.
+- [x] Validate routes: verified vision/schema evidence, enabled provider/model, no duplicate fallback, and complete production-required coverage.
+- [x] Map all product/purpose combinations to the mission route IDs without exposing model IDs to users.
+- [x] Run focused repository/routing/migration tests.
+- [x] Commit: `feat: persist revisioned ai configuration`.
 
 ## Task 5: Introduce provider adapters and per-provider discovery
 
