@@ -1,0 +1,294 @@
+import { useEffect, useState } from 'react';
+import { Archive, ArrowDownToLine, ArrowRight, BellRing, Check, CheckCircle2, CircleAlert, Copy, CreditCard, Database, FileText, FolderOpen, Keyboard, LoaderCircle, LockKeyhole, Mail, Megaphone, Moon, Monitor, RefreshCw, Search, Save, Settings2, Shield, ShieldCheck, Sliders, Sparkles, Sun, Trash2, UserRound, X } from 'lucide-react';
+import { api, clearCsrfToken, download } from '../../api';
+import { Button } from '../../components/Button';
+import { CustomSelect } from '../../components/CustomSelect';
+import { IconButton } from '../../components/IconButton';
+import { Modal } from '../../components/Dialog';
+import InstitutionLogoField from '../../components/InstitutionLogoField';
+import Toggle from '../../components/Toggle';
+import { formatBytes, formatDate } from '../../lib/formatters';
+import { userGreetingName, userInitials } from '../../lib/user';
+import { useResolvedTheme } from '../../lib/theme';
+import { DARK_ONLY_ACCENTS, workspaceAccents } from '../../data/workspace';
+import { useApp } from '../../state/ui-context';
+
+const REFERRAL_STATUS_LABEL = {
+  registered: { label: 'Terdaftar', hint: 'Menunggu pembelian pertama.' },
+  pending: { label: 'Menunggu masa tahan', hint: 'Bonus dilepas setelah masa tahan selesai.' },
+  held: { label: 'Ditahan', hint: 'Sedang ditinjau sebelum bonus dilepas.' },
+  rewarded: { label: 'Bonus diberikan', hint: 'Credit sudah masuk ke saldomu.' },
+  rejected: { label: 'Tidak memenuhi syarat', hint: 'Undangan tidak memenuhi ketentuan bonus.' },
+};
+
+function ReferralSettingsPane() {
+  const { user, setNotice } = useApp();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try { setData(await api('/referral')); } catch { setData(null); } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const code = data?.code || user?.referralCode || '';
+  const inviteLink = code ? `${window.location.origin}/auth?ref=${encodeURIComponent(code)}` : '';
+
+  const copy = async (value, key) => {
+    if (!value) return setNotice('Kode referral belum tersedia.');
+    try {
+      await navigator.clipboard?.writeText(value);
+      setCopied(key);
+      setTimeout(() => setCopied((current) => (current === key ? '' : current)), 2000);
+    } catch {
+      setNotice(`Salin manual: ${value}`);
+    }
+  };
+
+  const referrals = data?.referrals || [];
+  const rewarded = referrals.filter((item) => item.status === 'rewarded').length;
+
+  return <div className="referral-settings-pane">
+    <section className="referral-code-card">
+      <div className="referral-code-head"><span className="referral-code-icon"><Megaphone size={19} /></span><div><small>Kode referralmu</small><h3>{loading && !code ? '…' : code || 'Belum tersedia'}</h3></div></div>
+      <div className="referral-code-actions">
+        <Button variant="secondary" onClick={() => copy(code, 'code')} disabled={!code}>
+          {copied === 'code' ? <><Check size={14} />Tersalin</> : <><Copy size={14} />Salin kode</>}
+        </Button>
+        <Button variant="secondary" onClick={() => copy(inviteLink, 'link')} disabled={!inviteLink}>
+          {copied === 'link' ? <><Check size={14} />Tersalin</> : <><Copy size={14} />Salin link undangan</>}
+        </Button>
+      </div>
+    </section>
+
+    <section className="referral-terms">
+      <b>Cara bonus dihitung</b>
+      <ul>
+        <li>Temanmu memasukkan kodemu saat mendaftar.</li>
+        <li>Bonus aktif setelah temanmu belanja minimal Rp29.900 atau berlangganan Pro.</li>
+        <li>Credit masuk setelah masa tahan selesai, untuk memastikan transaksinya sah.</li>
+        <li>Akun yang dibuat dari perangkat yang sama tidak dihitung.</li>
+      </ul>
+    </section>
+
+    <section className="referral-list">
+      <div className="referral-list-head">
+        <div><b>Undangan</b><small>{loading ? 'Memuat…' : `${referrals.length} terdaftar · ${rewarded} berbonus`}</small></div>
+        <button type="button" onClick={load} disabled={loading}><RefreshCw size={13} />Muat ulang</button>
+      </div>
+      {!loading && !referrals.length && <p className="referral-empty">Belum ada yang mendaftar memakai kodemu. Bagikan link undangan di atas untuk mulai.</p>}
+      {referrals.map((item) => {
+        const status = REFERRAL_STATUS_LABEL[item.status] || { label: item.status, hint: '' };
+        return <article key={item.id} className="referral-row">
+          <div><b>{item.email}</b><small>{status.hint || item.rejection_reason || ''}</small></div>
+          <span className={`referral-status referral-status-${item.status}`}>{status.label}</span>
+        </article>;
+      })}
+    </section>
+  </div>;
+}
+
+function BillingSettingsPane({ onOpenBilling }) {
+  const [billing, setBilling] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const load = async () => { setLoading(true); try { setBilling(await api('/billing')); } catch { setBilling(null); } finally { setLoading(false); } };
+  useEffect(() => { load(); }, []);
+  const currentPlan = billing?.currentPlan || {};
+  const transactionCount = billing?.transactions?.length || 0;
+  const availableCredits = billing?.wallet?.balances?.total ?? billing?.balances?.total ?? '—';
+  return <div className="billing-settings-pane billing-settings-history-pane">
+    <section className="billing-overview-card">
+      <span className="billing-overview-icon"><CreditCard size={19} /></span>
+      <div><small>Plan aktif</small><h3>{currentPlan.label || currentPlan.name || 'Free plan'}</h3><p>Kelola plan dan credit tanpa meninggalkan riwayat transaksi akunmu.</p></div>
+      <Button onClick={onOpenBilling}>Kelola plan <ArrowRight size={14} /></Button>
+    </section>
+    <div className="billing-summary-grid">
+      <article><span>Credit tersedia</span><b>{availableCredits}</b><small>Dipakai saat proses dokumen berjalan.</small></article>
+      <article><span>Transaksi</span><b>{loading ? '…' : transactionCount}</b><small>Tercatat pada akun ini.</small></article>
+    </div>
+    <section className="settings-billing-history">
+      <div className="settings-billing-history-head"><div><b>Riwayat transaksi</b><small>Pembayaran dan perubahan credit</small></div><button type="button" onClick={load} disabled={loading}><RefreshCw size={13} />Muat ulang</button></div>
+      {loading ? <div className="settings-loading-state"><LoaderCircle className="spin" size={16} />Memuat riwayat...</div> : billing?.transactions?.length ? <div>{billing.transactions.map((item) => <article key={item.id}><span className="transaction-mark">{item.kind === 'payment' || item.kind === 'subscription' ? <CreditCard size={13} /> : <Sparkles size={13} />}</span><div><b>{item.title}</b><small>{item.detail}</small></div><div><strong>{item.amountLabel}</strong><small>{formatDate(item.createdAt)}</small></div></article>)}</div> : <div className="settings-empty-state"><CreditCard size={18} /><div><b>Belum ada transaksi</b><p>Riwayat pembayaran akan muncul di sini setelah checkout pertama.</p></div></div>}
+    </section>
+  </div>;
+}
+
+function AccentPicker({ value, onChange, resolvedTheme = 'dark' }) {
+  const lightMode = resolvedTheme === 'light';
+  return <div className="accent-picker" role="radiogroup" aria-label="Warna aksen workspace">
+    {workspaceAccents.map((accent) => {
+      const unavailable = lightMode && DARK_ONLY_ACCENTS.has(accent.key);
+      return <button
+        key={accent.key}
+        type="button"
+        role="radio"
+        aria-label={unavailable ? `${accent.label} (hanya tersedia pada tema gelap)` : accent.label}
+        title={unavailable ? `${accent.label} tidak terbaca pada tema terang. Tersedia kembali di tema gelap.` : accent.label}
+        aria-checked={value === accent.key}
+        disabled={unavailable}
+        className={`${value === accent.key ? 'selected' : ''}${unavailable ? ' accent-unavailable' : ''}`.trim()}
+        onClick={() => onChange(accent.key)}
+        style={{ '--accent-swatch': accent.color }}
+      >
+        <span className="accent-swatch">{value === accent.key && !unavailable && <Check size={13} />}</span>
+      </button>;
+    })}
+  </div>;
+}
+
+function ThemePicker({ value, onChange }) {
+  const themes = [
+    { key: 'system', label: 'Ikuti sistem', icon: Monitor },
+    { key: 'light', label: 'Tema terang', icon: Sun },
+    { key: 'dark', label: 'Tema gelap', icon: Moon },
+  ];
+  return <div className="theme-picker" role="radiogroup" aria-label="Tema workspace">
+    {themes.map(({ key, label, icon: Icon }) => <button key={key} type="button" role="radio" aria-label={label} title={label} aria-checked={value === key} className={value === key ? 'selected' : ''} onClick={() => onChange(key)}><Icon size={15} /></button>)}
+  </div>;
+}
+
+function SettingsPaneHeader({ eyebrow, title, description }) {
+  return <header className="settings-pane-header"><span>{eyebrow}</span><h2>{title}</h2><p>{description}</p></header>;
+}
+
+export default function SettingsModal({ onClose, onSaved, onArchivedChanged, onOpenBilling, prefs, setPrefs, initialTab = 'general' }) {
+  const { user, setNotice, refreshSession, showDialog } = useApp();
+  const settingsTheme = useResolvedTheme(prefs?.theme || 'system');
+  const [tab, setTab] = useState(initialTab);
+  const [form, setForm] = useState({ nickname: user.nickname || '', fullName: user.fullName || '', nim: user.nim || '', className: user.className || '', institutionName: user.institutionName || '', institutionLogoUrl: user.institutionLogoUrl || '', facultyName: user.facultyName || '', studyProgramName: user.studyProgramName || '', lecturerName: user.lecturerName || '', lecturerNip: user.lecturerNip || '', departmentKey: user.departmentKey || '', studyProgramKey: user.studyProgramKey || '' });
+  const [storage, setStorage] = useState(null);
+  const [storageBusy, setStorageBusy] = useState('');
+  const [safetyStatus, setSafetyStatus] = useState(null);
+  const [archivedChats, setArchivedChats] = useState([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [settingsQuery, setSettingsQuery] = useState('');
+  const loadStorage = async () => { try { setStorage(await api('/storage/summary')); } catch { setStorage(null); } };
+  useEffect(() => { loadStorage(); api('/safety/status').then(setSafetyStatus).catch(() => setSafetyStatus(null)); }, []);
+  useEffect(() => setTab(initialTab), [initialTab]);
+  const loadArchivedChats = async () => {
+    setArchivedLoading(true);
+    try { const data = await api('/chat/sessions/archived'); setArchivedChats(data.sessions || []); }
+    catch (err) { setNotice(err.message); }
+    finally { setArchivedLoading(false); }
+  };
+  useEffect(() => { if (tab === 'archived') loadArchivedChats(); }, [tab]);
+  const updatePrefs = (patch) => setPrefs((value) => ({ ...value, ...patch }));
+  const saveNickname = async () => {
+    setBusy(true);
+    try {
+      await api('/profile', { method: 'PUT', body: { nickname: form.nickname.trim() } });
+      await onSaved();
+      setNotice(form.nickname.trim() ? 'Nama panggilan disimpan.' : 'Sapaan kembali memakai nama depan.');
+    } catch (err) {
+      setNotice(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveAcademic = async () => { setBusy(true); try { await api('/profile', { method: 'PUT', body: { fullName: form.fullName, nim: form.nim, className: form.className, institutionName: form.institutionName, facultyName: form.facultyName, studyProgramName: form.studyProgramName, lecturerName: form.lecturerName, lecturerNip: form.lecturerNip, departmentKey: form.departmentKey, studyProgramKey: form.studyProgramKey } }); await onSaved(); setNotice('Profil akademik disimpan.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
+  const requestPasswordChange = async () => { setBusy(true); try { await api('/auth/password-change-request', { method: 'POST', body: {} }); setNotice('Link verifikasi perubahan kata sandi sudah dikirim ke email akunmu.'); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
+  const restoreArchivedChat = async (sessionId) => {
+    setBusy(true);
+    try {
+      await api(`/chat/sessions/${sessionId}/restore`, { method: 'POST', body: {} });
+      await loadArchivedChats();
+      await onArchivedChanged?.();
+    } catch (err) { setNotice(err.message); }
+    finally { setBusy(false); }
+  };
+  const logoutAll = async () => { const confirmed = await showDialog({ kind: 'confirm', title: 'Keluar dari semua perangkat?', message: 'Sesi di perangkat lain akan diakhiri. Perangkat ini tetap dapat melanjutkan setelah refresh.', confirmLabel: 'Akhiri sesi' }); if (!confirmed) return; setBusy(true); try { await api('/auth/logout-all', { method: 'POST' }); clearCsrfToken(); await refreshSession(); setNotice('Semua sesi sudah diakhiri.'); onClose(); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
+  const exportData = async () => { try { await download('/privacy/data-export', 'laprakin-data.json'); setNotice('Ringkasan data berhasil diunduh.'); } catch (err) { setNotice(err.message); } };
+  const deleteStorageFile = async (file) => {
+    const confirmed = await showDialog({ kind: 'confirm', title: 'Hapus file?', message: `${file.name || 'File ini'} akan dihapus dari penyimpanan akunmu.`, confirmLabel: 'Hapus', destructive: true });
+    if (!confirmed) return;
+    setStorageBusy(file.id);
+    try {
+      await api(`/storage/files/${file.kind}/${file.id}`, { method: 'DELETE', body: {} });
+      await loadStorage();
+      setNotice('File dihapus dari penyimpanan.');
+    } catch (err) {
+      setNotice(err.message);
+    } finally {
+      setStorageBusy('');
+    }
+  };
+  const deleteAccount = async () => { if (deleteConfirm !== user.email) return setNotice('Masukkan email akun dengan tepat untuk melanjutkan.'); setBusy(true); try { await api('/me', { method: 'DELETE', body: { confirmation: deleteConfirm } }); clearCsrfToken(); await refreshSession(); onClose(); } catch (err) { setNotice(err.message); } finally { setBusy(false); } };
+  const tabs = [
+    { key: 'general', label: 'Umum', icon: Settings2, title: 'Tampilan workspace', description: 'Atur tema, kepadatan, bahasa, dan warna aksen.' },
+    { key: 'notifications', label: 'Notifikasi', icon: BellRing, title: 'Notifikasi yang berguna', description: 'Pilih kabar yang benar-benar perlu muncul.' },
+    { key: 'personalization', label: 'Personalisasi', icon: Sliders, title: 'Cara Laprakin menulis', description: 'Jadikan preferensi ini sebagai titik awal untuk chat baru.' },
+    { key: 'billing', label: 'Billing', icon: CreditCard, title: 'Plan dan transaksi', description: 'Lihat status plan, credit, dan histori pembayaran.' },
+    { key: 'referral', label: 'Referral', icon: Megaphone, title: 'Ajak teman pakai Laprakin', description: 'Bagikan kodemu dan pantau status bonus tiap undangan.' },
+    { key: 'data', label: 'Kontrol data', icon: Database, title: 'Data tetap dalam kendalimu', description: 'Atur pemrosesan eksternal dan unduh ringkasan data.' },
+    { key: 'storage', label: 'Penyimpanan', icon: FolderOpen, title: 'Penggunaan penyimpanan', description: 'Pantau file yang tersimpan pada workspace.' },
+    { key: 'archived', label: 'Chat diarsipkan', icon: Archive, title: 'Chat diarsipkan', description: 'Lihat dan pulihkan percakapan yang pernah kamu arsipkan.' },
+    { key: 'safety', label: 'Safety', icon: Shield, title: 'Batas penggunaan yang jelas', description: 'Laprakin membantu menyusun, bukan memalsukan hasil akademik.' },
+    { key: 'security', label: 'Keamanan & login', icon: LockKeyhole, title: 'Akses akun', description: 'Kelola kata sandi dan sesi perangkat.' },
+    { key: 'academic', label: 'Profil akademik', icon: UserRound, title: 'Jurusan dan program studi', description: 'Dipakai sebagai konteks awal tanpa mengunci struktur tugas.' },
+    { key: 'keyboard', label: 'Keyboard', icon: Keyboard, title: 'Interaksi dan gerakan', description: 'Sesuaikan cara mengirim pesan dan intensitas animasi.' },
+  ];
+  const activeTab = tabs.find((item) => item.key === tab) || tabs[0];
+  const visibleTabs = tabs.filter((item) => `${item.label} ${item.title}`.toLocaleLowerCase().includes(settingsQuery.trim().toLocaleLowerCase()));
+  const Row = ({ title, description, children, className = '' }) => <div className={`settings-row ${className}`}><div><b>{title}</b>{description && <small>{description}</small>}</div>{children}</div>;
+  const storagePercentage = storage?.limitBytes ? Math.min(100, Math.round((storage.usedBytes / storage.limitBytes) * 100)) : 0;
+
+  return <Modal title="Settings" onClose={onClose} className="settings-modal settings-reference settings-v2">
+    <div className="settings-layout">
+      <nav className="settings-side" aria-label="Navigasi settings">
+        <div className="settings-side-head"><div><b>Settings</b><small>Workspace pribadi</small></div><IconButton label="Tutup settings" className="settings-close" onClick={onClose}><X size={18} /></IconButton></div>
+        <label className="settings-sidebar-search"><Search size={14}/><input value={settingsQuery} onChange={(event) => setSettingsQuery(event.target.value)} placeholder="Cari pengaturan" aria-label="Cari pengaturan" />{settingsQuery && <button type="button" onClick={() => setSettingsQuery('')} aria-label="Hapus pencarian"><X size={12}/></button>}</label>
+        <div className="settings-nav-list">{visibleTabs.map(({ key, label, icon: Icon }) => <button type="button" key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}><Icon size={16} /><span>{label}</span></button>)}</div>
+        <div className="settings-account-mini"><span>{userInitials(user)}</span><div><b>{user.fullName || user.email.split('@')[0]}</b><small>{user.email}</small></div></div>
+      </nav>
+      <div className="settings-content">
+        <SettingsPaneHeader eyebrow={activeTab.label} title={activeTab.title} description={activeTab.description} />
+         {tab === 'general' && <div className="settings-pane">
+           <section className="settings-group"><div className="settings-group-heading"><b>Appearance</b><small>Perubahan diterapkan langsung.</small></div><Row title="Tema" className="theme-settings-row"><ThemePicker value={prefs.theme || 'system'} onChange={(value) => updatePrefs({ theme: value })} /></Row><Row title="Kontras"><CustomSelect ariaLabel="Kontras workspace" value={prefs.contrast || 'default'} onChange={(value) => updatePrefs({ contrast: value })} options={[{ value: 'default', label: 'Default' }, { value: 'high', label: 'Tinggi' }]} /></Row><Row title="Bahasa"><CustomSelect ariaLabel="Bahasa workspace" value={prefs.language || 'id'} onChange={(value) => updatePrefs({ language: value })} options={[{ value: 'id', label: 'Bahasa Indonesia' }, { value: 'en', label: 'English' }]} /></Row></section>
+          <section className="settings-group accent-settings-group"><div className="settings-group-heading"><b>Warna aksen</b><small>Dipakai untuk tombol utama dan status aktif—bukan seluruh hover.</small></div><AccentPicker value={prefs.accent || 'lime'} onChange={(accent) => updatePrefs({ accent })} resolvedTheme={settingsTheme} /></section>
+          <Toggle checked={prefs.compact} onChange={(checked) => updatePrefs({ compact: checked })} title="Workspace ringkas" description="Rapatkan sidebar, toolbar, dan area percakapan." />
+        </div>}
+        {tab === 'notifications' && <div className="settings-pane"><section className="settings-group"><Toggle checked={prefs.jobNotifications !== false} onChange={(checked) => updatePrefs({ jobNotifications: checked })} title="Proses dokumen" description="Beritahu saat analisis, draft, atau export selesai." /><Toggle checked={prefs.deadlineNotifications !== false} onChange={(checked) => updatePrefs({ deadlineNotifications: checked })} title="Deadline tugas" description="Pengingat ringan untuk dokumen yang memiliki tenggat." /><Toggle checked={prefs.productUpdates !== false} onChange={(checked) => updatePrefs({ productUpdates: checked })} title="Update produk" description="Hanya perubahan fitur beta yang penting." /></section></div>}
+         {tab === 'personalization' && <div className="settings-pane"><section className="settings-group nickname-settings"><div className="settings-group-heading"><b>Nama panggilan</b><small>Dipakai hanya untuk menyapamu di halaman chat. Kosongkan untuk memakai nama depan.</small></div><div className="nickname-settings-control"><label aria-label="Sapaan"><input aria-label="Nama panggilan" value={form.nickname} maxLength={20} autoComplete="nickname" onChange={(event) => setForm({ ...form, nickname: event.target.value })} placeholder={userGreetingName({ ...user, nickname: '' })} /></label><small>{form.nickname.length}/20</small><Button type="button" variant="secondary" onClick={saveNickname} disabled={busy}><Save size={14}/>Simpan</Button></div></section><section className="settings-group"><Row title="Gaya bahasa"><CustomSelect ariaLabel="Gaya bahasa" value={prefs.tone || 'formal'} onChange={(value) => updatePrefs({ tone: value })} options={[{ value: 'formal', label: 'Formal' }, { value: 'semi-formal', label: 'Semi-formal' }]} /></Row><Row title="Sudut pandang"><CustomSelect ariaLabel="Sudut pandang" value={prefs.perspective || 'saya'} onChange={(value) => updatePrefs({ perspective: value })} options={[{ value: 'saya', label: 'Saya' }, { value: 'kita', label: 'Kita' }, { value: 'impersonal', label: 'Impersonal' }]} /></Row><Row title="Struktur awal"><CustomSelect ariaLabel="Struktur awal" value={prefs.profile || 'langkah'} onChange={(value) => updatePrefs({ profile: value })} options={[{ value: 'langkah', label: 'Berbasis langkah' }, { value: 'pengujian', label: 'Berbasis pengujian' }, { value: 'proyek', label: 'Berbasis proyek' }]} /></Row></section><label className="settings-textarea"><span>Instruksi tambahan</span><small>Selalu dikirim sebagai acuan AI untuk chat dan generate laprak.</small><textarea aria-label="Instruksi tambahan" value={prefs.customInstructions || ''} onChange={(event) => updatePrefs({ customInstructions: event.target.value })} placeholder="Contoh: gunakan bahasa teknis yang ringkas." /></label></div>}
+        {tab === 'billing' && <BillingSettingsPane onOpenBilling={onOpenBilling} />}
+        {tab === 'referral' && <ReferralSettingsPane />}
+        {tab === 'data' && <div className="settings-pane"><section className="settings-group"><Row title="Salinan data" description="Unduh profil, preferensi, dan ringkasan aktivitas akun."><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>Unduh data</Button></Row></section><p className="settings-privacy-note"><ShieldCheck size={15}/>Semua data dan pemrosesan dijamin kerahasiaannya karena tersimpan dan diproses dengan perlindungan enkripsi.</p>
+          {/* Hapus akun berada satu tab dengan unduh data: urutan yang benar
+          adalah mengunduh salinan lebih dulu, baru menghapus. */}
+          <section className="settings-danger-zone">
+            <div><b>Hapus akun</b><p>Unduh data yang diperlukan terlebih dahulu. Tindakan ini tidak dapat dibatalkan.</p></div>
+            <input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} placeholder={user.email} aria-label="Ketik email akun untuk konfirmasi" />
+            <Button variant="danger" onClick={deleteAccount} disabled={busy || deleteConfirm !== user.email}>Hapus akun</Button>
+          </section>
+        </div>}
+      {tab === 'storage' && <div className="settings-pane">{storage ? <><div className="storage-overview"><div><span>Terpakai</span><b>{formatBytes(storage.usedBytes)}</b><small>dari {formatBytes(storage.limitBytes)}</small></div><strong>{storagePercentage}%</strong></div><div className="storage-meter"><i><em style={{ width: `${storagePercentage}%` }} /></i></div><div className="storage-cards"><span><FolderOpen size={17}/><b>{storage.tier === 'pro' ? 'Pro' : storage.tier === 'subscription' ? 'Subscription' : storage.tier === 'paid' ? 'Satuan' : 'Gratis'}</b><small>{storage.retentionHint}</small></span><span><FileText size={17}/><b>Yang dihitung</b><small>Modul, bukti, template, data, dan export DOCX.</small></span></div><section className="settings-group storage-file-manager"><div className="settings-group-heading"><b>File tersimpan</b><small>{storage.files?.length || 0} file bisa dikelola</small></div>{storage.files?.length ? <div className="storage-file-list">{storage.files.map((file) => <article key={`${file.kind}-${file.id}`}><FileText size={15}/><div><b>{file.name}</b><small>{file.sourceLabel} · {formatBytes(file.sizeBytes)} · {formatDate(file.createdAt)}</small></div><Button variant="secondary" onClick={() => deleteStorageFile(file)} disabled={Boolean(storageBusy)}>{storageBusy === file.id ? <LoaderCircle className="spin" size={14}/> : <Trash2 size={14}/>}Hapus</Button></article>)}</div> : <div className="settings-empty-state"><FolderOpen size={18}/><div><b>Belum ada file tersimpan</b><p>File modul, bukti, data, dan export akan muncul di sini.</p></div></div>}</section></> : <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat ringkasan penyimpanan...</div>}<p className="settings-footnote">Chat teks dan preferensi tidak dihitung sebagai penyimpanan file.</p></div>}
+        {tab === 'safety' && <div className="settings-pane safety-settings-pane">
+          <section className={`safety-account-status ${safetyStatus?.hasAlert ? 'has-alert' : ''}`}>{safetyStatus ? safetyStatus.hasAlert ? <><CircleAlert size={20}/><div><b>Akun sedang mendapat alert</b><p>Ada aktivitas akun yang perlu kamu periksa.</p><small>{safetyStatus.openAlerts} alert terbuka</small></div></> : <><ShieldCheck size={20}/><div><b>Tidak ada alert pada akun</b><p>Penggunaan akunmu tidak sedang memiliki sinyal safety terbuka.</p><small>Status terakhir diperbarui otomatis.</small></div></> : <><LoaderCircle className="spin" size={18}/><div><b>Memuat status akun</b><p>Safety status sedang diperiksa.</p></div></>}</section>
+          {safetyStatus?.hasAlert && Boolean(safetyStatus.reasons?.length) && <section className="safety-reasons-panel"><b>Alasan alert</b><ul className="safety-reason-list">{safetyStatus.reasons.map((item, index) => <li key={`${item.createdAt || ''}-${index}`}>{item.reason}</li>)}</ul></section>}
+        </div>}
+        {tab === 'security' && <div className="settings-pane">
+          {String(user.authProvider || 'password').includes('google') && <section className="settings-group"><Row title="Google terhubung" description="Akun Google ini dapat dipakai untuk masuk tanpa kata sandi."><span className="settings-connected-status"><CheckCircle2 size={14}/>Aktif</span></Row></section>}
+          <section className="settings-group"><div className="settings-group-heading"><b>{user.authProvider === 'google' ? 'Buat kata sandi Laprakin' : 'Ubah kata sandi'}</b><small>Untuk keamanan, verifikasi dilakukan melalui link yang dikirim ke {user.email}.</small></div><Button type="button" variant="secondary" onClick={requestPasswordChange} disabled={busy}><Mail size={14}/>Kirim link verifikasi</Button></section>
+          <section className="settings-group"><Row title="Keluar dari semua perangkat" description="Gunakan setelah login dari perangkat umum."><Button variant="secondary" onClick={logoutAll} disabled={busy}>Akhiri semua sesi</Button></Row></section>
+        </div>}
+        {tab === 'archived' && <div className="settings-pane"><section className="archived-chat-settings">{archivedLoading ? <div className="settings-loading-state"><LoaderCircle className="spin" size={16}/>Memuat chat arsip...</div> : archivedChats.length ? <div className="archived-chat-list">{archivedChats.map((session) => <article key={session.id}><span className="archived-chat-icon"><Archive size={16}/></span><div><b>{session.title || 'Chat baru'}</b><small>{session.course_group || 'Belum dikelompokkan'}</small><time>{formatDate(session.archived_at || session.updated_at)}</time></div><Button type="button" variant="secondary" disabled={busy} onClick={() => restoreArchivedChat(session.id)}>Pulihkan</Button></article>)}</div> : <div className="settings-empty-state"><Archive size={18}/><div><b>Belum ada chat diarsipkan</b><p>Chat yang kamu arsipkan dari sidebar akan muncul di sini.</p></div></div>}</section></div>}
+        {tab === 'academic' && <div className="settings-pane">
+          <section className="settings-group academic-settings-form academic-settings-wide">
+             <label><span>Nama lengkap</span><input aria-label="Nama lengkap" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Nama pada cover" /></label>
+             <label><span>NPM / NIM</span><input aria-label="NPM / NIM" value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder="Nomor mahasiswa" /></label>
+             <label><span>Kelas</span><input aria-label="Kelas" value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Kelas anda" /></label>
+             <label><span>Univ / institusi</span><input aria-label="Univ / institusi" value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder="Nama kampus" /></label>
+             <label><span>Fakultas / Jurusan</span><input aria-label="Fakultas / Jurusan" value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder="Fakultas atau jurusan" /></label>
+             <label><span>Program studi</span><input aria-label="Program studi" value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder="Program studi" /></label>
+            <Button onClick={saveAcademic} disabled={busy}><Save size={14}/>Simpan profil akademik</Button>
+          </section>
+          <InstitutionLogoField logoUrl={user.institutionLogoUrl || ''} onChanged={onSaved} setNotice={setNotice} />
+        </div>}
+        {tab === 'keyboard' && <div className="settings-pane"><section className="settings-group"><Toggle checked={prefs.enterToSend !== false} onChange={(checked) => updatePrefs({ enterToSend: checked })} title="Enter untuk kirim" description="Gunakan Shift + Enter untuk membuat baris baru." /><Toggle checked={prefs.reducedMotion} onChange={(checked) => updatePrefs({ reducedMotion: checked })} title="Kurangi animasi" description="Pertahankan feedback penting dengan gerakan yang lebih singkat." /></section></div>}
+      </div>
+    </div>
+  </Modal>;
+}
