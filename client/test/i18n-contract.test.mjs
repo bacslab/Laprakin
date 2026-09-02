@@ -7,6 +7,7 @@ const [id, en, source] = await Promise.all([
   readFile(new URL('../src/i18n/en.json', import.meta.url), 'utf8').then(JSON.parse),
   readFile(new URL('../src/i18n/index.js', import.meta.url), 'utf8'),
 ]);
+const runtimeSource = await readFile(new URL('../src/i18n/I18nRuntime.jsx', import.meta.url), 'utf8');
 
 function keys(value, prefix = '') {
   return Object.entries(value).flatMap(([key, nested]) => {
@@ -24,4 +25,12 @@ test('translator falls back to Indonesian and interpolates values', () => {
   assert.match(source, /export function createTranslator/);
   assert.match(source, /language === 'en'/);
   assert.match(source, /readPath\(language === 'en' \? en : id, key\)/);
+});
+
+test('legacy DOM translation stays behind the i18n runtime boundary', async () => {
+  const mainSource = await readFile(new URL('../src/main.jsx', import.meta.url), 'utf8');
+  assert.match(runtimeSource, /translateUiText/);
+  assert.match(mainSource, /I18nRuntime/);
+  assert.doesNotMatch(mainSource, /function I18nRuntime/);
+  assert.doesNotMatch(mainSource, /translateUiText/);
 });
