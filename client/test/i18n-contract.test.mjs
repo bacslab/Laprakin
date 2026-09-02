@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [id, en, source, landingSource, statusSource, pricingSource, billingSource, tutorialSource, composerSource, previewSource, attachmentSource, overlaysSource] = await Promise.all([
+const [id, en, source, landingSource, statusSource, pricingSource, billingSource, tutorialSource, composerSource, previewSource, attachmentSource, overlaysSource, documentSource, workflowSource] = await Promise.all([
   readFile(new URL('../src/i18n/id.json', import.meta.url), 'utf8').then(JSON.parse),
   readFile(new URL('../src/i18n/en.json', import.meta.url), 'utf8').then(JSON.parse),
   readFile(new URL('../src/i18n/index.js', import.meta.url), 'utf8'),
@@ -15,6 +15,8 @@ const [id, en, source, landingSource, statusSource, pricingSource, billingSource
   readFile(new URL('../src/pages/Workspace/AttachmentPreview.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/Workspace/AttachmentComponents.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/WorkspaceOverlays.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/pages/Workspace/DocumentSidePanel.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/pages/Workspace/WorkspaceWorkflow.jsx', import.meta.url), 'utf8'),
 ]);
 const runtimeSource = await readFile(new URL('../src/i18n/I18nRuntime.jsx', import.meta.url), 'utf8');
 
@@ -91,6 +93,15 @@ test('workspace help, feedback, and notification overlays consume keyed locale c
   assert.match(overlaysSource, /workspace\.overlays\.feedback\.categories/);
   assert.match(overlaysSource, /workspace\.overlays\.notifications\.markAllRead/);
   assert.doesNotMatch(overlaysSource, /Apa yang bisa kami bantu|Ceritakan yang perlu kami perbaiki|Tandai semua dibaca/);
+});
+
+test('workspace document and workflow surfaces consume keyed locale copy', () => {
+  assert.match(documentSource, /workspace\.document\.revisionQuestion/);
+  assert.match(documentSource, /workspace\.document\.loadingWord/);
+  assert.match(workflowSource, /workspace\.workflow\.defaultSteps\.0\.title/);
+  assert.match(workflowSource, /workspace\.workflow\.thinkingDuration/);
+  assert.doesNotMatch(documentSource, /Memuat dokumen kerja|Versi dokumen|Sudah lengkap atau perlu revisi/);
+  assert.doesNotMatch(workflowSource, /Sedang berpikir|Mulai susun|Membaca seluruh bahan/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {

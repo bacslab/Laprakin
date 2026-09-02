@@ -488,6 +488,56 @@
         "markAllRead": "Tandai semua dibaca",
         "empty": "Belum ada notifikasi."
       }
+    },
+    "document": {
+      "title": "Dokumen",
+      "loadingResult": "Memuat hasil laprak",
+      "close": "Tutup dokumen",
+      "loadingWork": "Memuat dokumen kerja...",
+      "reportLabel": "Dokumen laprak",
+      "download": "Unduh",
+      "versionLabel": "Versi dokumen",
+      "currentVersion": "Versi saat ini",
+      "revision": "Revisi {{count}}",
+      "versionFallback": "Versi {{index}}",
+      "chooseVersion": "Pilih versi dokumen",
+      "recovery": "Laprakin sedang menyiapkan dokumen ini secara otomatis. Kamu boleh menutup panel atau berpindah chat; proses akan tetap berjalan.",
+      "revisionQuestion": "Sudah lengkap atau perlu revisi?",
+      "revisionDescription": "Tulis perubahan di chat utama. Bagian lain akan tetap dipertahankan.",
+      "previewLoadError": "Preview dokumen belum dapat dimuat.",
+      "previewError": "Preview gagal dimuat.",
+      "loadingWord": "Memuat dokumen Word asli..."
+    },
+    "workflow": {
+      "readyLabel": "Alur kerja Laprak",
+      "start": "Mulai susun",
+      "thinking": "Sedang berpikir",
+      "thinkingDuration": "Berpikir selama {{duration}}",
+      "durationMinutes": "{{minutes}}m {{seconds}}dtk",
+      "durationSeconds": "{{seconds}}dtk",
+      "failed": "Dokumen tetap tersimpan dan sedang disiapkan kembali.",
+      "defaultSteps": [
+        {
+          "title": "Membaca seluruh bahan",
+          "detail": "Mengambil struktur, instruksi, data, dan bukti yang tersedia."
+        },
+        {
+          "title": "Mempelajari susunan dokumen",
+          "detail": "Mengikuti urutan bagian dan gaya dari template yang dipakai."
+        },
+        {
+          "title": "Menyusun isi laprak",
+          "detail": "Menghubungkan langkah, bukti, hasil, dan pembahasan."
+        },
+        {
+          "title": "Menata dokumen Word",
+          "detail": "Memeriksa judul, paragraf, gambar, caption, dan pergantian halaman."
+        },
+        {
+          "title": "Menyiapkan hasil akhir",
+          "detail": "Menyimpan dokumen agar siap dibuka dan diperiksa."
+        }
+      ]
     }
   },
   "accessibility": {

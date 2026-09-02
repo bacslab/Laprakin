@@ -488,6 +488,56 @@
         "markAllRead": "Mark all as read",
         "empty": "No notifications yet."
       }
+    },
+    "document": {
+      "title": "Document",
+      "loadingResult": "Loading report result",
+      "close": "Close document",
+      "loadingWork": "Loading work document...",
+      "reportLabel": "Report document",
+      "download": "Download",
+      "versionLabel": "Document version",
+      "currentVersion": "Current version",
+      "revision": "Revision {{count}}",
+      "versionFallback": "Version {{index}}",
+      "chooseVersion": "Choose document version",
+      "recovery": "Laprakin is preparing this document automatically. You can close the panel or switch chats; the process will continue.",
+      "revisionQuestion": "Is it complete or does it need revisions?",
+      "revisionDescription": "Write the changes in the main chat. The other sections will remain intact.",
+      "previewLoadError": "The document preview is not available yet.",
+      "previewError": "The preview could not be loaded.",
+      "loadingWord": "Loading the original Word document..."
+    },
+    "workflow": {
+      "readyLabel": "Report workflow",
+      "start": "Start drafting",
+      "thinking": "Thinking",
+      "thinkingDuration": "Thought for {{duration}}",
+      "durationMinutes": "{{minutes}}m {{seconds}}s",
+      "durationSeconds": "{{seconds}}s",
+      "failed": "The document is saved and is being prepared again.",
+      "defaultSteps": [
+        {
+          "title": "Reading all materials",
+          "detail": "Collecting the available structure, instructions, data, and evidence."
+        },
+        {
+          "title": "Studying the document structure",
+          "detail": "Following the section order and style from the selected template."
+        },
+        {
+          "title": "Writing the report",
+          "detail": "Connecting steps, evidence, results, and discussion."
+        },
+        {
+          "title": "Laying out the Word document",
+          "detail": "Checking headings, paragraphs, images, captions, and page breaks."
+        },
+        {
+          "title": "Preparing the final result",
+          "detail": "Saving the document so it is ready to open and review."
+        }
+      ]
     }
   },
   "accessibility": {
