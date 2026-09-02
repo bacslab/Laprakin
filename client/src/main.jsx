@@ -11,14 +11,14 @@ import {
 } from 'lucide-react';
 import { api, apiStream, clearCsrfToken, download, setCsrfToken } from './api';
 import { buildRevisionRequest, getEditableMessage } from './lib/chat-message-actions';
-import { canonicalCourseLabel, courseAcronym, courseTokens, editDistance, normalizedCourseKey } from './lib/academic';
+import { courseTokens, normalizedCourseKey } from './lib/academic';
 import { inferPendingAttachmentKind } from './lib/attachments';
 import { formatBytes, formatCurrency, formatDate } from './lib/formatters';
 import { redirectToMidtransCheckout, validatedMidtransCheckoutUrl } from './lib/payment-redirect';
 import { userInitials } from './lib/user';
 import { resolveTheme, useResolvedTheme } from './lib/theme';
 import { pricingFallback, pricingFeatures } from './data/pricing';
-import { DARK_ONLY_ACCENTS, LIGHT_FALLBACK_ACCENT, workspaceAccents } from './data/workspace';
+import { canonicalCourseLabel, clipboardImageFiles, courseLabelsMatch, defaultChatConfig, mergeFiles, preferredCourseLabel, resolveAccent, takeLandingDraft } from './lib/workspace-helpers';
 import { BrandMark } from './components/BrandMark';
 import { Button } from './components/Button';
 import { CustomSelect } from './components/CustomSelect';
@@ -185,89 +185,11 @@ const SETTINGS_MODAL_TABS = {
   'settings-referral': 'referral',
 };
 
-/**
- * Aksen yang benar-benar dirender. Preferensi user tidak pernah ditulis ulang,
- * sehingga pilihan aslinya kembali begitu tema gelap dipakai lagi.
- */
-function resolveAccent(accentKey, resolvedTheme) {
-  const requested = workspaceAccents.find((item) => item.key === accentKey) || workspaceAccents[0];
-  if (resolvedTheme !== 'light' || !DARK_ONLY_ACCENTS.has(requested.key)) return requested;
-  return workspaceAccents.find((item) => item.key === LIGHT_FALLBACK_ACCENT) || requested;
-}
-
 function noticeToneFor(value) {
   const text = String(value || '').toLocaleLowerCase('id-ID');
   return /gagal|error|belum|tidak|ditolak|habis|invalid|kesalahan|dibatalkan|kadaluwarsa|terjadi/.test(text)
     ? 'negative'
     : 'positive';
-}
-
-const defaultChatConfig = {
-  title: 'Laprak baru',
-  structureMode: 'guided',
-  configuration: { courseName: '', moduleTitle: '', lecturerName: '', lecturerNip: '', documentProfile: 'langkah', customStructure: '', instructions: '', tone: 'formal', perspective: 'saya', allowExternalAi: true },
-};
-const previewTestimonials = [
-  { quote: '“Saya baru ingin lihat bentuk ulasannya dulu. Nantinya kutipan asli hanya tampil setelah pengguna menyetujui publikasi.”', name: 'Preview ulasan beta', label: 'Bukan testimoni pengguna' },
-  { quote: '“Ulasan yang dipublikasikan akan memakai alias. Email, NIM, dan bahan praktikum tidak ditampilkan.”', name: 'Privasi diutamakan', label: 'Bukan testimoni pengguna' },
-  { quote: '“Struktur ini sengaja ringkas supaya calon pengguna dapat membaca pengalaman orang lain tanpa terasa seperti iklan.”', name: 'Format transparan', label: 'Bukan testimoni pengguna' },
-];
-
-const LANDING_DRAFT_KEY = 'laprakin-landing-draft';
-function openLandingDraftDb() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('laprakin-landing-drafts', 1);
-    request.onupgradeneeded = () => request.result.createObjectStore('drafts');
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-async function saveLandingDraft(prompt, files = []) {
-  sessionStorage.setItem(LANDING_DRAFT_KEY, prompt || '');
-  try { const db = await openLandingDraftDb(); const tx = db.transaction('drafts', 'readwrite'); tx.objectStore('drafts').put(files, 'pending'); await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); }); db.close(); } catch { /* prompt still survives even if browser blocks IndexedDB */ }
-}
-async function takeLandingDraft() {
-  const prompt = sessionStorage.getItem(LANDING_DRAFT_KEY) || '';
-  sessionStorage.removeItem(LANDING_DRAFT_KEY);
-  let files = [];
-  try { const db = await openLandingDraftDb(); const tx = db.transaction('drafts', 'readwrite'); const request = tx.objectStore('drafts').get('pending'); files = await new Promise((resolve) => { request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]); }); tx.objectStore('drafts').delete('pending'); db.close(); } catch { /* no local files */ }
-  return { prompt, files };
-}
-
-function isImageFile(file) { return Boolean(file?.type?.startsWith('image/')); }
-function fileKey(file) { return `${file?.name || 'file'}:${file?.size || 0}:${file?.lastModified || 0}`; }
-function mergeFiles(existing = [], incoming = []) {
-  const keys = new Set(existing.map(fileKey));
-  return [...existing, ...incoming.filter((file) => file && !keys.has(fileKey(file)))];
-}
-function clipboardImageFiles(event) {
-  const items = Array.from(event.clipboardData?.items || []);
-  return items
-    .filter((item) => item.type?.startsWith('image/'))
-    .map((item, index) => {
-      const blob = item.getAsFile();
-      if (!blob) return null;
-      const ext = blob.type.split('/')[1] || 'png';
-      return new File([blob], `gambar-clipboard-${Date.now()}-${index + 1}.${ext}`, { type: blob.type || 'image/png' });
-    })
-    .filter(Boolean);
-}
-function LocalFilePreview({ file, className = '' }) {
-  const [src, setSrc] = useState('');
-  useEffect(() => {
-    if (!isImageFile(file)) { setSrc(''); return undefined; }
-    const url = URL.createObjectURL(file);
-    setSrc(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-  return src ? <img className={className} src={src} alt="Preview lampiran" /> : <FileText size={12} />;
-}
-function HeroFileChip({ file, index, onRemove }) {
-  return <span className={`hero-file-chip ${isImageFile(file) ? 'has-image' : ''}`}>
-    <span className="hero-file-thumb"><LocalFilePreview file={file} /></span>
-    <b>{file.name}</b>
-    <button type="button" aria-label={`Hapus ${file.name}`} onClick={() => onRemove(index)}><X size={11} /></button>
-  </span>;
 }
 
 function readPrefs() {
@@ -403,27 +325,6 @@ function ProtectedBilling() {
 function PricingRedirect() { const location = useLocation(); return <Navigate to={`/pricing${location.search || ''}`} replace />; }
 
 function ProtectedAdmin() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role !== 'admin') return <Navigate to="/app" replace />; return <AdminWorkspaceBoundary render={() => <AdminMfaGate><LegacyAdminWorkspace /></AdminMfaGate>} />; }
-
-function courseLabelsMatch(left, right) {
-  const a = normalizedCourseKey(left);
-  const b = normalizedCourseKey(right);
-  if (a === b) return true;
-  if (a === 'belum dikelompokkan' || b === 'belum dikelompokkan') return false;
-  const acronymA = courseAcronym(a);
-  const acronymB = courseAcronym(b);
-  if (acronymA.length >= 2 && acronymA === acronymB) return true;
-  const compactA = a.replace(/\s+/g, '');
-  const compactB = b.replace(/\s+/g, '');
-  if (Math.min(compactA.length, compactB.length) < 7) return false;
-  return 1 - (editDistance(compactA, compactB) / Math.max(compactA.length, compactB.length)) >= 0.84;
-}
-
-function preferredCourseLabel(left, right) {
-  const leftTokens = courseTokens(left).length;
-  const rightTokens = courseTokens(right).length;
-  if (leftTokens !== rightTokens) return leftTokens > rightTokens ? left : right;
-  return String(left).length >= String(right).length ? left : right;
-}
 
 function LegacyWorkspace() {
   const { user, wallet, refreshSession, setNotice, prefs, setPrefs, showDialog } = useApp();
