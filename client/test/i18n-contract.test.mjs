@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [id, en, source, landingSource, statusSource, pricingSource, billingSource, tutorialSource, composerSource, previewSource, attachmentSource] = await Promise.all([
+const [id, en, source, landingSource, statusSource, pricingSource, billingSource, tutorialSource, composerSource, previewSource, attachmentSource, overlaysSource] = await Promise.all([
   readFile(new URL('../src/i18n/id.json', import.meta.url), 'utf8').then(JSON.parse),
   readFile(new URL('../src/i18n/en.json', import.meta.url), 'utf8').then(JSON.parse),
   readFile(new URL('../src/i18n/index.js', import.meta.url), 'utf8'),
@@ -14,6 +14,7 @@ const [id, en, source, landingSource, statusSource, pricingSource, billingSource
   readFile(new URL('../src/pages/Workspace/Composer.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/Workspace/AttachmentPreview.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/Workspace/AttachmentComponents.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/WorkspaceOverlays.jsx', import.meta.url), 'utf8'),
 ]);
 const runtimeSource = await readFile(new URL('../src/i18n/I18nRuntime.jsx', import.meta.url), 'utf8');
 
@@ -82,6 +83,14 @@ test('workspace attachment previews consume keyed locale copy', () => {
   assert.match(attachmentSource, /workspace\.attachments\.removeFile/);
   assert.doesNotMatch(previewSource, /PDF tidak dapat ditampilkan|Tutup preview|Memuat isi file/);
   assert.doesNotMatch(attachmentSource, /Bahan terlampir|Tambah file|Hapus \$\{file\.name\}/);
+});
+
+test('workspace help, feedback, and notification overlays consume keyed locale copy', () => {
+  assert.match(overlaysSource, /useI18n/);
+  assert.match(overlaysSource, /workspace\.overlays\.help\.introTitle/);
+  assert.match(overlaysSource, /workspace\.overlays\.feedback\.categories/);
+  assert.match(overlaysSource, /workspace\.overlays\.notifications\.markAllRead/);
+  assert.doesNotMatch(overlaysSource, /Apa yang bisa kami bantu|Ceritakan yang perlu kami perbaiki|Tandai semua dibaca/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {

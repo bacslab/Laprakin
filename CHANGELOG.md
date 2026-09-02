@@ -12,6 +12,7 @@
 - Memindahkan aturan aktif public Pricing dan standalone Billing ke `client/src/styles/pricing.css` dengan breakpoint responsive dan contract test.
 - Memigrasikan tutorial Workspace, Composer, mode AI, shortcut prompt, dan label bahan ke translation key Indonesia/Inggris.
 - Memigrasikan label preview PDF/Word/file, sumber terlampir, dan aksi lampiran ke translation key Indonesia/Inggris.
+- Memigrasikan overlay Help, Feedback, dan Notifications beserta copy interaksi serta label aksesibilitasnya ke translation key Indonesia/Inggris.
 
 ## 21.0.6 - 2026-09-02
 

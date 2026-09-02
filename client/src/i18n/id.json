@@ -428,6 +428,66 @@
       "module": "Modul",
       "material": "Bahan",
       "addFile": "Tambah file"
+    },
+    "overlays": {
+      "help": {
+        "title": "Bantuan",
+        "introTitle": "Apa yang bisa kami bantu?",
+        "introDescription": "Tanyakan soal akun, bahan, export, billing, atau kendala workspace.",
+        "supportActive": "Support aktif",
+        "topics": ["File gagal diunggah", "Export DOCX", "Billing dan credit", "Privasi file"],
+        "assistant": "Tim Laprakin",
+        "you": "Kamu",
+        "emptyTitle": "Belum ada percakapan",
+        "emptyDescription": "Pilih topik di atas atau ceritakan kendalanya secara singkat.",
+        "messageLabel": "Pesan bantuan",
+        "placeholder": "Tulis kendalamu...",
+        "sensitiveHint": "Jangan kirim kata sandi atau data sensitif.",
+        "send": "Kirim"
+      },
+      "feedback": {
+        "title": "Feedback",
+        "eyebrow": "Masukan produk",
+        "heading": "Ceritakan yang perlu kami perbaiki.",
+        "description": "Jelaskan kendala atau hasil yang kamu harapkan. Tim akan membaca riwayatnya di panel sebelah.",
+        "categoryLegend": "Jenis masukan",
+        "categories": {
+          "idea": "Ide fitur",
+          "bug": "Bug",
+          "experience": "Pengalaman",
+          "other": "Lainnya"
+        },
+        "ratingLegend": "Nilai pengalaman",
+        "optional": "opsional",
+        "ratingAria": "Nilai {{rating}} dari 5",
+        "bad": "Buruk",
+        "good": "Bagus",
+        "bodyLabel": "Masukan",
+        "bodyPlaceholder": "Apa yang terjadi, dan seperti apa hasil yang kamu harapkan?",
+        "contactAllowed": "Boleh dihubungi",
+        "contactDescription": "Tim dapat membalas lewat akun ini.",
+        "publicQuote": "Boleh dijadikan testimoni",
+        "publicQuoteDescription": "Tidak dipublikasikan tanpa alias dan persetujuanmu.",
+        "publicAlias": "Alias publik",
+        "required": "wajib",
+        "publicAliasPlaceholder": "Contoh: Mahasiswa TI semester 4",
+        "submit": "Kirim masukan",
+        "sent": "Feedback terkirim.",
+        "history": "Riwayat",
+        "historyCount": "{{count}} masukan",
+        "noRating": "tanpa rating",
+        "team": "Tim Laprakin",
+        "emptyTitle": "Belum ada feedback",
+        "emptyDescription": "Masukan yang dikirim akan tersimpan dan balasan tim muncul di sini."
+      },
+      "notifications": {
+        "title": "Notifikasi",
+        "newCount": "{{count}} baru",
+        "allRead": "Semua sudah dibaca",
+        "close": "Tutup",
+        "markAllRead": "Tandai semua dibaca",
+        "empty": "Belum ada notifikasi."
+      }
     }
   },
   "accessibility": {

@@ -428,6 +428,66 @@
       "module": "Module",
       "material": "Material",
       "addFile": "Add file"
+    },
+    "overlays": {
+      "help": {
+        "title": "Help",
+        "introTitle": "How can we help?",
+        "introDescription": "Ask about your account, materials, exports, billing, or workspace issues.",
+        "supportActive": "Support is active",
+        "topics": ["File upload failed", "DOCX export", "Billing and credits", "File privacy"],
+        "assistant": "Laprakin team",
+        "you": "You",
+        "emptyTitle": "No conversation yet",
+        "emptyDescription": "Choose a topic above or briefly describe the issue.",
+        "messageLabel": "Help message",
+        "placeholder": "Describe the issue...",
+        "sensitiveHint": "Do not send passwords or sensitive data.",
+        "send": "Send"
+      },
+      "feedback": {
+        "title": "Feedback",
+        "eyebrow": "Product feedback",
+        "heading": "Tell us what needs improvement.",
+        "description": "Explain the issue or result you expected. The team will read its history in the panel beside it.",
+        "categoryLegend": "Feedback type",
+        "categories": {
+          "idea": "Feature idea",
+          "bug": "Bug",
+          "experience": "Experience",
+          "other": "Other"
+        },
+        "ratingLegend": "Rate your experience",
+        "optional": "optional",
+        "ratingAria": "Rate {{rating}} out of 5",
+        "bad": "Poor",
+        "good": "Great",
+        "bodyLabel": "Feedback",
+        "bodyPlaceholder": "What happened, and what result did you expect?",
+        "contactAllowed": "You may contact me",
+        "contactDescription": "The team may reply through this account.",
+        "publicQuote": "May be used as a testimonial",
+        "publicQuoteDescription": "It will not be published without your alias and consent.",
+        "publicAlias": "Public alias",
+        "required": "required",
+        "publicAliasPlaceholder": "Example: Computer science student",
+        "submit": "Send feedback",
+        "sent": "Feedback sent.",
+        "history": "History",
+        "historyCount": "{{count}} items",
+        "noRating": "no rating",
+        "team": "Laprakin team",
+        "emptyTitle": "No feedback yet",
+        "emptyDescription": "Submitted feedback and team replies will appear here."
+      },
+      "notifications": {
+        "title": "Notifications",
+        "newCount": "{{count}} new",
+        "allRead": "All caught up",
+        "close": "Close",
+        "markAllRead": "Mark all as read",
+        "empty": "No notifications yet."
+      }
     }
   },
   "accessibility": {
