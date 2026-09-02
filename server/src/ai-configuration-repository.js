@@ -269,5 +269,40 @@ export function createAiConfigurationRepository({ store = db, now = currentTimes
     return activeRevisionId ? getRevision(activeRevisionId) : null;
   }
 
-  return { createDraft, markTested, activate, getRevision, getActiveRevision, getPointers };
+  function rollback({ targetRevisionId = null, actorUserId = null, reason = '' } = {}) {
+    let transactionOpen = false;
+    try {
+      store.exec('BEGIN IMMEDIATE');
+      transactionOpen = true;
+      const pointer = store.prepare('SELECT active_revision_id, last_known_good_revision_id FROM ai_configuration_pointers WHERE singleton_id = 1').get();
+      const activeRevisionId = pointer?.active_revision_id || null;
+      const rollbackId = String(targetRevisionId || pointer?.last_known_good_revision_id || '');
+      if (!activeRevisionId || !rollbackId || rollbackId === activeRevisionId || (targetRevisionId && rollbackId !== pointer?.last_known_good_revision_id)) {
+        throw new AiConfigurationRepositoryError('Last-known-good configuration is unavailable.', 'AI_CONFIGURATION_ROLLBACK_UNAVAILABLE');
+      }
+      const target = store.prepare("SELECT id, state FROM ai_configuration_revisions WHERE id = ? AND state IN ('tested', 'superseded')").get(rollbackId);
+      if (!target) throw new AiConfigurationRepositoryError('Last-known-good configuration is unavailable.', 'AI_CONFIGURATION_ROLLBACK_UNAVAILABLE');
+      const timestamp = now();
+      store.prepare("UPDATE ai_configuration_revisions SET state = 'superseded', superseded_at = ? WHERE id = ? AND state = 'active'")
+        .run(timestamp, activeRevisionId);
+      store.prepare(`
+        UPDATE ai_configuration_revisions
+        SET state = 'active', activated_by_user_id = ?, activated_at = ?, activation_reason = ?, superseded_at = NULL
+        WHERE id = ?
+      `).run(actorUserId || null, timestamp, String(reason || '').trim().slice(0, 500), rollbackId);
+      store.prepare(`
+        UPDATE ai_configuration_pointers
+        SET active_revision_id = ?, last_known_good_revision_id = ?, updated_at = ?
+        WHERE singleton_id = 1
+      `).run(rollbackId, rollbackId, timestamp);
+      store.exec('COMMIT');
+      transactionOpen = false;
+      return getRevision(rollbackId);
+    } catch (error) {
+      if (transactionOpen) store.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  return { createDraft, markTested, activate, rollback, getRevision, getActiveRevision, getPointers };
 }

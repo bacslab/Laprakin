@@ -62,3 +62,26 @@ test('a material processor-manifest change invalidates old consent and revocatio
   assert.ok(revoked.revokedAt);
   assert.equal(getExternalAiConsent({ userId, manifest }).active, false);
 });
+
+test('active revision identity and route-only changes preserve consent while a processor change invalidates it', () => {
+  const activeOne = {
+    id: 'revision-one',
+    providers: [{
+      providerId: 'nararouter', displayName: 'NaraRouter', adapterType: 'openai-compatible', enabled: true, secretReference: 'secret-one',
+    }],
+  };
+  const activeRouteOnly = { ...activeOne, id: 'revision-route-only' };
+  const activeProcessorChange = {
+    id: 'revision-provider-change',
+    providers: [{
+      providerId: 'cloudflare', displayName: 'Cloudflare Workers AI', adapterType: 'openai-compatible', enabled: true, secretReference: 'secret-two',
+    }],
+  };
+  const firstManifest = buildProcessorManifest({}, { activeRevision: activeOne });
+  const routeOnlyManifest = buildProcessorManifest({}, { activeRevision: activeRouteOnly });
+  const changedManifest = buildProcessorManifest({}, { activeRevision: activeProcessorChange });
+  assert.notEqual(firstManifest.configurationRevisionId, routeOnlyManifest.configurationRevisionId);
+  recordExternalAiConsent({ userId, manifest: firstManifest, sourceSurface: 'processor_settings' });
+  assert.equal(getExternalAiConsent({ userId, manifest: routeOnlyManifest }).active, true);
+  assert.equal(getExternalAiConsent({ userId, manifest: changedManifest }).active, false);
+});

@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid';
 import { db } from './db.js';
 import { HttpError, now, parseJson } from './utils.js';
 
-function manifestScope(manifest) {
+export function materialManifestScope(manifest) {
   const providers = Array.isArray(manifest?.providers) ? manifest.providers : [];
   return {
     manifestVersion: String(manifest?.manifestVersion || ''),
@@ -13,7 +13,7 @@ function manifestScope(manifest) {
 }
 
 function exposeConsent(row, manifest) {
-  const scope = manifestScope(manifest);
+  const scope = materialManifestScope(manifest);
   if (!row) return { active: false, ...scope, sourceSurface: '', grantedAt: null, revokedAt: null };
   const providerIds = parseJson(row.provider_ids_json, []).map(String).sort();
   const dataClasses = parseJson(row.data_classes_json, []).map(String).sort();
@@ -43,7 +43,7 @@ export function getExternalAiConsent({ userId, manifest, store = db }) {
 }
 
 export function recordExternalAiConsent({ userId, manifest, sourceSurface, store = db }) {
-  const scope = manifestScope(manifest);
+  const scope = materialManifestScope(manifest);
   if (!scope.providerIds.length) throw new HttpError(503, 'Pemroses AI eksternal belum tersedia.', 'AI_NOT_CONFIGURED');
   const timestamp = now();
   store.exec('BEGIN IMMEDIATE');

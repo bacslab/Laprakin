@@ -141,13 +141,13 @@
 **Interfaces:**
 - `createDraft`, `replaceCredential`, `testDraft`, `discoverDraftModels`, `runDraftCanaries`, `previewActivation`, `activateRevision`, `rollbackRevision`, `captureActiveConfiguration`.
 
-- [ ] Write red lifecycle tests proving drafts do not affect runtime, tests use only synthetic Laprakin-owned content, evidence expires after ten minutes, failed drafts preserve last-known-good, activation/rollback are atomic, and restart reloads the active pointer.
-- [ ] Bind test evidence and route diffs to immutable revisions and actor/reason metadata.
-- [ ] Require recent MFA and capability in the API layer, with second-approval hooks for production-provider replacement.
-- [ ] Rebuild the processor manifest from the captured active runtime revision and invalidate consent only for material processor/data/policy changes.
-- [ ] Prove in-flight snapshots retain the starting revision while later requests see the activated revision.
-- [ ] Run lifecycle, consent, and mutation-metadata tests.
-- [ ] Commit: `feat: activate and roll back ai revisions`.
+- [x] Write red lifecycle tests proving drafts do not affect runtime, tests use only synthetic Laprakin-owned content, evidence expires after ten minutes, failed drafts preserve last-known-good, activation/rollback are atomic, and restart reloads the active pointer.
+- [x] Bind test evidence and route diffs to immutable revisions and actor/reason metadata.
+- [x] Require recent MFA and capability in the API layer, with second-approval hooks for production-provider replacement.
+- [x] Rebuild the processor manifest from the captured active runtime revision and invalidate consent only for material processor/data/policy changes.
+- [x] Prove in-flight snapshots retain the starting revision while later requests see the activated revision.
+- [x] Run lifecycle, consent, and mutation-metadata tests.
+- [x] Commit: `feat: activate and roll back ai revisions`.
 
 ## Task 7: Adopt runtime snapshots and complete usage telemetry
 
