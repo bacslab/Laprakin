@@ -1063,5 +1063,51 @@ ensureColumn('pricing_overrides', 'duration_days', 'INTEGER');
 ensureColumn('pricing_overrides', 'revisions_per_report', 'INTEGER');
 ensureColumn('pricing_overrides', 'storage_mb', 'INTEGER');
 ensureColumn('pricing_overrides', 'features_json', 'TEXT');
+// V30: one durable identity for every cost-bearing mutation. Only the input
+// hash and canonical response are stored; raw request bodies are not copied
+// into the ledger.
+db.exec(`
+CREATE TABLE IF NOT EXISTS mutation_requests (
+  id TEXT PRIMARY KEY,
+  request_id TEXT NOT NULL,
+  owner_user_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'processing',
+  resource_type TEXT NOT NULL DEFAULT '',
+  resource_id TEXT NOT NULL DEFAULT '',
+  configuration_revision TEXT NOT NULL DEFAULT '',
+  provider_id TEXT NOT NULL DEFAULT '',
+  model_id TEXT NOT NULL DEFAULT '',
+  prompt_template_revision TEXT NOT NULL DEFAULT '',
+  canonical_status INTEGER,
+  canonical_response_json TEXT,
+  error_code TEXT NOT NULL DEFAULT '',
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT,
+  FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(owner_user_id, operation, request_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mutation_requests_owner_updated
+  ON mutation_requests(owner_user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mutation_requests_state_updated
+  ON mutation_requests(state, updated_at);
+`);
+ensureColumn('chat_messages', 'request_id', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('ai_usage_events', 'request_id', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('jobs', 'request_id', "TEXT NOT NULL DEFAULT ''");
+db.exec(`
+CREATE INDEX IF NOT EXISTS idx_chat_messages_request
+  ON chat_messages(owner_user_id, request_id, role)
+  WHERE request_id != '';
+CREATE INDEX IF NOT EXISTS idx_ai_usage_request
+  ON ai_usage_events(user_id, request_id)
+  WHERE request_id != '';
+CREATE INDEX IF NOT EXISTS idx_jobs_request
+  ON jobs(request_id)
+  WHERE request_id != '';
+`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_usage_context ON ai_usage_events(context_type, context_id, created_at);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_user_devices_profile ON user_devices(profile_hash, user_id);`);

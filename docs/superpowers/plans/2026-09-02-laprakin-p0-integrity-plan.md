@@ -92,7 +92,7 @@ git commit -m "test: capture claude-grade p0 baseline"
 - Produces: `normalizeRequestId(value)`, `hashMutationInput(value)`, `beginMutation(input)`, `completeMutation(input)`, `failMutation(input)`, and `getMutationSnapshot(input)`.
 - `beginMutation` returns `{ disposition: 'started' | 'replay' | 'in_progress', mutation }` and throws `IDEMPOTENCY_KEY_REUSED` for a hash mismatch.
 
-- [ ] **Step 1: Write failing ledger tests**
+- [x] **Step 1: Write failing ledger tests**
 
 ```js
 test('one owner, operation, and key has one canonical row', () => {
@@ -110,21 +110,21 @@ test('a completed mutation returns its canonical result', () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify missing storage fails**
+- [x] **Step 2: Run the focused test and verify missing storage fails**
 
 Run: `node --test server/test/mutation-requests.test.mjs`
 
 Expected: module-not-found or missing-export failure.
 
-- [ ] **Step 3: Add the schema and indexes**
+- [x] **Step 3: Add the schema and indexes**
 
 Create `mutation_requests` with a unique `(owner_user_id, operation, request_id)` index, request hash, state, resource linkage, configuration/provider/model/template revisions, canonical status/response, timestamps, and a foreign key to users. Add `request_id` columns and indexes to `chat_messages`, `ai_usage_events`, and `jobs` through the repository's forward-safe migration pattern.
 
-- [ ] **Step 4: Implement atomic ledger transitions**
+- [x] **Step 4: Implement atomic ledger transitions**
 
 Use SQLite immediate transactions for acquisition and completion. Serialize only privacy-safe canonical API payloads; reject malformed stored JSON as a terminal server error instead of silently starting a second mutation.
 
-- [ ] **Step 5: Run focused and migration tests**
+- [x] **Step 5: Run focused and migration tests**
 
 Run:
 
@@ -135,7 +135,7 @@ npm test
 
 Expected: ledger tests pass; legacy server suite has zero failures.
 
-- [ ] **Step 6: Commit the mutation ledger**
+- [x] **Step 6: Commit the mutation ledger**
 
 ```text
 git add server/src/db.js server/src/mutation-requests.js server/test/mutation-requests.test.mjs
