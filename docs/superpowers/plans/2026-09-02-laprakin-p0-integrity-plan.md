@@ -40,20 +40,29 @@
 
 Record the base SHA, branch, OS/Node/npm versions, initial server/client counts, the cold-start timing observation, build warning, route inventory, 4,727 legacy `!important` count, and exact P0 source evidence. Mark each definition-of-done item as `contradicted`, `missing evidence`, or `not yet tested`; do not mark future work complete.
 
-- [ ] **Step 2: Write the stream fallback source contract**
+- [ ] **Step 2: Write the stream fallback behavior contract**
 
 ```js
-test('apiStream never calls api() to recover a mutation response', async () => {
-  const source = await readFile(new URL('../src/api.js', import.meta.url), 'utf8');
-  const body = source.slice(source.indexOf('export async function apiStream'), source.indexOf('export async function download'));
-  assert.doesNotMatch(body, /return\s+api\s*\(/);
-  assert.match(body, /parseOriginalResponse/);
+test('non-SSE mutation response is parsed without a second fetch', async () => {
+  const calls = [];
+  const payload = { session: { id: 's1' }, messages: [] };
+  const result = await performStreamRequest('/chat/sessions/s1/messages', {
+    method: 'POST',
+    requestId: 'req-contract-1234',
+    body: { content: 'Satu aksi' },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(result, payload);
 });
 ```
 
-- [ ] **Step 3: Write composer and provider drift source contracts**
+- [ ] **Step 3: Write composer and provider manifest behavior contracts**
 
-Require the composer to call `shouldSubmitComposerKey(event, enterToSend)`. Require admin integration UI to render provider records from a manifest and contain neither `Gemini API` nor `integrationStatus?.gemini`.
+Import the wished-for `shouldSubmitComposerKey` helper and assert the complete keyboard truth table from Task 6. Import `buildProcessorManifest` and assert a NaraRouter configuration produces `providers: [{ id: 'nararouter', displayName: 'NaraRouter', ... }]` without a `gemini` property. Later rendered tests verify Admin consumes this manifest instead of branching on provider names.
 
 - [ ] **Step 4: Run the new tests and capture the red evidence**
 
@@ -63,7 +72,7 @@ Run:
 node --test client/test/api-stream-contract.test.mjs client/test/composer-keyboard.test.mjs server/test/provider-contract.test.mjs
 ```
 
-Expected: failures identify the second POST path, absent keyboard helper, and hard-coded Gemini contract.
+Expected: missing-module or missing-export failures prove the single-fetch lifecycle, keyboard helper, and provider manifest do not yet exist.
 
 - [ ] **Step 5: Commit the baseline and red tests**
 
