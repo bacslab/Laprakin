@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const componentSource = await readFile(new URL('../src/components/CustomSelect.jsx', import.meta.url), 'utf8');
+const dialogSource = await readFile(new URL('../src/components/Dialog.jsx', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.jsx', import.meta.url), 'utf8');
 const focusReturnSource = await readFile(new URL('../src/hooks/useFocusReturn.js', import.meta.url), 'utf8').catch(() => '');
 const focusTrapSource = await readFile(new URL('../src/hooks/useFocusTrap.js', import.meta.url), 'utf8').catch(() => '');
@@ -24,6 +25,6 @@ test('dialogs, notices, and focus helpers have accessible boundaries', () => {
   assert.match(mainSource, /notification-popover[^>]+role="dialog"[^>]+aria-modal="true"/);
   assert.match(focusReturnSource, /export function useFocusReturn/);
   assert.match(focusTrapSource, /export function useFocusTrap/);
-  assert.match(mainSource, /useFocusReturn/);
-  assert.match(mainSource, /useFocusTrap/);
+  assert.match(dialogSource, /useFocusReturn/);
+  assert.match(dialogSource, /useFocusTrap/);
 });

@@ -34,14 +34,13 @@ import './styles/admin.css';
 import LoadingScreen from './components/LoadingScreen';
 import { loadPage } from './lib/load-page';
 import { AppContext, useApp } from './state/ui-context';
-import { useFocusReturn } from './hooks/useFocusReturn';
-import { useFocusTrap } from './hooks/useFocusTrap';
 import { createTranslator } from './i18n';
 import { translateUiText } from './i18n/legacy';
 import { I18nContext } from './i18n/context';
 import { FeatureUpdatesAdmin, ProductUpdatePopup } from './FeatureUpdates';
 import { ChatSessionRow, SessionGroup } from './pages/Workspace/Sidebar/ChatSessionRow';
 import AccountPopover from './pages/Workspace/Sidebar/AccountPopover';
+import { AppDialog, Modal } from './components/Dialog';
 import { renderAsync as renderDocx } from 'docx-preview';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -3205,32 +3204,6 @@ function FeedbackModal({ onClose }) {
 }
 
 function NotificationModal({ onClose }) { const { setNotice } = useApp(); const [data, setData] = useState({ notifications: [], unread: 0 }); const ref = useRef(null); useEffect(() => { api('/notifications').then(setData).catch((err) => setNotice(err.message)); }, []); useEffect(() => { const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose(); }; window.addEventListener('mousedown', closeOutside); return () => window.removeEventListener('mousedown', closeOutside); }, [onClose]); useEffect(() => { const timer = window.setTimeout(onClose, 5000); return () => window.clearTimeout(timer); }, [onClose]); const markRead = async () => { try { setData(await api('/notifications/read', { method: 'PUT', body: {} })); } catch (err) { setNotice(err.message); } }; return <aside ref={ref} className="notification-popover" role="dialog" aria-modal="true" aria-label="Notifikasi"><header><div><b>Notifikasi</b><small>{data.unread ? `${data.unread} baru` : 'Semua sudah dibaca'}</small></div><IconButton label="Tutup" onClick={onClose}><X size={16} /></IconButton></header>{data.unread ? <button className="notification-read" onClick={markRead}>Tandai semua dibaca</button> : null}<div className="notification-list">{data.notifications.length ? data.notifications.map((note) => <article key={note.id} className={note.is_read ? 'is-read' : ''}><span /> <div><b>{note.title}</b><p>{note.body}</p><small>{formatDate(note.created_at)}</small></div></article>) : <p className="muted-note">Belum ada notifikasi.</p>}</div></aside>; }
-
-function AppDialog({ dialog, onResolve }) {
-  const [value, setValue] = useState('');
-  const dialogRef = useRef(null);
-  const promptInputRef = useRef(null);
-  useFocusReturn(Boolean(dialog));
-  useFocusTrap(dialogRef, Boolean(dialog));
-  const isPrompt = dialog?.kind === 'prompt';
-  useEffect(() => { setValue(dialog?.initialValue || ''); }, [dialog]);
-  useEffect(() => {
-    if (!dialog || !isPrompt) return undefined;
-    const frame = window.requestAnimationFrame(() => promptInputRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
-  }, [dialog, isPrompt]);
-  if (!dialog) return null;
-  const close = (result) => onResolve(isPrompt && result === true ? value.trim() : result);
-  return <div className="app-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(isPrompt ? null : false); }}><section ref={dialogRef} className={`app-dialog ${dialog.destructive ? 'is-danger' : ''}`} role="dialog" aria-modal="true" aria-labelledby="app-dialog-title"><div className="app-dialog-icon">{dialog.destructive ? <Trash2 size={17} /> : isPrompt ? <Pencil size={17} /> : <CircleAlert size={17} />}</div><div className="app-dialog-copy"><h2 id="app-dialog-title">{dialog.title || 'Konfirmasi'}</h2>{dialog.message && <p>{dialog.message}</p>}</div>{isPrompt && <form onSubmit={(event) => { event.preventDefault(); close(true); }}><input ref={promptInputRef} aria-label={dialog.title || 'Input'} value={value} onChange={(event) => setValue(event.target.value)} placeholder={dialog.placeholder || ''} maxLength={dialog.maxLength || 100} /><div className="app-dialog-actions"><button type="button" className="app-dialog-cancel" onClick={() => close(null)}>Batal</button><button type="submit" className="app-dialog-confirm">{dialog.confirmLabel || 'Simpan'}</button></div></form>}{!isPrompt && <div className="app-dialog-actions"><button type="button" className="app-dialog-cancel" onClick={() => close(false)}>Batal</button><button type="button" className="app-dialog-confirm" onClick={() => close(true)}>{dialog.confirmLabel || 'Lanjutkan'}</button></div>}</section></div>;
-}
-
-function Modal({ title, onClose, children, className = '' }) {
-  const modalRef = useRef(null);
-  useFocusReturn(true);
-  useFocusTrap(modalRef, true);
-  useEffect(() => { const closeOnEscape = (event) => { if (event.key === 'Escape') onClose(); }; window.addEventListener('keydown', closeOnEscape); return () => window.removeEventListener('keydown', closeOnEscape); }, [onClose]);
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={modalRef} className={`modal ${className}`} role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title"><header><b id="workspace-modal-title">{title}</b><IconButton label="Tutup" onClick={onClose}><X size={16}/></IconButton></header>{children}</section></div>;
-}
 
 function AdminAccessPanel({ users, setNotice, onRefresh }) {
   const [selectedId, setSelectedId] = useState(users[0]?.id || '');
