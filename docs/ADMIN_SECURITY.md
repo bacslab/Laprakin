@@ -75,6 +75,12 @@ menyediakan setup dan step-up UI. Setelah berhasil, sesi admin memperoleh jendel
 step-up `ADMIN_MFA_WINDOW_MINUTES` (default 30 menit). Recovery dilakukan dengan
 menghapus enrollment dari storage terkelola setelah identitas admin diverifikasi,
 lalu enroll ulang—jangan mengirim secret melalui log atau issue.
+Jalankan sebelum release:
+
+```bash
+node --test server/test/authorization-boundaries.test.mjs
+NODE_ENV=production npm run verify:production
+```
 
 ## Respons insiden admin
 
