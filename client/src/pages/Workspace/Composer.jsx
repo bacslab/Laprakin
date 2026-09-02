@@ -1,14 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, ClipboardList, FileText, GraduationCap, LayoutTemplate, LockKeyhole, Pencil, Plus, Send } from 'lucide-react';
 import { CustomSelect } from '../../components/CustomSelect';
+import { useI18n } from '../../i18n/context';
 import { PendingAttachmentChip } from './AttachmentComponents';
 
 function AiModeMenu({ value, onChange, access = {}, onUpgrade }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const modes = [
-    { key: 'basic', label: 'Basic', description: 'Untuk laprak harian', unlock: 'Tersedia untuk semua' },
-    { key: 'thinking', label: 'Thinking', description: 'Analisis lebih terarah', unlock: 'Credit Laprak atau Pro' },
-    { key: 'xtrathink', label: 'XtraThink', description: 'Penalaran paling mendalam', unlock: 'Khusus Max' },
+    { key: 'basic', label: t('workspace.aiMode.basic.label'), description: t('workspace.aiMode.basic.description'), unlock: t('workspace.aiMode.basic.unlock') },
+    { key: 'thinking', label: t('workspace.aiMode.thinking.label'), description: t('workspace.aiMode.thinking.description'), unlock: t('workspace.aiMode.thinking.unlock') },
+    { key: 'xtrathink', label: t('workspace.aiMode.xtrathink.label'), description: t('workspace.aiMode.xtrathink.description'), unlock: t('workspace.aiMode.xtrathink.unlock') },
   ];
   const current = modes.find((item) => item.key === value) || modes[0];
   useEffect(() => { if (!open) return undefined; const timer = window.setTimeout(() => setOpen(false), 5000); return () => window.clearTimeout(timer); }, [open]);
@@ -43,15 +45,16 @@ function resizeComposerTextarea(textarea) {
 }
 
 export default function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, centered, pendingFiles = [], onPasteImages, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, editingMessage = null, onCancelEdit }) {
+  const { t } = useI18n();
   const textareaRef = useRef(null);
   const shortcutItems = [
-    { key: 'laprak', label: 'Laprak', icon: FileText, prompt: 'Buatkan saya laporan praktikum berdasarkan bahan dan instruksi yang tersedia.' },
-    { key: 'proposal', label: 'Proposal', icon: LayoutTemplate, prompt: 'Bantu saya menyusun proposal berdasarkan bahan dan instruksi berikut: ' },
-    { key: 'makalah', label: 'Makalah', icon: GraduationCap, prompt: 'Bantu saya menyusun makalah berdasarkan bahan dan instruksi berikut: ' },
-    { key: 'tugas-akhir', label: 'Tugas akhir', icon: ClipboardList, prompt: 'Bantu saya mengerjakan bagian tugas akhir berdasarkan arahan dan sumber berikut: ' },
-    { key: 'jurnal', label: 'Jurnal', icon: Pencil, prompt: 'Bantu saya menyusun artikel jurnal dari data dan tujuan penelitian berikut: ' },
+    { key: 'laprak', label: t('workspace.composer.shortcuts.0.label'), icon: FileText, prompt: t('workspace.composer.shortcuts.0.prompt') },
+    { key: 'proposal', label: t('workspace.composer.shortcuts.1.label'), icon: LayoutTemplate, prompt: t('workspace.composer.shortcuts.1.prompt') },
+    { key: 'makalah', label: t('workspace.composer.shortcuts.2.label'), icon: GraduationCap, prompt: t('workspace.composer.shortcuts.2.prompt') },
+    { key: 'tugas-akhir', label: t('workspace.composer.shortcuts.3.label'), icon: ClipboardList, prompt: t('workspace.composer.shortcuts.3.prompt') },
+    { key: 'jurnal', label: t('workspace.composer.shortcuts.4.label'), icon: Pencil, prompt: t('workspace.composer.shortcuts.4.prompt') },
   ];
-  const placeholder = centered ? 'Ceritakan tugas yang ingin kamu susun...' : (pendingFiles.length ? 'Tambahkan pesan untuk bahan ini...' : 'Tulis tugasmu, tempel link, atau paste gambar...');
+  const placeholder = centered ? t('workspace.composer.placeholders.centered') : (pendingFiles.length ? t('workspace.composer.placeholders.withFiles') : t('workspace.composer.placeholders.default'));
   useLayoutEffect(() => {
     resizeComposerTextarea(textareaRef.current);
   }, [input]);
@@ -79,22 +82,22 @@ export default function Composer({ input, setInput, busy, attachmentKind, setAtt
   }, [editingMessage, setInput]);
   return <div className={`composer-zone ${centered ? 'composer-centered composer-claude' : ''}`}>
     {pendingFiles.length ? <div className="pending-files">{pendingFiles.map((file, index) => <PendingAttachmentChip file={file} index={index} key={`${file.name}-${index}`} onRemove={onRemovePending} />)}</div> : null}
-    {editingMessage && <div className="composer-editing-banner" role="status" aria-live="polite"><span><Pencil size={13} />Mengubah pesan</span><button type="button" onClick={onCancelEdit} disabled={busy}>Batalkan</button></div>}
+    {editingMessage && <div className="composer-editing-banner" role="status" aria-live="polite"><span><Pencil size={13} />{t('workspace.composer.editBanner')}</span><button type="button" onClick={onCancelEdit} disabled={busy}>{t('workspace.composer.cancelEdit')}</button></div>}
     <form className={`composer ${centered ? 'composer-style-reference' : ''}`} onSubmit={send}>
-      <textarea ref={textareaRef} aria-label={placeholder || 'Pesan chat'} rows="2" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={placeholder} />
+      <textarea ref={textareaRef} aria-label={placeholder || t('workspace.composer.chatMessage')} rows="2" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={placeholder} />
       <div className="composer-bottom-row">
         <div className="composer-left">
-          <CustomSelect className="composer-select" value={attachmentKind} onChange={setAttachmentKind} ariaLabel="Jenis bahan" options={[{ value: '', label: 'Deteksi otomatis' }, { value: 'module', label: 'Modul' }, { value: 'instruction', label: 'Instruksi' }, { value: 'practice_evidence', label: 'Bukti praktik' }, { value: 'template', label: 'Template' }, { value: 'supporting_document', label: 'Dokumen pendukung' }]} />
-          <button type="button" className="attach-button" onClick={() => uploadRef.current?.click()} title="Tambah bahan"><Plus size={18} /></button>
-          <input ref={uploadRef} aria-label="Lampirkan bahan" hidden type="file" multiple accept=".pdf,.docx,.txt,.md,.csv,.xlsx,.png,.jpg,.jpeg,.webp" onChange={upload} />
+          <CustomSelect className="composer-select" value={attachmentKind} onChange={setAttachmentKind} ariaLabel={t('workspace.composer.attachmentKind')} options={[{ value: '', label: t('workspace.composer.autoDetect') }, { value: 'module', label: t('workspace.composer.module') }, { value: 'instruction', label: t('workspace.composer.instruction') }, { value: 'practice_evidence', label: t('workspace.composer.practiceEvidence') }, { value: 'template', label: t('workspace.composer.template') }, { value: 'supporting_document', label: t('workspace.composer.supportingDocument') }]} />
+          <button type="button" className="attach-button" onClick={() => uploadRef.current?.click()} title={t('workspace.composer.addSource')}><Plus size={18} /></button>
+          <input ref={uploadRef} aria-label={t('workspace.composer.attachSource')} hidden type="file" multiple accept=".pdf,.docx,.txt,.md,.csv,.xlsx,.png,.jpg,.jpeg,.webp" onChange={upload} />
         </div>
         <div className="composer-actions">
           <AiModeMenu value={aiMode} onChange={setAiMode} access={aiModeAccess} onUpgrade={onUpgrade} />
-          <button className="send-button" type="submit" disabled={busy || (!input.trim() && !pendingFiles.length)} aria-label={editingMessage ? 'Simpan perubahan pesan' : 'Kirim pesan'}><Send size={17} /></button>
+          <button className="send-button" type="submit" disabled={busy || (!input.trim() && !pendingFiles.length)} aria-label={editingMessage ? t('workspace.composer.saveEdit') : t('workspace.composer.send')}><Send size={17} /></button>
         </div>
       </div>
     </form>
-    {centered ? <div className="composer-shortcuts" aria-label="Pilih jenis dokumen">{shortcutItems.map((item) => { const Icon = item.icon; return <button key={item.key} type="button" className="composer-shortcut" onClick={() => setInput(item.prompt)}><Icon size={14} /><span>{item.label}</span></button>; })}</div> : null}
-    {!centered ? <small>Enter untuk kirim · Shift + Enter untuk baris baru · file hanya terlihat di akunmu</small> : null}
+    {centered ? <div className="composer-shortcuts" aria-label={t('workspace.composer.documentType')}>{shortcutItems.map((item) => { const Icon = item.icon; return <button key={item.key} type="button" className="composer-shortcut" onClick={() => setInput(item.prompt)}><Icon size={14} /><span>{item.label}</span></button>; })}</div> : null}
+    {!centered ? <small>{t('workspace.composer.hint')}</small> : null}
   </div>;
 }

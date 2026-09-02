@@ -317,7 +317,96 @@
     "documents": "Dokumen",
     "configuration": "Konfigurasi chat",
     "newChat": "Chat baru",
-    "searchChats": "Cari chat"
+    "searchChats": "Cari chat",
+    "tutorial": {
+      "stepProgress": "Langkah {{current}} dari {{total}}",
+      "close": "Tutup tutorial",
+      "progressLabel": "Langkah {{current}} dari {{total}}",
+      "videoLabel": "Video {{title}}",
+      "previous": "Sebelumnya",
+      "startChat": "Mulai chat",
+      "next": "Lanjut",
+      "steps": [
+        {
+          "title": "Ceritakan tugasmu",
+          "description": "Tulis jenis tugas, mata kuliah, dan topik praktik secara singkat di kotak chat."
+        },
+        {
+          "title": "Tambahkan bahan utama",
+          "description": "Unggah modul, instruksi dosen, atau template supaya susunannya mengikuti bahan yang benar."
+        },
+        {
+          "title": "Lengkapi bukti praktik",
+          "description": "Tambahkan screenshot, foto hasil, data, atau dokumentasi yang memang kamu miliki."
+        },
+        {
+          "title": "Review sampai siap diunduh",
+          "description": "Periksa draft, minta revisi bila perlu, lalu selesaikan cek pemahaman untuk membuka download."
+        }
+      ]
+    },
+    "composer": {
+      "editBanner": "Mengubah pesan",
+      "cancelEdit": "Batalkan",
+      "chatMessage": "Pesan chat",
+      "attachmentKind": "Jenis bahan",
+      "autoDetect": "Deteksi otomatis",
+      "module": "Modul",
+      "instruction": "Instruksi",
+      "practiceEvidence": "Bukti praktik",
+      "template": "Template",
+      "supportingDocument": "Dokumen pendukung",
+      "addSource": "Tambah bahan",
+      "attachSource": "Lampirkan bahan",
+      "saveEdit": "Simpan perubahan pesan",
+      "send": "Kirim pesan",
+      "documentType": "Pilih jenis dokumen",
+      "hint": "Enter untuk kirim · Shift + Enter untuk baris baru · file hanya terlihat di akunmu",
+      "placeholders": {
+        "centered": "Ceritakan tugas yang ingin kamu susun...",
+        "withFiles": "Tambahkan pesan untuk bahan ini...",
+        "default": "Tulis tugasmu, tempel link, atau paste gambar..."
+      },
+      "shortcuts": [
+        {
+          "label": "Laprak",
+          "prompt": "Buatkan saya laporan praktikum berdasarkan bahan dan instruksi yang tersedia."
+        },
+        {
+          "label": "Proposal",
+          "prompt": "Bantu saya menyusun proposal berdasarkan bahan dan instruksi berikut: "
+        },
+        {
+          "label": "Makalah",
+          "prompt": "Bantu saya menyusun makalah berdasarkan bahan dan instruksi berikut: "
+        },
+        {
+          "label": "Tugas akhir",
+          "prompt": "Bantu saya mengerjakan bagian tugas akhir berdasarkan arahan dan sumber berikut: "
+        },
+        {
+          "label": "Jurnal",
+          "prompt": "Bantu saya menyusun artikel jurnal dari data dan tujuan penelitian berikut: "
+        }
+      ]
+    },
+    "aiMode": {
+      "basic": {
+        "label": "Basic",
+        "description": "Untuk laprak harian",
+        "unlock": "Tersedia untuk semua"
+      },
+      "thinking": {
+        "label": "Thinking",
+        "description": "Analisis lebih terarah",
+        "unlock": "Credit Laprak atau Pro"
+      },
+      "xtrathink": {
+        "label": "XtraThink",
+        "description": "Penalaran paling mendalam",
+        "unlock": "Khusus Max"
+      }
+    }
   },
   "accessibility": {
     "closeNavigation": "Tutup navigasi",

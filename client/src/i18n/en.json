@@ -317,7 +317,96 @@
     "documents": "Documents",
     "configuration": "Chat configuration",
     "newChat": "New chat",
-    "searchChats": "Search chats"
+    "searchChats": "Search chats",
+    "tutorial": {
+      "stepProgress": "Step {{current}} of {{total}}",
+      "close": "Close tutorial",
+      "progressLabel": "Step {{current}} of {{total}}",
+      "videoLabel": "{{title}} video",
+      "previous": "Previous",
+      "startChat": "Start chatting",
+      "next": "Next",
+      "steps": [
+        {
+          "title": "Describe your assignment",
+          "description": "Briefly write the assignment type, course, and practice topic in the chat box."
+        },
+        {
+          "title": "Add the main materials",
+          "description": "Upload a module, lecturer instructions, or template so the structure follows the right material."
+        },
+        {
+          "title": "Complete the practice evidence",
+          "description": "Add screenshots, result photos, data, or documentation you actually have."
+        },
+        {
+          "title": "Review until it is ready to download",
+          "description": "Check the draft, request revisions if needed, then complete the understanding check to unlock download."
+        }
+      ]
+    },
+    "composer": {
+      "editBanner": "Editing message",
+      "cancelEdit": "Cancel",
+      "chatMessage": "Chat message",
+      "attachmentKind": "Material type",
+      "autoDetect": "Detect automatically",
+      "module": "Module",
+      "instruction": "Instructions",
+      "practiceEvidence": "Practice evidence",
+      "template": "Template",
+      "supportingDocument": "Supporting document",
+      "addSource": "Add material",
+      "attachSource": "Attach material",
+      "saveEdit": "Save message changes",
+      "send": "Send message",
+      "documentType": "Choose document type",
+      "hint": "Enter to send · Shift + Enter for a new line · files are visible only in your account",
+      "placeholders": {
+        "centered": "Describe the assignment you want to create...",
+        "withFiles": "Add a message for these materials...",
+        "default": "Write an assignment, paste a link, or paste an image..."
+      },
+      "shortcuts": [
+        {
+          "label": "Report",
+          "prompt": "Create a practical report based on the available materials and instructions."
+        },
+        {
+          "label": "Proposal",
+          "prompt": "Help me draft a proposal based on the following materials and instructions: "
+        },
+        {
+          "label": "Paper",
+          "prompt": "Help me draft a paper based on the following materials and instructions: "
+        },
+        {
+          "label": "Thesis",
+          "prompt": "Help me complete this thesis section based on the following guidance and sources: "
+        },
+        {
+          "label": "Journal",
+          "prompt": "Help me draft a journal article from the following research data and objectives: "
+        }
+      ]
+    },
+    "aiMode": {
+      "basic": {
+        "label": "Basic",
+        "description": "For daily reports",
+        "unlock": "Available to everyone"
+      },
+      "thinking": {
+        "label": "Thinking",
+        "description": "More focused analysis",
+        "unlock": "Laprakin credits or Pro"
+      },
+      "xtrathink": {
+        "label": "XtraThink",
+        "description": "The deepest reasoning",
+        "unlock": "Max only"
+      }
+    }
   },
   "accessibility": {
     "closeNavigation": "Close navigation",
