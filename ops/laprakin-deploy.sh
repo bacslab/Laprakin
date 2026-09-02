@@ -33,7 +33,11 @@ fi
 APP_DIR="${LAPRAKIN_APP_DIR:-/opt/laprakin}"
 STATE_DIR="${LAPRAKIN_DEPLOY_STATE_DIR:-/var/lib/laprakin-deploy}"
 REPO_DIR="$STATE_DIR/repo"
-REPO_URL="${LAPRAKIN_REPO_URL:-git@github.com:bacslab/Laprakin.git}"
+# Repository production saat ini publik, jadi checkout default memakai HTTPS
+# read-only dan tidak bergantung pada deploy key GitHub yang bisa dinonaktifkan
+# oleh kebijakan repository. Untuk repository privat, set LAPRAKIN_REPO_URL ke
+# URL SSH dan deploy key yang sesuai.
+REPO_URL="${LAPRAKIN_REPO_URL:-https://github.com/bacslab/Laprakin.git}"
 BRANCH="${LAPRAKIN_DEPLOY_BRANCH:-release}"
 SSH_KEY="${LAPRAKIN_DEPLOY_KEY:-$STATE_DIR/deploy-key}"
 NOTIFY="${LAPRAKIN_NOTIFY_BIN:-/usr/local/bin/laprakin-notify.sh}"
@@ -94,9 +98,8 @@ ensure_build_space() {
 }
 
 # ── Pastikan akses repository sudah dikonfigurasi ───────────────────────────
-# Selama deploy key belum didaftarkan di GitHub, kondisi ini tidak dianggap
-# kegagalan: timer berjalan tiap lima menit, dan mengirim notifikasi setiap kali
-# hanya akan membanjiri inbox operator saat setup belum tuntas.
+# Jika operator memilih URL SSH untuk repository privat, validasi deploy key
+# lebih dulu dan lewati dengan tenang selama setup belum selesai.
 if [[ "$REPO_URL" == git@github.com:* ]]; then
   if [[ ! -s "$SSH_KEY" ]]; then
     echo "deploy: deploy key belum ada di $SSH_KEY; dilewati"
