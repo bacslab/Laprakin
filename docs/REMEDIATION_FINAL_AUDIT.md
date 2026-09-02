@@ -25,7 +25,7 @@ passing tests.
 | Error tracking and status surface | Foundation complete | Structured redacted logs, DSN-gated Sentry adapter, and `/api/status` exist; production DSN/alert routing still requires deployment configuration. |
 | CSS token/layer foundation | Complete | Token, layer, and landing ownership contracts pass. |
 | CSS section migration and `!important` target | Incomplete | The compatibility stylesheet remains large and above the target budget; scoped section files, contrast checks, and the measurable guard exist, but section-by-section migration and all required visual breakpoints remain. |
-| Client modularization | Incomplete | Domain providers, utilities, leaves, workspace helpers, and page boundaries exist; Admin orchestration, Workspace orchestration, and ChatSurface are extracted/lazy, and `main.jsx` is down to 294 lines. The extracted `LegacyWorkspace.jsx` remains 933 lines, so the per-file JSX size gate and full domain ownership migration remain. |
+| Client modularization | Incomplete | Domain providers, utilities, leaves, workspace helpers, and page boundaries exist; Admin orchestration, Workspace orchestration, and ChatSurface are extracted/lazy, `main.jsx` is down to 294 lines, and every client JSX module passes the 500-line contract. Full domain/reducer ownership migration remains. |
 | Workspace state split | Foundation complete | Chat, document, and UI provider contracts plus state boundary tests pass; full reducer/page ownership migration remains. |
 | True progressive AI streaming | Complete for current provider scope | Provider relay emits deltas and heartbeats with cancellation, retries before the first delta, progressive output moderation, canonical persistence, and a tested JSON fallback. |
 | Route-based code splitting | Foundation complete | Lazy boundaries build separate Landing/Auth/Workspace, `LegacyWorkspace`, Admin, `LegacyAdminWorkspace`, `ChatSurface`, Status, and Pricing chunks. The shared vendor chunk remains large. |
@@ -42,12 +42,12 @@ passing tests.
 ## Verification evidence
 
 - Server suite: 107 passed, 0 failed.
-- Client contract suite: 30 passed, 0 failed.
+- Client contract suite: 31 passed, 0 failed.
 - Clean-data E2E: passed for auth, profile, evidence, timeline, quality gate,
   template DOCX, restore, and verified password changes.
 - Workflow API and admin operations checks: passed.
 - Full build: passed. The build emitted separate lazy route chunks, including
-  `LegacyWorkspace` (104.56 kB), `LegacyAdminWorkspace` (48.26 kB), and
+  `LegacyWorkspace` (108.07 kB), `LegacyAdminWorkspace` (48.26 kB), and
   `ChatSurface` (29.34 kB), while also warning about the large shared/vendor
   chunk.
 - Lint and typecheck: passed under the repository's existing configured
@@ -61,7 +61,8 @@ passing tests.
 This branch is safe to review as an incremental remediation checkpoint. The
 original product gaps prioritized for private beta are implemented and
 verified; the broader supplied UX roadmap remains open for CSS section
-migration, the remaining Workspace domain/JSX-size cleanup, complete keyed
-i18n migration, and mobile/tablet visual evidence. SQLite/Postgres, queue, and
+CSS section migration, the remaining Workspace domain/reducer ownership cleanup,
+complete keyed i18n migration, and mobile/tablet visual evidence. SQLite/Postgres,
+queue, and
 multi-instance deployment migration remain intentionally out of scope until
 traffic warrants a separate operational design.
