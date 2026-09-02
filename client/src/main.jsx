@@ -41,6 +41,7 @@ import { translateUiText } from './i18n/legacy';
 import { I18nContext } from './i18n/context';
 import { FeatureUpdatesAdmin, ProductUpdatePopup } from './FeatureUpdates';
 import { ChatSessionRow, SessionGroup } from './pages/Workspace/Sidebar/ChatSessionRow';
+import AccountPopover from './pages/Workspace/Sidebar/AccountPopover';
 import { renderAsync as renderDocx } from 'docx-preview';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -1663,17 +1664,6 @@ function LegacyWorkspace() {
     </aside>}
     {SETTINGS_MODAL_TABS[modal] && <SettingsModal initialTab={SETTINGS_MODAL_TABS[modal]} onClose={() => setModal(null)} onSaved={refreshSession} onArchivedChanged={loadSessions} onOpenBilling={() => { setModal(null); navigate('/pricing'); }} prefs={prefs} setPrefs={setPrefs} />}{modal === 'help' && <HelpModal onClose={() => setModal(null)} />}{modal === 'feedback' && <FeedbackModal onClose={() => setModal(null)} />}{modal === 'notifications' && <NotificationModal onClose={() => setModal(null)} />}{identityIntake && <IdentityIntakeModal user={user} busy={busy} onSave={completeIdentityIntake} onBack={() => setIdentityIntake(null)} />}{tutorialOpen && <WorkspaceTutorial onClose={closeTutorial} />}{productUpdate && <ProductUpdatePopup update={productUpdate} onReceipt={recordProductUpdate} onClose={closeProductUpdate} />}
   </div>;
-}
-
-function AccountPopover({ onOpen, onLogout, onClose, showUpgrade = true }) {
-  const { user } = useApp();
-  const ref = useRef(null);
-  useEffect(() => {
-    const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose?.(); };
-    window.addEventListener('mousedown', closeOutside);
-    return () => window.removeEventListener('mousedown', closeOutside);
-  }, [onClose]);
-  return <div ref={ref} className="account-popover account-popover-fixed" onMouseDown={(event) => event.stopPropagation()}><div className="account-popover-head"><span className="account-popover-avatar" aria-hidden="true">{userInitials(user)}</span><div><b>{user?.fullName || 'Akun Laprakin'}</b><small>Workspace pribadi</small></div></div><div className="account-popover-divider" />{showUpgrade && <button onClick={() => onOpen('billing')}><Sparkles size={15} />Upgrade plan<ChevronRight size={14} /></button>}<button onClick={() => onOpen('settings-referral')}><Megaphone size={15} />Referral<ChevronRight size={14} /></button><button onClick={() => onOpen('settings-personalization')}><Sliders size={15} />Personalisasi</button><button onClick={() => onOpen('settings-academic')}><UserRound size={15} />Jurusan & prodi</button><button onClick={() => onOpen('settings-general')}><Settings2 size={15} />Settings</button><div className="account-popover-divider" /><button onClick={() => onOpen('help')}><HelpCircle size={15} />Help<ChevronRight size={14} /></button><button className="logout-item" onClick={onLogout}><LogOut size={15} />Log out<ChevronRight size={14} /></button></div>;
 }
 
 function PdfThumbnail({ url = '', file = null, size = 58 }) {
