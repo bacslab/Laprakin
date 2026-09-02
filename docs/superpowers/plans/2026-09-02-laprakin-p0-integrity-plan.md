@@ -36,11 +36,11 @@
 - Consumes: current `apiStream`, `Composer`, provider integration response, and audited command output.
 - Produces: executable failing contracts and a baseline document used by every later phase.
 
-- [ ] **Step 1: Write the audit baseline**
+- [x] **Step 1: Write the audit baseline**
 
 Record the base SHA, branch, OS/Node/npm versions, initial server/client counts, the cold-start timing observation, build warning, route inventory, 4,727 legacy `!important` count, and exact P0 source evidence. Mark each definition-of-done item as `contradicted`, `missing evidence`, or `not yet tested`; do not mark future work complete.
 
-- [ ] **Step 2: Write the stream fallback behavior contract**
+- [x] **Step 2: Write the stream fallback behavior contract**
 
 ```js
 test('non-SSE mutation response is parsed without a second fetch', async () => {
@@ -60,11 +60,11 @@ test('non-SSE mutation response is parsed without a second fetch', async () => {
 });
 ```
 
-- [ ] **Step 3: Write composer and provider manifest behavior contracts**
+- [x] **Step 3: Write composer and provider manifest behavior contracts**
 
 Import the wished-for `shouldSubmitComposerKey` helper and assert the complete keyboard truth table from Task 6. Import `buildProcessorManifest` and assert a NaraRouter configuration produces `providers: [{ id: 'nararouter', displayName: 'NaraRouter', ... }]` without a `gemini` property. Later rendered tests verify Admin consumes this manifest instead of branching on provider names.
 
-- [ ] **Step 4: Run the new tests and capture the red evidence**
+- [x] **Step 4: Run the new tests and capture the red evidence**
 
 Run:
 
@@ -74,7 +74,7 @@ node --test client/test/api-stream-contract.test.mjs client/test/composer-keyboa
 
 Expected: missing-module or missing-export failures prove the single-fetch lifecycle, keyboard helper, and provider manifest do not yet exist.
 
-- [ ] **Step 5: Commit the baseline and red tests**
+- [x] **Step 5: Commit the baseline and red tests**
 
 ```text
 git add docs/audits client/test/api-stream-contract.test.mjs client/test/composer-keyboard.test.mjs server/test/provider-contract.test.mjs
