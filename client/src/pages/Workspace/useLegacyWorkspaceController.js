@@ -4,6 +4,7 @@ import { api, apiStream, clearCsrfToken, download } from '../../api';
 import { buildRevisionRequest, getEditableMessage } from '../../lib/chat-message-actions';
 import { courseTokens, normalizedCourseKey } from '../../lib/academic';
 import { inferPendingAttachmentKind } from '../../lib/attachments';
+import { clearDraftRequest, loadDraftRequest, rememberDraftRequest } from '../../lib/request-lifecycle';
 import { useResolvedTheme } from '../../lib/theme';
 import { useApp } from '../../state/ui-context';
 import { useI18n } from '../../i18n/context';
@@ -313,6 +314,9 @@ export function useLegacyWorkspaceController() {
       setActive(synced.session);
       setConfig({ title: synced.session.title || t('workspace.defaults.laprak'), structureMode: synced.session.structure_mode || 'guided', configuration: { ...defaultChatConfig.configuration, ...(synced.session.configuration || {}) } });
       setSessions((old) => old.map((item) => item.id === synced.session.id ? synced.session : item));
+      const draftRequest = { sessionId: current.id, content, aiMode };
+      const requestId = loadDraftRequest(draftRequest)?.requestId || `chat-${crypto.randomUUID()}`;
+      rememberDraftRequest({ ...draftRequest, requestId });
       streamAssistantId = `local-assistant-${crypto.randomUUID()}`;
       setMessages((items) => [...items, {
         id: `local-user-${crypto.randomUUID()}`,
@@ -323,7 +327,8 @@ export function useLegacyWorkspaceController() {
       }]);
       const data = await apiStream(`/chat/sessions/${current.id}/messages`, {
         method: 'POST',
-        body: { content, aiMode, allowExternalAi: prefs.allowExternalAi !== false },
+        requestId,
+        body: { requestId, content, aiMode, allowExternalAi: prefs.allowExternalAi !== false },
         onDelta: (delta) => {
           const text = String(delta || '');
           if (!text) return;
@@ -343,6 +348,7 @@ export function useLegacyWorkspaceController() {
         },
       });
       hydrate(data);
+      clearDraftRequest(current.id, requestId);
       setSessions((old) => old.map((item) => item.id === data.session.id ? data.session : item));
       setInput('');
       setPendingLandingFiles([]);

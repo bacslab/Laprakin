@@ -1,4 +1,5 @@
 import { parseSseEvents } from './lib/read-sse-stream';
+import { composeRequestSignal, loadCanonicalMutation, parseOriginalResponse } from './lib/request-lifecycle';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const DEVICE_KEY = 'laprakin-device-id';
@@ -50,12 +51,15 @@ export async function api(path, options = {}) {
     method = 'GET',
     body,
     form = false,
+    headers: extraHeaders = {},
+    requestId = body?.requestId,
     includeCsrf = !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()),
   } = options;
 
-  const headers = { 'x-laprakin-device': deviceId, 'x-laprakin-client-profile': clientProfile };
+  const headers = { 'x-laprakin-device': deviceId, 'x-laprakin-client-profile': clientProfile, ...extraHeaders };
   if (!form) headers['content-type'] = 'application/json';
   if (includeCsrf && getCsrfToken()) headers['x-laprakin-csrf'] = getCsrfToken();
+  if (requestId) headers['idempotency-key'] = requestId;
 
   let response;
   try {
@@ -89,37 +93,67 @@ export async function apiStream(path, options = {}) {
     method = 'GET',
     body,
     form = false,
+    headers: extraHeaders = {},
+    requestId = body?.requestId,
+    timeoutMs = 60000,
+    signal,
     includeCsrf = !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()),
   } = requestOptions;
-  const headers = { 'x-laprakin-device': deviceId, 'x-laprakin-client-profile': clientProfile, accept: 'text/event-stream' };
+  const headers = { 'x-laprakin-device': deviceId, 'x-laprakin-client-profile': clientProfile, accept: 'text/event-stream', ...extraHeaders };
   if (!form) headers['content-type'] = 'application/json';
   if (includeCsrf && getCsrfToken()) headers['x-laprakin-csrf'] = getCsrfToken();
-  let response;
+  if (requestId) headers['idempotency-key'] = requestId;
+  const composed = composeRequestSignal({ signal, timeoutMs });
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    const response = await fetch(`${API_BASE}${path}`, {
       method,
       credentials: 'include',
       headers,
       body: body ? (form ? body : JSON.stringify(body)) : undefined,
+      signal: composed.signal,
     });
-  } catch (netErr) {
-    throw new Error(friendlyClientErrorMessage(netErr));
-  }
-  const contentType = response.headers.get('content-type') || '';
-  if (!contentType.includes('text/event-stream')) return api(path, requestOptions);
-  let payload = null;
-  let sawUsefulEvent = false;
-  for await (const event of parseSseEvents(response.body)) {
-    if (event.type === 'delta') { sawUsefulEvent = true; onDelta?.(event.text); }
-    if (event.type === 'error') {
-      const error = new Error('Respons chat belum dapat diproses.');
-      error.code = event.code;
-      throw error;
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream')) {
+      const payload = await parseOriginalResponse(response);
+      if (!response.ok) {
+        const error = new Error(friendlyClientErrorMessage(payload?.error?.message || payload || 'Permintaan belum dapat diproses.'));
+        error.code = payload?.error?.code;
+        error.payload = payload;
+        throw error;
+      }
+      return payload;
     }
-    if (event.type === 'done') payload = event.message || null;
+    let payload = null;
+    let sawUsefulEvent = false;
+    for await (const event of parseSseEvents(response.body)) {
+      if (event.type === 'delta') { sawUsefulEvent = true; onDelta?.(event.text); }
+      if (event.type === 'error') {
+        const error = new Error('Respons chat belum dapat diproses.');
+        error.code = event.code;
+        throw error;
+      }
+      if (event.type === 'done') payload = event.message || null;
+    }
+    if (payload) return payload;
+    if (requestId) {
+      const snapshot = await loadCanonicalMutation(requestId, {
+        apiBase: API_BASE,
+        headers: { 'x-laprakin-device': deviceId, 'x-laprakin-client-profile': clientProfile },
+        signal: composed.signal,
+      });
+      if (snapshot?.state === 'completed') return snapshot.response;
+    }
+    const error = new Error(sawUsefulEvent ? 'Respons chat terputus sebelum selesai.' : 'Respons chat belum dapat diproses.');
+    error.code = 'STREAM_INTERRUPTED';
+    throw error;
+  } catch (netErr) {
+    if (netErr?.code) throw netErr;
+    const error = new Error(friendlyClientErrorMessage(netErr));
+    error.name = netErr?.name || error.name;
+    throw error;
+  } finally {
+    composed.cleanup();
   }
-  if (!sawUsefulEvent || !payload) return api(path, requestOptions);
-  return payload;
 }
 
 export async function download(path, fileName) {
