@@ -10,6 +10,7 @@ test('route modules are loaded through the shared page loader', () => {
   assert.match(mainSource, /loadPage\(\(\) => import\('\.\/pages\/Auth\/AuthPage'\)\)/);
   assert.match(mainSource, /loadPage\(\(\) => import\('\.\/pages\/Workspace\/Workspace'\)\)/);
   assert.match(mainSource, /loadPage\(\(\) => import\('\.\/pages\/Admin\/AdminWorkspace'\)\)/);
+  assert.match(mainSource, /loadPage\(\(\) => import\('\.\/pages\/Status\/StatusPage'\)\)/);
   assert.doesNotMatch(mainSource, /import\s+[^;]+from\s+['"]\.\/pages\/(?:Landing|Auth|Workspace|Admin)\//);
 });
 

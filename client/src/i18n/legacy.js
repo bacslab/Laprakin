@@ -128,6 +128,7 @@ export const EN_UI = {
   'Credit tersedia': 'Available credits',
   'Tidak berlangganan': 'Not subscribed',
   'Status': 'Status',
+  'Status layanan': 'Service status',
   'Menunggu pembayaran. Scan QRIS yang muncul di checkout Midtrans.': 'Waiting for payment. Scan the QRIS shown in Midtrans checkout.',
   'Pembayaran berhasil. Credit atau plan telah diaktifkan oleh server.': 'Payment successful. Credits or plan were activated by the server.',
   'Pembayaran ditolak. Pilih checkout QRIS baru bila ingin mencoba lagi.': 'Payment was declined. Create a new QRIS checkout to try again.',

@@ -48,6 +48,7 @@ const AuthPageModule = loadPage(() => import('./pages/Auth/AuthPage'));
 const AdminWorkspaceBoundary = loadPage(() => import('./pages/Admin/AdminWorkspace'));
 const AdminMfaGate = loadPage(() => import('./pages/Admin/AdminMfaGate'));
 const WorkspaceBoundary = loadPage(() => import('./pages/Workspace/Workspace'));
+const StatusPage = loadPage(() => import('./pages/Status/StatusPage'));
 
 const textNodeOriginals = new WeakMap();
 const textNodeRendered = new WeakMap();
@@ -345,7 +346,7 @@ function AppProvider({ children }) {
 
 function App() {
   const location = useLocation();
-  return <AppErrorBoundary resetKey={location.pathname}><AppProvider><I18nRuntime><Suspense fallback={<LoadingScreen />}><div className="route-transition"><Routes><Route path="/" element={<LandingRoutePage />} /><Route path="/auth" element={<AuthPageModule />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/pricing" element={<PublicPricingPage />} /><Route path="/checkout" element={<PublicPricingPage />} /><Route path="/billing" element={<PricingRedirect />} /><Route path="/app/billing" element={<PricingRedirect />} /><Route path="/admin/*" element={<ProtectedAdmin />} /><Route path="/app/*" element={<ProtectedApp />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></div></Suspense></I18nRuntime></AppProvider></AppErrorBoundary>;
+  return <AppErrorBoundary resetKey={location.pathname}><AppProvider><I18nRuntime><Suspense fallback={<LoadingScreen />}><div className="route-transition"><Routes><Route path="/" element={<LandingRoutePage />} /><Route path="/status" element={<StatusPage />} /><Route path="/auth" element={<AuthPageModule />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/pricing" element={<PublicPricingPage />} /><Route path="/checkout" element={<PublicPricingPage />} /><Route path="/billing" element={<PricingRedirect />} /><Route path="/app/billing" element={<PricingRedirect />} /><Route path="/admin/*" element={<ProtectedAdmin />} /><Route path="/app/*" element={<ProtectedApp />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></div></Suspense></I18nRuntime></AppProvider></AppErrorBoundary>;
 }
 
 const legalContent = {

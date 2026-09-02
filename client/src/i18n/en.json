@@ -6,6 +6,25 @@
     "send": "Send",
     "loading": "Preparing Laprakin..."
   },
+  "status": {
+    "eyebrow": "Service status",
+    "title": "Everything is being monitored.",
+    "description": "Check Laprakin and its important dependencies from one public page.",
+    "operational": "All systems operational",
+    "degraded": "Service is degraded",
+    "checking": "Checking services",
+    "unreachable": "Status is unavailable",
+    "summary": "We check this status periodically.",
+    "retryHint": "Try refreshing shortly or check your connection.",
+    "refresh": "Refresh status",
+    "lastChecked": "Last checked",
+    "notChecked": "Not checked yet",
+    "version": "Version",
+    "components": "Service components",
+    "noComponents": "No component data yet.",
+    "privacy": "This page only shows general operational status and contains no credentials, tokens, document content, or account data.",
+    "backHome": "Back to homepage"
+  },
   "auth": {
     "login": "Log in",
     "register": "Create account",
