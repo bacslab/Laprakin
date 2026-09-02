@@ -13,10 +13,10 @@ test('current workspace versions are a single release version', () => {
   const versions = collectWorkspaceVersions();
   assert.equal(versions.root, versions.client);
   assert.equal(versions.client, versions.server);
-  assert.equal(versions.root, '21.0.6');
+  assert.equal(versions.root, '21.0.7');
 });
 
 test('validateChangelog requires the current version first and descending history', () => {
-  assert.deepEqual(validateChangelog('21.0.6', ['21.0.6', '21.0.5', '21.0.4']), []);
-  assert.match(validateChangelog('21.0.6', ['21.0.5', '21.0.6']).join('\n'), /first|descending|current/i);
+  assert.deepEqual(validateChangelog('21.0.7', ['21.0.7', '21.0.6', '21.0.5']), []);
+  assert.match(validateChangelog('21.0.7', ['21.0.6', '21.0.7']).join('\n'), /first|descending|current/i);
 });

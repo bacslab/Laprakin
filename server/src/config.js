@@ -86,6 +86,8 @@ export const config = {
   // Admin promotion must always be an explicit deployment decision.
   adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
   adminMfaRequired: process.env.ADMIN_MFA_REQUIRED === 'true',
+  adminMfaWindowMinutes: boundedInt(process.env.ADMIN_MFA_WINDOW_MINUTES, 30, 5, 120),
+  passwordBreachCheck: process.env.PASSWORD_BREACH_CHECK === 'true',
   naraRouterApiKey: process.env.NARAROUTER_API_KEY || '',
   naraRouterBaseUrl: (process.env.NARAROUTER_BASE_URL || 'https://router.bynara.id/v1').replace(/\/$/, ''),
   naraRouterMaxRpm: boundedInt(process.env.NARAROUTER_MAX_RPM, 8, 1, 10),

@@ -34,7 +34,7 @@ export function recordAdminAudit({ actorUserId, action, target, payloadDiff = {}
 }
 
 export function listAdminAudit({ actorUserId = null, action = '', limit = 100, cursor = null, store = db } = {}) {
-  const filters = [];
+  const filters = ["(target_type = 'admin' OR action LIKE 'admin.%' OR action LIKE 'retention.%')"];
   const params = [];
   if (actorUserId) { filters.push('actor_user_id = ?'); params.push(actorUserId); }
   if (action) { filters.push('action = ?'); params.push(action); }

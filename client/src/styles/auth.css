@@ -6,4 +6,10 @@
   .auth-page.theme-dark {
     color-scheme: dark;
   }
+
+  /* Auth-only compatibility fixes moved out of the monolithic sheet. */
+  .auth-page .auth-topbar { border-bottom: 0; }
+  .auth-page { height: 100dvh; min-height: 100dvh; overflow: hidden; }
+  .auth-page .google-button { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .auth-page .google-button b { display: none; }
 }

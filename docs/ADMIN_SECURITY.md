@@ -35,7 +35,9 @@ lapisan deployment; aplikasi tidak menambah penyedia identitas baru.
 - Logout, reset password, dan pencabutan sesi menaikkan `session_version`, sehingga
   token lama tidak lagi diterima.
 - Semua endpoint `/api/admin/*` wajib memakai `requireAdmin`; mutation juga wajib
-  memakai `requireCsrf` dan mencatat `audit(...)`.
+  memakai `requireCsrf` dan mencatat `audit(...)`. Middleware step-up MFA berlaku
+  seragam setelah autentikasi untuk seluruh permukaan admin, termasuk event dan
+  panel yang baru ditambahkan.
 - Regression test menjalankan akun student dan admin yang terpisah, memeriksa
   respons `403 ADMIN_ONLY`, cookie timeout, inventaris route, CSRF, dan audit log.
 
@@ -46,23 +48,33 @@ yang dikonfigurasi. Origin yang tidak terdaftar menerima `ORIGIN_DENIED`; creden
 tidak pernah direfleksikan untuk origin tersebut. Header dasar mencakup `nosniff`,
 penolakan frame, content-security policy, cross-origin policy, dan default no-store.
 
+## Pemeriksaan password
+
+Deployment dapat mengaktifkan `PASSWORD_BREACH_CHECK=true`. Server memakai range
+query k-anonim ke Have I Been Pwned sehingga password utuh tidak pernah dikirim;
+password yang terdeteksi ditolak saat registrasi atau reset. Jika layanan pemeriksa
+tidak tersedia, pendaftaran tetap berjalan dan hanya dicatat sebagai warning teknis.
+
 ## Admin audit
 
-Helper `recordAdminAudit` menyediakan baris audit terstruktur untuk mutation yang
-memakainya. Payload diff di-redact secara rekursif untuk credential, token, cookie,
+`recordAdminAudit` membuat baris audit terstruktur untuk setiap request mutation
+admin. Payload diff di-redact secara rekursif untuk credential, token, cookie,
 password, prompt, isi dokumen, dan raw source. IP disimpan sebagai hash SHA-256
-satu arah dan tidak diekspos sebagai alamat mentah. Query hanya mengembalikan
-metadata. Route admin lain tetap menggunakan tabel audit legacy sampai migrasi
-uniform dilakukan.
+satu arah dan tidak diekspos sebagai alamat mentah. `/api/admin/audit` mendukung
+filter `action`, `actorUserId`, `limit`, dan `cursor`, serta hanya mengembalikan
+metadata aman.
 
 ## TOTP opsional
 
-`createTotpSecret(userId)` membuat secret Base32 dan `verifyTotpCode(userId, code)`
-menerima window 30 detik saat ini serta satu window di sebelahnya untuk toleransi
-jam. User biasa tidak ditantang. Helper aplikasi dan flag deployment
-`ADMIN_MFA_REQUIRED=true` sudah tersedia, tetapi enrollment persisten, recovery,
-challenge middleware, dan UI admin masih harus dihubungkan sebelum enforcement
-aplikasi diaktifkan.
+`createTotpSecret(userId)` membuat secret Base32 yang disimpan terenkripsi di tabel
+`admin_mfa_secrets`; `verifyTotpCode(userId, code)` menerima window 30 detik saat
+ini serta satu window di sebelahnya untuk toleransi jam dan menolak replay pada
+time-step yang sama. User biasa tidak ditantang. `ADMIN_MFA_REQUIRED=true`
+mewajibkan enrollment; endpoint `/api/admin/mfa/status`, `/enroll`, dan `/verify`
+menyediakan setup dan step-up UI. Setelah berhasil, sesi admin memperoleh jendela
+step-up `ADMIN_MFA_WINDOW_MINUTES` (default 30 menit). Recovery dilakukan dengan
+menghapus enrollment dari storage terkelola setelah identitas admin diverifikasi,
+lalu enroll ulang—jangan mengirim secret melalui log atau issue.
 
 ## Respons insiden admin
 

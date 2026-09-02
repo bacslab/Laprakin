@@ -1,3 +1,10 @@
+## 21.0.7 - 2026-09-02
+
+- Menyimpan enrollment TOTP admin secara terenkripsi, menolak replay code, dan menambahkan challenge step-up pada seluruh route admin dengan UI enrollment yang bisa dipulihkan secara terkontrol.
+- Menjadikan audit admin queryable dengan filter aman dan pencatatan mutation terstruktur yang konsisten tanpa raw IP, token, atau isi dokumen.
+- Menambahkan pemeriksaan password opsional berbasis range query k-anonim serta memigrasikan surface Auth ke translation key Indonesia/Inggris.
+- Memindahkan override khusus Auth ke layer stylesheet terpisah dan menurunkan budget compatibility `!important` secara terukur.
+
 ## 21.0.6 - 2026-09-02
 
 - Mengekstrak formatter umum dan utilitas normalisasi akademik ke modul client yang dapat diuji secara langsung.

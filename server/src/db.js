@@ -1042,6 +1042,15 @@ CREATE TABLE IF NOT EXISTS pricing_overrides (
   updated_at TEXT NOT NULL,
   FOREIGN KEY(updated_by_user_id) REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS admin_mfa_secrets (
+  user_id TEXT PRIMARY KEY,
+  secret_ciphertext TEXT NOT NULL,
+  enrolled_at TEXT NOT NULL,
+  last_verified_step INTEGER,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_admin_mfa_enrolled ON admin_mfa_secrets(enrolled_at DESC);
 `);
 ensureColumn('ai_usage_events', 'context_type', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('ai_usage_events', 'context_id', "TEXT NOT NULL DEFAULT ''");

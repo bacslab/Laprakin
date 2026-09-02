@@ -648,7 +648,7 @@ export function invalidateAllSessions(userId) {
   audit(userId, 'auth.sessions_revoked', 'user', userId, {});
 }
 
-export function setSession(res, user) {
+export function setSession(res, user, { mfaVerifiedAt = null } = {}) {
   if (!user?.emailVerified) {
     throw new HttpError(403, 'Verifikasi email sebelum membuat sesi.', 'EMAIL_NOT_VERIFIED');
   }
@@ -660,7 +660,13 @@ export function setSession(res, user) {
     ? config.adminSessionHours * 60 * 60 * 1000
     : config.sessionDays * 24 * 60 * 60 * 1000;
   const token = jwt.sign(
-    { sub: user.id, role: user.role, csrf: csrfToken, sv: Number(row?.session_version || 1) },
+    {
+      sub: user.id,
+      role: user.role,
+      csrf: csrfToken,
+      sv: Number(row?.session_version || 1),
+      ...(mfaVerifiedAt ? { mfaVerifiedAt: Number(mfaVerifiedAt) } : {}),
+    },
     config.jwtSecret,
     { expiresIn },
   );
@@ -690,7 +696,7 @@ export function getSession(req) {
     const payload = jwt.verify(req.cookies?.[COOKIE_NAME] || '', config.jwtSecret);
     const row = db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(payload.sub);
     if (!row || !row.email_verified_at || Number(payload.sv || 1) !== Number(row.session_version || 1)) return null;
-    return { user: toUser(row), csrfToken: payload.csrf };
+    return { user: toUser(row), csrfToken: payload.csrf, mfaVerifiedAt: Number(payload.mfaVerifiedAt || 0) || null };
   } catch {
     return null;
   }

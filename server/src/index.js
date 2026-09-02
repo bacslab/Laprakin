@@ -29,7 +29,9 @@ import { buildRevisionPlan, RevisionError, validateRevisionRequest } from './cha
 import { moderationMessage, moderateText } from './content-safety.js';
 import { createLogger, reportException, statusSnapshot } from './observability.js';
 import { createSseChannel } from './chat-stream.js';
-import { recordAdminAudit } from './admin-audit.js';
+import { listAdminAudit, recordAdminAudit } from './admin-audit.js';
+import { createTotpSecret, getAdminMfaStatus, verifyTotpCode, adminMfaRequired } from './mfa.js';
+import { checkPasswordBreach } from './password-breach.js';
 import {
   analyzeChatRequest,
   assessChatReadiness,
@@ -225,6 +227,13 @@ const securePasswordSchema = z.string()
   .min(12, 'Kata sandi minimal 12 karakter.')
   .max(64, 'Kata sandi maksimal 64 karakter.')
   .refine((value) => Buffer.byteLength(value, 'utf8') <= 72, 'Kata sandi terlalu panjang untuk diproses dengan aman.');
+
+async function enforcePasswordSafety(password) {
+  if (!config.passwordBreachCheck) return;
+  const result = await checkPasswordBreach(password);
+  if (result.breached) throw new HttpError(400, 'Kata sandi ini pernah muncul dalam kebocoran data. Pilih kata sandi yang berbeda.', 'PASSWORD_BREACHED');
+  if (!result.checked) logger.warn({ errorCode: 'PASSWORD_BREACH_CHECK_UNAVAILABLE' }, 'password breach check unavailable');
+}
 
 const registerSchema = z.object({
   email: z.string().email('Masukkan email yang valid.'),
@@ -2117,6 +2126,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
 app.post('/api/auth/register', authLimiter, asyncHandler(async (req, res) => {
   assertAccessAllowed(req, '');
   const input = registerSchema.parse(req.body || {});
+  await enforcePasswordSafety(input.password);
   const guardId = reserveRegistration(req, input.email);
   let created;
   try {
@@ -2166,6 +2176,7 @@ app.post('/api/auth/request-password-reset', authLimiter, asyncHandler(async (re
 
 app.post('/api/auth/reset-password', authLimiter, asyncHandler(async (req, res) => {
   const input = passwordResetSchema.parse(req.body || {});
+  await enforcePasswordSafety(input.password);
   const user = await resetPassword(input.token, input.password);
   assertAccessAllowed(req, user.id);
   if (!user.emailVerified) {
@@ -4816,6 +4827,55 @@ function requireAdmin(req, _res, next) {
   return next();
 }
 
+function adminMfaState(req) {
+  const status = getAdminMfaStatus(req.user.id);
+  const required = adminMfaRequired({ role: req.user.role, mfaEnrolled: status.enrolled }, { enforced: config.adminMfaRequired });
+  const verifiedAt = Number(req.session?.mfaVerifiedAt || 0);
+  const verified = required && verifiedAt > 0
+    && (Date.now() - verifiedAt) <= config.adminMfaWindowMinutes * 60 * 1000;
+  return { ...status, required, verified, verifiedAt: verifiedAt || null };
+}
+
+function requireAdminMfa(req, _res, next) {
+  if (/^\/mfa\/(?:status|enroll|verify)$/.test(req.path)) return next();
+  if (!req.user || req.user.role !== 'admin') return next(new HttpError(403, 'Khusus admin.', 'ADMIN_ONLY'));
+  const state = adminMfaState(req);
+  if (!state.required || state.verified) return next();
+  if (!state.enrolled) {
+    return next(new HttpError(428, 'Aktifkan verifikasi dua langkah sebelum memakai console admin.', 'ADMIN_MFA_ENROLLMENT_REQUIRED'));
+  }
+  return next(new HttpError(428, 'Masukkan kode verifikasi dua langkah untuk melanjutkan.', 'ADMIN_MFA_REQUIRED'));
+}
+
+// Keep the step-up check uniform across every admin surface. Enrollment and
+// challenge endpoints remain reachable so an administrator can recover a
+// session without weakening the protection on operational mutations.
+app.use('/api/admin', requireAuth, requireAdminMfa);
+
+function adminMutationAction(req) {
+  const segments = String(req.path || '').split('/').filter(Boolean).slice(0, 3);
+  return `admin.${String(req.method || 'unknown').toLowerCase()}.${segments.join('.') || 'request'}`.slice(0, 120);
+}
+
+app.use('/api/admin', (req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  res.on('finish', () => {
+    if (req.user?.role !== 'admin') return;
+    try {
+      recordAdminAudit({
+        actorUserId: req.user.id,
+        action: adminMutationAction(req),
+        target: String(req.path || '/').replace(/\/[^/]{18,}/g, '/:id').slice(0, 160),
+        payloadDiff: { method: req.method, status: res.statusCode },
+        ipAddress: req.ip,
+      });
+    } catch (error) {
+      logger.error({ errorCode: 'ADMIN_AUDIT_WRITE_FAILED' }, 'admin audit write failed');
+    }
+  });
+  return next();
+});
+
 function escapeEmailHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (character) => ({
     '&': '&amp;',
@@ -4895,6 +4955,32 @@ function exposeRestriction(row) {
     revokedAt: row.revoked_at || null,
   };
 }
+
+app.get('/api/admin/mfa/status', requireAuth, requireAdmin, (req, res) => {
+  return res.json({ mfa: adminMfaState(req) });
+});
+
+app.post('/api/admin/mfa/enroll', requireAuth, requireCsrf, requireAdmin, (req, res) => {
+  const secret = createTotpSecret(req.user.id);
+  const label = encodeURIComponent(`Laprakin:${req.user.email}`);
+  const issuer = encodeURIComponent('Laprakin');
+  audit(req.user.id, 'admin.mfa_enrolled', 'admin_mfa', req.user.id, {});
+  return res.status(201).json({
+    mfa: adminMfaState(req),
+    secret,
+    otpauthUrl: `otpauth://totp/${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`,
+  });
+});
+
+app.post('/api/admin/mfa/verify', requireAuth, requireCsrf, requireAdmin, (req, res) => {
+  const code = String(req.body?.code || '').trim();
+  const status = getAdminMfaStatus(req.user.id);
+  if (!status.enrolled) throw new HttpError(409, 'Buat enrollment verifikasi dua langkah terlebih dahulu.', 'ADMIN_MFA_NOT_ENROLLED');
+  if (!verifyTotpCode(req.user.id, code)) throw new HttpError(401, 'Kode verifikasi tidak valid atau sudah dipakai.', 'ADMIN_MFA_INVALID');
+  const csrfToken = setSession(res, req.user, { mfaVerifiedAt: Date.now() });
+  audit(req.user.id, 'admin.mfa_verified', 'admin_mfa', req.user.id, {});
+  return res.json({ csrfToken, mfa: adminMfaState({ ...req, session: { ...req.session, mfaVerifiedAt: Date.now() } }) });
+});
 
 app.get('/api/admin/events', requireAuth, requireAdmin, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -5442,13 +5528,6 @@ app.post('/api/admin/credits/grant', requireAuth, requireCsrf, requireAdmin, adm
     }
     throw error;
   }
-  recordAdminAudit({
-    actorUserId: req.user.id,
-    action: 'admin.credit_granted',
-    target: grantId,
-    payloadDiff: { audience: input.audience, amount: input.amount, recipientCount: recipients.length },
-    ipAddress: req.ip,
-  });
   audit(req.user.id, 'admin.credit_granted', 'admin_credit_grant', grantId, {
     audience: input.audience,
     amount: input.amount,
@@ -5834,13 +5913,19 @@ app.put('/api/admin/risk-events/:id', requireAuth, requireCsrf, requireAdmin, as
 }));
 
 app.get('/api/admin/audit', requireAuth, requireAdmin, (req, res) => {
-  const events = db.prepare(`SELECT id, actor_user_id, action, target_type, target_id, metadata_json, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 100`).all()
+  const rows = listAdminAudit({
+    actorUserId: String(req.query.actorUserId || '').trim() || null,
+    action: String(req.query.action || '').trim(),
+    limit: req.query.limit,
+    cursor: String(req.query.cursor || '').trim() || null,
+  });
+  const events = rows
     .map((row) => ({
       id: row.id,
       actorRef: row.actor_user_id ? anonymousUserRef(row.actor_user_id) : 'Sistem',
       action: row.action,
-      targetType: row.target_type,
-      metadata: parseJson(row.metadata_json, {}),
+      targetType: 'admin',
+      metadata: row.metadata || {},
       createdAt: row.created_at,
     }));
   res.json({ events });

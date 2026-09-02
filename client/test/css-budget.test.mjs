@@ -3,10 +3,10 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const css = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
-const ruleCount = (css.match(/\{/g) || []).length;
+const importantCount = (css.match(/!important\b/g) || []).length;
 
 test('compatibility stylesheet stays within the measured rule budget', () => {
-  assert.ok(ruleCount <= 5176, `CSS rule budget exceeded: ${ruleCount} > 5176`);
+  assert.ok(importantCount <= 4730, `CSS !important budget exceeded: ${importantCount} > 4730`);
 });
 
 test('section styles declare explicit ownership layers', async () => {
