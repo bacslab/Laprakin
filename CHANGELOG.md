@@ -24,6 +24,7 @@
 - Memigrasikan email broadcast, update produk, dan popup update ke translation key Indonesia/Inggris.
 - Memecah panel Admin integrasi, feedback, risk review, dan Landing CMS menjadi komponen terpisah dengan copy keyed serta status dinamis yang terlokalisasi.
 - Menyamakan import hook i18n ke context provider agar seluruh panel client ter-build melalui kontrak yang sama.
+- Memigrasikan aksi pesan, konteks chat, quiz, kartu dokumen, popup akun, logo institusi, dialog, dan greeting workspace ke translation key Indonesia/Inggris.
 
 ## 21.0.6 - 2026-09-02
 

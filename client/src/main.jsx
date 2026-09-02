@@ -32,6 +32,7 @@ import LoadingScreen from './components/LoadingScreen';
 import { loadPage } from './lib/load-page';
 import { AppContext, useApp } from './state/ui-context';
 import I18nRuntime from './i18n/I18nRuntime';
+import { createTranslator } from './i18n';
 import { AppDialog } from './components/Dialog';
 import BillingPage from './pages/Billing/BillingPage';
 
@@ -107,6 +108,7 @@ function AppProvider({ children }) {
   const [prefs, setPrefs] = useState(readPrefs);
   const [notice, setNotice] = useState(null);
   const [dialog, setDialog] = useState(null);
+  const translate = useMemo(() => createTranslator(prefs.language), [prefs.language]);
   const sessionChecked = useRef(false);
   const refreshSession = async () => {
     try {
@@ -145,7 +147,7 @@ function AppProvider({ children }) {
     return () => window.clearTimeout(timer);
   }, [notice]);
   const value = useMemo(() => ({ ...session, setSession, refreshSession, prefs, setPrefs, notice, setNotice, showDialog }), [session, prefs, notice, showDialog]);
-  return <AppContext.Provider value={value}>{children}{notice && <div className={`toast toast-${noticeToneFor(notice)}`} role="status" aria-live="polite" aria-atomic="true"><span>{notice}</span><IconButton label="Tutup notifikasi" onClick={() => setNotice(null)}><X size={14} /></IconButton></div>}<AppDialog dialog={dialog} onResolve={resolveDialog} /></AppContext.Provider>;
+  return <AppContext.Provider value={value}>{children}{notice && <div className={`toast toast-${noticeToneFor(notice)}`} role="status" aria-live="polite" aria-atomic="true"><span>{notice}</span><IconButton label={translate('common.closeNotification')} onClick={() => setNotice(null)}><X size={14} /></IconButton></div>}<AppDialog dialog={dialog} onResolve={resolveDialog} /></AppContext.Provider>;
 }
 
 function App() {

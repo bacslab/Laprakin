@@ -32,6 +32,11 @@ const adminAppealsSource = await readFile(new URL('../src/pages/Admin/AdminAppea
 const adminBroadcastSource = await readFile(new URL('../src/pages/Admin/AdminBroadcastPanel.jsx', import.meta.url), 'utf8');
 const featureUpdatesSource = await readFile(new URL('../src/FeatureUpdates.jsx', import.meta.url), 'utf8');
 const adminContentPanelsSource = await readFile(new URL('../src/pages/Admin/AdminLegacyContentPanels.jsx', import.meta.url), 'utf8');
+const chatComponentsSource = await readFile(new URL('../src/pages/Workspace/ChatComponents.jsx', import.meta.url), 'utf8');
+const chatSurfaceSource = await readFile(new URL('../src/pages/Workspace/ChatSurface.jsx', import.meta.url), 'utf8');
+const accountPopoverSource = await readFile(new URL('../src/pages/Workspace/Sidebar/AccountPopover.jsx', import.meta.url), 'utf8');
+const institutionLogoSource = await readFile(new URL('../src/components/InstitutionLogoField.jsx', import.meta.url), 'utf8');
+const dialogSource = await readFile(new URL('../src/components/Dialog.jsx', import.meta.url), 'utf8');
 
 function keys(value, prefix = '') {
   return Object.entries(value).flatMap(([key, nested]) => {
@@ -177,6 +182,20 @@ test('remaining admin content surfaces consume keyed locale copy', () => {
   assert.doesNotMatch(adminBroadcastSource, /Promosi, update, atau maintenance|Semua user terverifikasi|Kirim email/);
   assert.doesNotMatch(featureUpdatesSource, /Kelola draft, jadwal tayang|Buat draft untuk mulai|Tutup update fitur/);
   assert.doesNotMatch(adminContentPanelsSource, /Credential tetap di server|Feedback pengguna|Kejadian perlu ditinjau|Landing CMS/);
+});
+
+test('remaining workspace controls and dialogs consume keyed locale copy', () => {
+  assert.match(chatComponentsSource, /workspace\.messageActions\.copyNotice/);
+  assert.match(chatComponentsSource, /workspace\.quiz\.question/);
+  assert.match(chatSurfaceSource, /workspace\.chatSurface\.greetingAccent/);
+  assert.match(accountPopoverSource, /workspace\.account\.privateWorkspace/);
+  assert.match(institutionLogoSource, /workspace\.institutionLogo\.maxSize/);
+  assert.match(dialogSource, /common\.dialogConfirm/);
+  assert.doesNotMatch(chatComponentsSource, /Jawaban AI disalin|Lengkapi konteks|Mulai quiz|Memuat dokumen kerja/);
+  assert.doesNotMatch(chatSurfaceSource, /Lepas file untuk melampirkan|Cek pemahaman|Quiz laprak/);
+  assert.doesNotMatch(accountPopoverSource, /Workspace pribadi|Personalisasi|Jurusan & prodi/);
+  assert.doesNotMatch(institutionLogoSource, /Ukuran logo maksimal|Logo harus berformat PNG|Ganti logo/);
+  assert.doesNotMatch(dialogSource, /Konfirmasi|Batal|Lanjutkan/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {

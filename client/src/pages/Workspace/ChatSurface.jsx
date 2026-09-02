@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, Globe2, UploadCloud } from 'lucide-react';
 import { getRegenerationTarget } from '../../lib/chat-message-actions';
 import { userGreetingName } from '../../lib/user';
+import { useI18n } from '../../i18n/context';
 import { SourceBar } from './AttachmentComponents';
 import AttachmentPreviewModal from './AttachmentPreview';
 import Composer from './Composer';
@@ -9,6 +10,7 @@ import { ThinkingRail, WorkPlanRail, WorkflowPanel } from './WorkspaceWorkflow';
 import { AssistantMessageActions, ChatBriefPanel, DocumentCard, DocumentQuiz, InlineContext, MessageContent, UserMessageActions } from './ChatComponents';
 
 export default function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz, editingMessage, onEditMessage, onCancelEdit, onRevise }) {
+  const { t } = useI18n();
   const blankChat = !active || (!messages.length && !attachments.length && !active.document_id);
   const [previewFile, setPreviewFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
@@ -58,9 +60,9 @@ export default function ChatSurface({ active, messages, attachments, documentSta
       onAddPendingFiles(Array.from(event.dataTransfer.files || []));
     }}
   >
-    {dragActive && <div className="workspace-drop-hint" aria-hidden="true"><UploadCloud size={22} /><b>Lepas file untuk melampirkan</b><small>File tetap menunggu sampai kamu menekan Enter.</small></div>}
+    {dragActive && <div className="workspace-drop-hint" aria-hidden="true"><UploadCloud size={22} /><b>{t('workspace.chatSurface.dropHint')}</b><small>{t('workspace.chatSurface.dropDescription')}</small></div>}
     <div className="chat-thread">
-      {quizMode && documentState ? <div className="quiz-workspace-panel"><header><div><small>Cek pemahaman</small><h2>Quiz laprak</h2></div><button type="button" onClick={onCloseQuiz}><ArrowLeft size={14}/>Kembali</button></header><DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} /></div> : blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}>mau <em>laprakin</em> apa hari ini, {greetingName}?</h1></div> : <div className="thread-content">
+      {quizMode && documentState ? <div className="quiz-workspace-panel"><header><div><small>{t('workspace.chatSurface.quizEyebrow')}</small><h2>{t('workspace.chatSurface.quizTitle')}</h2></div><button type="button" onClick={onCloseQuiz}><ArrowLeft size={14}/>{t('workspace.chatSurface.quizBack')}</button></header><DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} /></div> : blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}>{t('workspace.chatSurface.greetingLead')} <em>{t('workspace.chatSurface.greetingAccent')}</em> {t('workspace.chatSurface.greetingTail', { name: greetingName })}</h1></div> : <div className="thread-content">
       {visibleMessages.map((message) => <div className={`message-turn message-turn-${message.role}`} key={message.id}>
         {message.role === 'user' && attachmentBuckets.get(message.id)?.length ? <SourceBar compact attachments={attachmentBuckets.get(message.id)} onOpen={setPreviewFile} /> : null}
         {message.role === 'assistant' && !message.meta?.isClarification && message.meta?.workPlan?.steps?.length ? <WorkPlanRail

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, CheckCircle2, CodeXml, Copy, FileText, LoaderCircle, Pencil, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import { Button } from '../../components/Button';
+import { useI18n } from '../../i18n/context';
 import { useApp } from '../../state/ui-context';
 
 export function InlineMessageText({ text }) {
@@ -33,39 +34,42 @@ export function MessageContent({ content }) {
 }
 
 export function AssistantMessageActions({ message, onRegenerate, busy = false }) {
+  const { t, language } = useI18n();
   const { setNotice } = useApp();
   const [reaction, setReaction] = useState('');
   const [copied, setCopied] = useState(false);
   const text = String(message.content || '');
-  const timestamp = new Date(message.created_at || message.createdAt || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const timestamp = new Date(message.created_at || message.createdAt || Date.now()).toLocaleTimeString(language === 'en' ? 'en-US' : 'id-ID', { hour: '2-digit', minute: '2-digit' });
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      setNotice('Jawaban AI disalin.');
+      setNotice(t('workspace.messageActions.copyNotice'));
       window.setTimeout(() => setCopied(false), 1400);
-    } catch { setNotice('Jawaban AI belum dapat disalin.'); }
+    } catch { setNotice(t('workspace.messageActions.copyFailed')); }
   };
   const rate = (value) => {
     setReaction((current) => current === value ? '' : value);
-    setNotice(value === 'up' ? 'Masukan positif tersimpan.' : 'Masukan perbaikan tersimpan.');
+    setNotice(value === 'up' ? t('workspace.messageActions.positiveSaved') : t('workspace.messageActions.improvementSaved'));
   };
-  return <footer className="message-actions" aria-label="Aksi jawaban AI">
-    <button type="button" onClick={copy} aria-label="Salin jawaban" title="Salin jawaban">{copied ? <Check size={14} /> : <Copy size={14} />}</button>
-    <button type="button" className={reaction === 'up' ? 'selected' : ''} onClick={() => rate('up')} aria-label="Jawaban membantu" title="Membantu"><ThumbsUp size={14} /></button>
-    <button type="button" className={reaction === 'down' ? 'selected' : ''} onClick={() => rate('down')} aria-label="Jawaban perlu diperbaiki" title="Perlu diperbaiki"><ThumbsDown size={14} /></button>
-    {onRegenerate && <button type="button" onClick={onRegenerate} disabled={busy} aria-label="Buat ulang jawaban" title="Buat ulang jawaban"><RefreshCw size={14} /></button>}
+  return <footer className="message-actions" aria-label={t('workspace.messageActions.label')}>
+    <button type="button" onClick={copy} aria-label={t('workspace.messageActions.copy')} title={t('workspace.messageActions.copy')}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
+    <button type="button" className={reaction === 'up' ? 'selected' : ''} onClick={() => rate('up')} aria-label={t('workspace.messageActions.helpful')} title={t('workspace.messageActions.helpfulTitle')}><ThumbsUp size={14} /></button>
+    <button type="button" className={reaction === 'down' ? 'selected' : ''} onClick={() => rate('down')} aria-label={t('workspace.messageActions.needsImprovement')} title={t('workspace.messageActions.needsImprovementTitle')}><ThumbsDown size={14} /></button>
+    {onRegenerate && <button type="button" onClick={onRegenerate} disabled={busy} aria-label={t('workspace.messageActions.regenerate')} title={t('workspace.messageActions.regenerate')}><RefreshCw size={14} /></button>}
     <time dateTime={message.created_at || message.createdAt}>{timestamp}</time>
   </footer>;
 }
 
 export function UserMessageActions({ message, onEdit, busy = false }) {
-  return <footer className="message-actions message-actions-user" aria-label="Aksi pesanmu">
-    <button type="button" onClick={() => onEdit?.(message)} disabled={busy} aria-label="Ubah pesan" title="Ubah pesan"><Pencil size={14} />Ubah pesan</button>
+  const { t } = useI18n();
+  return <footer className="message-actions message-actions-user" aria-label={t('workspace.messageActions.userLabel')}>
+    <button type="button" onClick={() => onEdit?.(message)} disabled={busy} aria-label={t('workspace.messageActions.edit')} title={t('workspace.messageActions.edit')}><Pencil size={14} />{t('workspace.messageActions.edit')}</button>
   </footer>;
 }
 
 export function ChatBriefPanel({ config, updateConfig, workflow, busy, onSubmit }) {
+  const { t } = useI18n();
   const missing = workflow?.missingCriticalContext || '';
   const courseName = config.configuration.courseName || workflow?.courseName || '';
   const moduleTitle = config.configuration.moduleTitle || workflow?.practiceTopic || '';
@@ -82,18 +86,20 @@ export function ChatBriefPanel({ config, updateConfig, workflow, busy, onSubmit 
       practiceTopic: moduleTitle.trim(),
     });
   }}>
-    <div><small>Lengkapi konteks</small><b>{needsCourse && needsModule ? 'Mata kuliah dan materi' : needsCourse ? 'Mata kuliah' : 'Materi praktikum'}</b></div>
-     {needsCourse && <label>Mata kuliah<input ref={firstInputRef} aria-label="Mata kuliah" value={courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Contoh: Administrasi Jaringan Komputer" /></label>}
-     {needsModule && <label>Materi / modul<input ref={!needsCourse ? firstInputRef : undefined} aria-label="Materi atau modul" value={moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Contoh: Dynamic Host Configuration Protocol" /></label>}
-    <Button type="submit" disabled={busy || !ready}>{busy ? <LoaderCircle className="spin" size={14} /> : <ArrowRight size={14} />}Lanjutkan</Button>
+    <div><small>{t('workspace.brief.eyebrow')}</small><b>{needsCourse && needsModule ? t('workspace.brief.courseAndMaterial') : needsCourse ? t('workspace.brief.course') : t('workspace.brief.material')}</b></div>
+     {needsCourse && <label>{t('workspace.brief.courseLabel')}<input ref={firstInputRef} aria-label={t('workspace.brief.courseAria')} value={courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder={t('workspace.brief.coursePlaceholder')} /></label>}
+     {needsModule && <label>{t('workspace.brief.materialLabel')}<input ref={!needsCourse ? firstInputRef : undefined} aria-label={t('workspace.brief.materialAria')} value={moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder={t('workspace.brief.materialPlaceholder')} /></label>}
+    <Button type="submit" disabled={busy || !ready}>{busy ? <LoaderCircle className="spin" size={14} /> : <ArrowRight size={14} />}{t('workspace.brief.continue')}</Button>
   </form>;
 }
 
 export function InlineContext({ config, updateConfig, onClose }) {
-  return <form className="inline-context" onSubmit={(event) => { event.preventDefault(); onClose(); }}><div className="context-title"><div><b>Konteks laprak</b><p>Isi seperlunya agar bahan lebih mudah dibaca.</p></div><button type="button" onClick={onClose} aria-label="Tutup form konteks"><X size={14} /></button></div><div className="context-fields"><label>Mata kuliah<input aria-label="Mata kuliah" value={config.configuration.courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder="Jaringan Komputer" /></label><label>Judul materi <small>Opsional</small><input aria-label="Judul materi" value={config.configuration.moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder="Routing Protocol" /></label><Button type="submit" variant="secondary">Simpan</Button></div></form>;
+  const { t } = useI18n();
+  return <form className="inline-context" onSubmit={(event) => { event.preventDefault(); onClose(); }}><div className="context-title"><div><b>{t('workspace.context.title')}</b><p>{t('workspace.context.description')}</p></div><button type="button" onClick={onClose} aria-label={t('workspace.context.close')}><X size={14} /></button></div><div className="context-fields"><label>{t('workspace.context.course')}<input aria-label={t('workspace.context.course')} value={config.configuration.courseName} onChange={(event) => updateConfig({ configuration: { courseName: event.target.value } })} placeholder={t('workspace.context.coursePlaceholder')} /></label><label>{t('workspace.context.material')} <small>{t('workspace.context.optional')}</small><input aria-label={t('workspace.context.material')} value={config.configuration.moduleTitle} onChange={(event) => updateConfig({ configuration: { moduleTitle: event.target.value } })} placeholder={t('workspace.context.materialPlaceholder')} /></label><Button type="submit" variant="secondary">{t('workspace.context.save')}</Button></div></form>;
 }
 
 export function DocumentQuiz({ access, busy, onStart, onSubmit }) {
+  const { t } = useI18n();
   const [attempt, setAttempt] = useState(null);
   const [answers, setAnswers] = useState({});
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -112,42 +118,43 @@ export function DocumentQuiz({ access, busy, onStart, onSubmit }) {
     if (next) setResult(next);
   };
   if (access?.passed && !attempt) {
-    return <section className="quiz-gate quiz-passed"><span><CheckCircle2 size={18} /></span><div><small>Selesai</small><b>Download terbuka</b><p>Nilai {access.latestScore ?? 0}%</p></div></section>;
+    return <section className="quiz-gate quiz-passed"><span><CheckCircle2 size={18} /></span><div><small>{t('workspace.quiz.finished')}</small><b>{t('workspace.quiz.downloadOpen')}</b><p>{t('workspace.quiz.score', { score: access.latestScore ?? 0 })}</p></div></section>;
   }
   if (!attempt) {
     return <section className="quiz-gate">
-      <div><small>Pre-quiz</small><h3>{access?.attemptCount ? `Nilai terakhir ${access.latestScore ?? 0}%` : '5 soal singkat'}</h3>{access?.attemptCount ? <p>Minimal {access.passScore}%</p> : null}</div>
-      <Button onClick={begin} disabled={busy}><Sparkles size={14} />{access?.attemptCount ? 'Coba lagi' : 'Mulai quiz'}</Button>
+      <div><small>{t('workspace.quiz.preQuiz')}</small><h3>{access?.attemptCount ? t('workspace.quiz.lastScore', { score: access.latestScore ?? 0 }) : t('workspace.quiz.questionCount', { count: 5 })}</h3>{access?.attemptCount ? <p>{t('workspace.quiz.minimum', { score: access.passScore })}</p> : null}</div>
+      <Button onClick={begin} disabled={busy}><Sparkles size={14} />{access?.attemptCount ? t('workspace.quiz.tryAgain') : t('workspace.quiz.start')}</Button>
     </section>;
   }
   if (result) {
     return <section className={`quiz-result ${result.passed ? 'passed' : 'failed'}`}>
       <div className="quiz-result-score"><span>{result.score}</span><small>/ 100</small></div>
-      <div><small>{result.passed ? 'Lulus' : 'Belum lulus'}</small><h3>{result.passed ? 'Download terbuka' : `Minimal ${result.passScore}%`}</h3></div>
-      {!result.passed && <Button onClick={begin} disabled={busy}><RefreshCw size={14} />Soal baru</Button>}
+      <div><small>{result.passed ? t('workspace.quiz.passed') : t('workspace.quiz.notPassed')}</small><h3>{result.passed ? t('workspace.quiz.downloadOpen') : t('workspace.quiz.minimum', { score: result.passScore })}</h3></div>
+      {!result.passed && <Button onClick={begin} disabled={busy}><RefreshCw size={14} />{t('workspace.quiz.newQuestions')}</Button>}
     </section>;
   }
   const question = attempt.questions[questionIndex];
   const selected = answers[question.id];
   const isLast = questionIndex === attempt.questions.length - 1;
   return <section className="quiz-player">
-    <header><span>Soal</span><b>{questionIndex + 1} / {attempt.questions.length}</b><div><i style={{ width: `${((questionIndex + 1) / attempt.questions.length) * 100}%` }} /></div></header>
+    <header><span>{t('workspace.quiz.question')}</span><b>{questionIndex + 1} / {attempt.questions.length}</b><div><i style={{ width: `${((questionIndex + 1) / attempt.questions.length) * 100}%` }} /></div></header>
     <article className="quiz-question-card"><small>{question.sectionTitle}</small><h3>{question.question}</h3></article>
     {/* Tanpa kelas warna per-opsi: empat warna keras yang berbeda membuat
     pilihan terlihat seperti kuis permainan dan tidak mengikuti tema. */}
     <div className="quiz-options">{question.options.map((option, index) => <button type="button" key={`${question.id}-${index}`} className={`quiz-option ${selected === index ? 'selected' : ''}`} onClick={() => setAnswers((value) => ({ ...value, [question.id]: index }))}><span>{String.fromCharCode(65 + index)}</span><b>{option}</b></button>)}</div>
-    <footer><button type="button" disabled={questionIndex === 0} onClick={() => setQuestionIndex((value) => value - 1)}>Sebelumnya</button><Button disabled={selected === undefined || busy} onClick={() => isLast ? finish() : setQuestionIndex((value) => value + 1)}>{isLast ? 'Selesai' : 'Lanjut'}<ArrowRight size={14} /></Button></footer>
+    <footer><button type="button" disabled={questionIndex === 0} onClick={() => setQuestionIndex((value) => value - 1)}>{t('workspace.quiz.previous')}</button><Button disabled={selected === undefined || busy} onClick={() => isLast ? finish() : setQuestionIndex((value) => value + 1)}>{isLast ? t('workspace.quiz.finished') : t('workspace.quiz.next')}<ArrowRight size={14} /></Button></footer>
   </section>;
 }
 
 export function DocumentCard({ documentState, activeJob, version = null, onOpen }) {
-  if (!documentState) return <div className="document-card loading-doc"><LoaderCircle className="spin" size={15} />Memuat dokumen kerja...</div>;
+  const { t } = useI18n();
+  if (!documentState) return <div className="document-card loading-doc"><LoaderCircle className="spin" size={15} />{t('workspace.documentCard.loading')}</div>;
   const isGenerated = documentState.status === 'generated';
   const latestJob = activeJob || documentState.jobs?.[0] || null;
   const liveJob = ['queued', 'running', 'retry_queued'].includes(latestJob?.status);
   return <article className={`document-card document-slim-card ${isGenerated ? 'document-is-ready' : 'document-is-processing'}`}>
     <span className="document-card-icon"><FileText size={20} /></span>
-    <div className="document-card-copy"><b>{documentState.title}</b><small>{isGenerated ? `Dokumen Word · Versi ${Number(version || Number(documentState.revision_count || 0) + 1)}` : liveJob ? latestJob.message || 'Sedang menyiapkan dokumen' : 'Menyiapkan tahap berikutnya secara otomatis'}</small></div>
-    <button type="button" className="document-open-button" onClick={onOpen}>{isGenerated ? 'Buka' : 'Lihat proses'}</button>
+    <div className="document-card-copy"><b>{documentState.title}</b><small>{isGenerated ? t('workspace.documentCard.wordVersion', { version: Number(version || Number(documentState.revision_count || 0) + 1) }) : liveJob ? latestJob.message || t('workspace.documentCard.preparing') : t('workspace.documentCard.nextStage')}</small></div>
+    <button type="button" className="document-open-button" onClick={onOpen}>{isGenerated ? t('workspace.documentCard.open') : t('workspace.documentCard.viewProcess')}</button>
   </article>;
 }
