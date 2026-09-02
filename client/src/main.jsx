@@ -44,6 +44,8 @@ import AccountPopover from './pages/Workspace/Sidebar/AccountPopover';
 import { AppDialog, Modal } from './components/Dialog';
 import AdminAccessPanel from './pages/Admin/AdminAccessPanel';
 import AdminPricingPanel from './pages/Admin/AdminPricingPanel';
+import AdminAppealsPanel from './pages/Admin/AdminAppealsPanel';
+import AdminBroadcastPanel from './pages/Admin/AdminBroadcastPanel';
 import { renderAsync as renderDocx } from 'docx-preview';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -3198,57 +3200,6 @@ function FeedbackModal({ onClose }) {
 }
 
 function NotificationModal({ onClose }) { const { setNotice } = useApp(); const [data, setData] = useState({ notifications: [], unread: 0 }); const ref = useRef(null); useEffect(() => { api('/notifications').then(setData).catch((err) => setNotice(err.message)); }, []); useEffect(() => { const closeOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) onClose(); }; window.addEventListener('mousedown', closeOutside); return () => window.removeEventListener('mousedown', closeOutside); }, [onClose]); useEffect(() => { const timer = window.setTimeout(onClose, 5000); return () => window.clearTimeout(timer); }, [onClose]); const markRead = async () => { try { setData(await api('/notifications/read', { method: 'PUT', body: {} })); } catch (err) { setNotice(err.message); } }; return <aside ref={ref} className="notification-popover" role="dialog" aria-modal="true" aria-label="Notifikasi"><header><div><b>Notifikasi</b><small>{data.unread ? `${data.unread} baru` : 'Semua sudah dibaca'}</small></div><IconButton label="Tutup" onClick={onClose}><X size={16} /></IconButton></header>{data.unread ? <button className="notification-read" onClick={markRead}>Tandai semua dibaca</button> : null}<div className="notification-list">{data.notifications.length ? data.notifications.map((note) => <article key={note.id} className={note.is_read ? 'is-read' : ''}><span /> <div><b>{note.title}</b><p>{note.body}</p><small>{formatDate(note.created_at)}</small></div></article>) : <p className="muted-note">Belum ada notifikasi.</p>}</div></aside>; }
-
-function AdminAppealsPanel({ setNotice, onRefresh }) {
-  const [appeals, setAppeals] = useState([]);
-  const [replies, setReplies] = useState({});
-  const [busy, setBusy] = useState(false);
-  const loadAppeals = useCallback(() => api('/admin/appeals?status=all').then((data) => setAppeals(data.appeals || [])).catch((error) => setNotice(error.message)), [setNotice]);
-  useEffect(() => { loadAppeals(); }, [loadAppeals]);
-  const review = async (appeal, status) => {
-    const reply = (replies[appeal.id] || '').trim();
-    if (reply.length < 4) return;
-    setBusy(true);
-    try {
-      await api(`/admin/appeals/${appeal.id}`, {
-        method: 'PUT',
-        body: { status, reply, liftRestrictions: status === 'approved' },
-      });
-      await Promise.all([loadAppeals(), onRefresh()]);
-      setNotice(status === 'approved' ? 'Appeal disetujui dan pembatasan akun dicabut.' : 'Hasil appeal dikirim ke user.');
-    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
-  };
-  return <section className="admin-content"><div className="admin-panel admin-wide"><div className="admin-panel-head"><h2>Appeal akun</h2><small>User menerima hasil lewat email</small></div><div className="admin-list admin-appeal-list">{appeals.length ? appeals.map((appeal) => <article key={appeal.id}><div className="admin-appeal-copy"><div><b>{appeal.userName || appeal.userEmail || 'Akun tidak aktif'}</b><small>{appeal.userEmail || 'Email terlindungi'} · {formatDate(appeal.createdAt)}</small></div><p>{appeal.message}</p>{appeal.status === 'open' ? <textarea aria-label={`Balasan appeal untuk ${appeal.userEmail || 'user'}`} value={replies[appeal.id] || ''} onChange={(event) => setReplies((value) => ({ ...value, [appeal.id]: event.target.value }))} placeholder="Tulis hasil peninjauan untuk user."/> : <small className="admin-reply">{appeal.adminReply}</small>}</div><div className="admin-actions"><span className={`status-${appeal.status === 'approved' ? 'completed' : appeal.status === 'open' ? 'queued' : 'failed'}`}>{appeal.status}</span>{appeal.status === 'open' && <><button disabled={busy} onClick={() => review(appeal, 'approved')}>Setujui</button><button disabled={busy} onClick={() => review(appeal, 'rejected')}>Tolak</button></>}</div></article>) : <p className="empty-admin">Belum ada appeal.</p>}</div></div></section>;
-}
-
-function AdminBroadcastPanel({ users, setNotice }) {
-  const [form, setForm] = useState({ audience: 'all', userIds: [], subject: '', heading: '', body: '', ctaLabel: '', ctaUrl: '', imageUrl: '', accentColor: '#b7ff24', backgroundColor: '#f5f5f2', textColor: '#171715' });
-  const [history, setHistory] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const loadHistory = useCallback(() => api('/admin/broadcasts').then((data) => setHistory(data.broadcasts || [])).catch((error) => setNotice(error.message)), [setNotice]);
-  useEffect(() => { loadHistory(); }, [loadHistory]);
-  const toggleRecipient = (id) => setForm((value) => ({ ...value, userIds: value.userIds.includes(id) ? value.userIds.filter((item) => item !== id) : [...value.userIds, id] }));
-  const uploadImage = async (event) => {
-    const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
-    setBusy(true);
-    try {
-      const body = new FormData(); body.append('file', file);
-      const result = await api('/admin/broadcasts/image', { method: 'POST', body, form: true });
-      setForm((value) => ({ ...value, imageUrl: result.imageUrl }));
-    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
-  };
-  const sendBroadcast = async () => {
-    setBusy(true);
-    try {
-      const result = await api('/admin/broadcasts', { method: 'POST', body: form });
-      setNotice(`${result.deliveredCount} dari ${result.recipientCount} email berhasil diproses.`);
-      setForm((value) => ({ ...value, subject: '', heading: '', body: '', ctaLabel: '', ctaUrl: '', imageUrl: '' }));
-      await loadHistory();
-    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
-  };
-  const invalid = form.subject.trim().length < 3 || form.heading.trim().length < 2 || form.body.trim().length < 10 || (form.audience === 'selected' && !form.userIds.length);
-  return <section className="admin-content"><div className="admin-grid admin-broadcast-grid"><section className="admin-panel admin-broadcast-form"><div className="admin-panel-head"><h2>Email user</h2><small>Promosi, update, atau maintenance</small></div><label htmlFor="admin-broadcast-audience">Target<CustomSelect id="admin-broadcast-audience" ariaLabel="Target email" value={form.audience} onChange={(audience) => setForm((value) => ({ ...value, audience }))} options={[{value:'all',label:'Semua user terverifikasi'},{value:'paid',label:'Semua user paid'},{value:'selected',label:'User terpilih'}]}/></label>{form.audience === 'selected' && <div className="admin-recipient-list">{users.map((item) => <label key={item.id}><input aria-label={`Pilih penerima ${item.email}`} type="checkbox" checked={form.userIds.includes(item.id)} onChange={() => toggleRecipient(item.id)}/><span>{item.email}</span></label>)}</div>}<label>Subjek<input aria-label="Subjek email" maxLength="140" value={form.subject} onChange={(event) => setForm((value) => ({ ...value, subject: event.target.value }))}/></label><label>Judul email<input aria-label="Judul email" maxLength="140" value={form.heading} onChange={(event) => setForm((value) => ({ ...value, heading: event.target.value }))}/></label><label>Isi<textarea aria-label="Isi email" maxLength="6000" value={form.body} onChange={(event) => setForm((value) => ({ ...value, body: event.target.value }))}/></label><div className="admin-form-row"><label>Label tombol<input aria-label="Label tombol email" maxLength="50" value={form.ctaLabel} onChange={(event) => setForm((value) => ({ ...value, ctaLabel: event.target.value }))}/></label><label>URL tombol<input aria-label="URL tombol email" type="url" value={form.ctaUrl} onChange={(event) => setForm((value) => ({ ...value, ctaUrl: event.target.value }))}/></label></div><label>Gambar<input aria-label="Gambar email" type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadImage}/></label><div className="admin-color-row"><label>Aksen<input aria-label="Warna aksen email" type="color" value={form.accentColor} onChange={(event) => setForm((value) => ({ ...value, accentColor: event.target.value }))}/></label><label>Latar<input aria-label="Warna latar email" type="color" value={form.backgroundColor} onChange={(event) => setForm((value) => ({ ...value, backgroundColor: event.target.value }))}/></label><label>Teks<input aria-label="Warna teks email" type="color" value={form.textColor} onChange={(event) => setForm((value) => ({ ...value, textColor: event.target.value }))}/></label></div><Button onClick={sendBroadcast} disabled={busy || invalid}><Send size={14}/>Kirim email</Button></section><div><section className="admin-email-preview" style={{background:form.backgroundColor,color:form.textColor}}>{form.imageUrl && <img src={form.imageUrl} alt="Preview email"/>}<h2>{form.heading || 'Judul email'}</h2><p>{form.body || 'Isi email akan tampil di sini.'}</p>{form.ctaLabel && <span style={{background:form.accentColor,color:form.textColor}}>{form.ctaLabel}</span>}</section><section className="admin-panel"><div className="admin-panel-head"><h2>Riwayat</h2><small>{history.length} email</small></div><div className="admin-list">{history.slice(0,20).map((item) => <article key={item.id}><div><b>{item.subject}</b><small>{item.audience} · {formatDate(item.createdAt)}</small></div><span>{item.deliveredCount}/{item.recipientCount}</span></article>)}</div></section></div></div></section>;
-}
 
 function LegacyAdminWorkspace() {
   const { user, refreshSession, setNotice, prefs, setPrefs } = useApp();
