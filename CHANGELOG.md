@@ -26,6 +26,7 @@
 - Menyamakan import hook i18n ke context provider agar seluruh panel client ter-build melalui kontrak yang sama.
 - Memigrasikan aksi pesan, konteks chat, quiz, kartu dokumen, popup akun, logo institusi, dialog, dan greeting workspace ke translation key Indonesia/Inggris.
 - Memindahkan loading state Admin ke stylesheet section `styles/admin.css` dengan kontrak ownership tersendiri.
+- Menyelaraskan ESLint ke versi yang kompatibel dengan `eslint-plugin-jsx-a11y` dan menjalankan suite server secara serial agar integration test SQLite tidak saling mengganggu di CI.
 
 ## 21.0.6 - 2026-09-02
 
