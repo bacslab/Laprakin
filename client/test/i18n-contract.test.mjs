@@ -110,7 +110,15 @@ test('workspace settings referral, billing, and appearance surfaces consume keye
   assert.match(settingsSource, /workspace\.settings\.billing\.history/);
   assert.match(settingsSource, /workspace\.settings\.appearance\.darkOnlyTitle/);
   assert.match(settingsSource, /workspace\.settings\.appearance\.themes\.system/);
+  assert.match(settingsSource, /workspace\.settings\.data\.deleteTitle/);
+  assert.match(settingsSource, /workspace\.settings\.storage\.filesTitle/);
+  assert.match(settingsSource, /workspace\.settings\.safety\.alertTitle/);
+  assert.match(settingsSource, /workspace\.settings\.security\.verifyDescription/);
+  assert.match(settingsSource, /workspace\.settings\.archived\.restore/);
+  assert.match(settingsSource, /workspace\.settings\.academic\.fullName/);
+  assert.match(settingsSource, /workspace\.settings\.keyboard\.enterToSend/);
   assert.doesNotMatch(settingsSource, /Kode referralmu|Cara bonus dihitung|Warna aksen workspace|Ikuti sistem/);
+  assert.doesNotMatch(settingsSource, /Akun sedang mendapat alert|Google terhubung|Belum ada chat diarsipkan|Nama lengkap/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {
