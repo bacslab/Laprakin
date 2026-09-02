@@ -28,6 +28,8 @@ export async function verifyNaraRouterIntegration() {
     return {
       ok: readiness.configured && readiness.registryCached && readiness.textReady && readiness.documentReady,
       code: readiness.registryCached ? '' : 'NARAROUTER_MODELS_UNAVAILABLE',
+      adapterType: 'openai-compatible',
+      discoveryTransport: 'guarded-egress',
       models: readiness.models,
       visionReady: readiness.visionReady,
     };

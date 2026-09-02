@@ -121,13 +121,13 @@
 - Adapter contract: `testConnection`, `discoverModels`, `runCanary`, `complete`, `stream`, `normalizeError`.
 - Initial adapters: NaraRouter/OpenAI-compatible, existing Cloudflare AI fallback, and generic OpenAI-compatible only behind the guarded-host policy.
 
-- [ ] Write red contract tests shared by every adapter, including streaming, cancellation, structured output, vision evidence, bounded payloads, and sanitized errors.
-- [ ] Move provider-specific URL/token/body/error logic out of `ai.js` into adapters using the guarded client.
-- [ ] Persist discovery source and capability evidence per provider. Unknown critical capabilities are `unverified`, never guessed as verified from model names.
-- [ ] Permit manual model IDs/overrides only with explicit evidence state and audit-ready metadata.
-- [ ] Preserve the current environment NaraRouter and Cloudflare behavior through bootstrap adapters.
-- [ ] Run adapter, stream, truncation, content-safety, and integration tests.
-- [ ] Commit: `refactor: add guarded ai provider adapters`.
+- [x] Write red contract tests shared by every adapter, including streaming, cancellation, structured output, vision evidence, bounded payloads, and sanitized errors.
+- [x] Move provider-specific URL/token/body/error logic out of `ai.js` into adapters using the guarded client.
+- [x] Persist discovery source and capability evidence per provider. Unknown critical capabilities are `unverified`, never guessed as verified from model names.
+- [x] Permit manual model IDs/overrides only with explicit evidence state and audit-ready metadata.
+- [x] Preserve the current environment NaraRouter and Cloudflare behavior through bootstrap adapters.
+- [x] Run adapter, stream, truncation, content-safety, and integration tests.
+- [x] Commit: `refactor: add guarded ai provider adapters`.
 
 ## Task 6: Implement draft, test, activate, and rollback lifecycle
 

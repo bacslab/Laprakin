@@ -5,11 +5,14 @@ import { streamOpenAiCompatible } from '../src/ai.js';
 
 test('streamOpenAiCompatible relays provider deltas and returns the complete message', async () => {
   let requestBody;
-  const response = new Response(ReadableStream.from([
-    'data: {"choices":[{"delta":{"content":"{\\"message\\":\\"La"}}] }\n\n',
-    'data: {"choices":[{"delta":{"content":"por\\\"}"}}],"usage":{"total_tokens":3}}\n\n',
-    'data: [DONE]\n\n',
-  ]), { headers: { 'content-type': 'text/event-stream' } });
+  const providerAdapters = { get: () => ({
+    async *stream(options) {
+      requestBody = { ...options, stream: true };
+      yield { type: 'delta', text: '{"message":"La' };
+      yield { type: 'delta', text: 'por"}' };
+      yield { type: 'done', message: '{"message":"Lapor"}', usage: { total_tokens: 3 } };
+    },
+  }) };
 
   const events = [];
   for await (const event of streamOpenAiCompatible({
@@ -17,10 +20,7 @@ test('streamOpenAiCompatible relays provider deltas and returns the complete mes
     model: 'test-model',
     messages: [{ role: 'user', content: 'halo' }],
     maxOutputTokens: 100,
-    fetchImpl: async (_url, options) => {
-      requestBody = JSON.parse(options.body);
-      return response;
-    },
+    providerAdapters,
   })) events.push(event);
 
   assert.equal(requestBody.stream, true);

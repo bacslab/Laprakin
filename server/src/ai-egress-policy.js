@@ -39,6 +39,13 @@ function publicIpv4(address) {
   return !blocked.some(([first, prefix]) => inIpv4Range(value, first, prefix));
 }
 
+function loopbackAddress(address) {
+  const normalized = normalizeHostname(address);
+  const ipv4 = ipv4Integer(normalized);
+  if (ipv4 != null) return inIpv4Range(ipv4, '127.0.0.0', 8);
+  return ipv6Integer(normalized) === 1n;
+}
+
 function ipv6Integer(address) {
   let source = normalizeHostname(address).split('%')[0];
   if (source.includes('.')) {
@@ -97,7 +104,7 @@ function assertSafeHostname(hostname, policy) {
   if (!host || INTERNAL_HOST.test(host)) {
     throw new AiEgressPolicyError('Provider host is blocked.', 'AI_EGRESS_HOST_BLOCKED');
   }
-  if (net.isIP(host) && !isPublicProviderAddress(host)) {
+  if (net.isIP(host) && !isPublicProviderAddress(host) && !(policy.isProd !== true && policy.allowTestLoopback === true && loopbackAddress(host))) {
     throw new AiEgressPolicyError('Provider address is blocked.', 'AI_EGRESS_ADDRESS_BLOCKED');
   }
   if (!hostAllowed(host, policy)) {
@@ -146,7 +153,7 @@ export async function resolveAndValidateHost(hostname, {
   const addresses = answers.map((answer) => ({ address: normalizeHostname(answer?.address), family: Number(answer?.family || net.isIP(answer?.address)) }));
   if (addresses.some((answer) => ![4, 6].includes(answer.family)
     || net.isIP(answer.address) !== answer.family
-    || !isPublicProviderAddress(answer.address))) {
+    || (!isPublicProviderAddress(answer.address) && !(policy.isProd !== true && policy.allowTestLoopback === true && loopbackAddress(answer.address))))) {
     throw new AiEgressPolicyError('Provider DNS returned a blocked address.', 'AI_EGRESS_ADDRESS_BLOCKED');
   }
   return { hostname: host, addresses };

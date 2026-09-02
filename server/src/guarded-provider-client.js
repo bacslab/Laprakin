@@ -64,6 +64,80 @@ async function collectBody(body, maxBytes) {
   return Buffer.concat(chunks);
 }
 
+function requestBodyBytes(body, maxRequestBytes) {
+  const bytes = body == null ? Buffer.alloc(0) : Buffer.isBuffer(body) ? body : Buffer.from(String(body));
+  if (bytes.length > maxRequestBytes) {
+    throw new GuardedProviderError('Provider request exceeded the safe size limit.', 'AI_EGRESS_REQUEST_TOO_LARGE', 413);
+  }
+  return bytes;
+}
+
+function safeResponseHeaders(headers) {
+  return { 'content-type': String(headers?.['content-type'] || headers?.get?.('content-type') || '') };
+}
+
+function validateResponse(response) {
+  if (response.status >= 300 && response.status < 400) {
+    response.body?.destroy?.();
+    throw new GuardedProviderError('Provider redirect was blocked.', 'AI_EGRESS_REDIRECT_BLOCKED', 502);
+  }
+  if (response.status < 200 || response.status >= 300) {
+    response.body?.destroy?.();
+    throw responseError(response.status);
+  }
+}
+
+function operationScope({ timeoutMs, signal }) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abortFromCaller();
+  else signal?.addEventListener?.('abort', abortFromCaller, { once: true });
+  let rejectTimeout;
+  const timeout = new Promise((_, reject) => { rejectTimeout = reject; });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+    rejectTimeout(new GuardedProviderError('Provider request timed out.', 'AI_EGRESS_TIMEOUT', 504));
+  }, Math.max(10, Number(timeoutMs) || 15_000));
+  const cleanup = () => {
+    clearTimeout(timer);
+    signal?.removeEventListener?.('abort', abortFromCaller);
+  };
+  return { controller, timeout, cleanup, didTimeOut: () => timedOut };
+}
+
+function normalizeNetworkError(error, scope) {
+  if (error instanceof GuardedProviderError || error instanceof AiEgressPolicyError) return error;
+  if (scope.didTimeOut()) return new GuardedProviderError('Provider request timed out.', 'AI_EGRESS_TIMEOUT', 504);
+  if (scope.controller.signal.aborted || error?.name === 'AbortError') {
+    return new GuardedProviderError('Provider request was cancelled.', 'AI_EGRESS_CANCELLED', 499);
+  }
+  return new GuardedProviderError('Provider network request failed.', 'AI_EGRESS_NETWORK_FAILED', 502);
+}
+
+async function openProviderResponse({
+  url, method, headers, requestBody, connectTimeoutMs, policy, lookup, transport, scope,
+}) {
+  try {
+    const resolution = await resolveAndValidateHost(url.hostname, { ...policy, ...(lookup ? { lookup } : {}) });
+    const selected = resolution.addresses[0];
+    return await transport({
+      url,
+      method: String(method || 'GET').toUpperCase(),
+      headers: { ...headers },
+      body: requestBody,
+      address: selected.address,
+      family: selected.family,
+      serverName: resolution.hostname,
+      connectTimeoutMs: Math.max(100, Number(connectTimeoutMs) || 5_000),
+      signal: scope.controller.signal,
+    });
+  } catch (error) {
+    throw normalizeNetworkError(error, scope);
+  }
+}
+
 export async function guardedProviderRequest({
   url: inputUrl,
   method = 'GET',
@@ -76,52 +150,20 @@ export async function guardedProviderRequest({
   policy = {},
   lookup,
   transport = nodeTransport,
+  signal,
 } = {}) {
   const url = validateProviderUrl(inputUrl, policy);
-  const requestBody = body == null ? Buffer.alloc(0) : Buffer.isBuffer(body) ? body : Buffer.from(String(body));
-  if (requestBody.length > maxRequestBytes) {
-    throw new GuardedProviderError('Provider request exceeded the safe size limit.', 'AI_EGRESS_REQUEST_TOO_LARGE', 413);
-  }
-  const resolution = await resolveAndValidateHost(url.hostname, { ...policy, ...(lookup ? { lookup } : {}) });
-  const selected = resolution.addresses[0];
-  const controller = new AbortController();
-  let timer;
+  const requestBody = requestBodyBytes(body, maxRequestBytes);
+  const scope = operationScope({ timeoutMs, signal });
   try {
     const operation = (async () => {
-      let response;
-      try {
-        response = await transport({
-          url,
-          method: String(method || 'GET').toUpperCase(),
-          headers: { ...headers },
-          body: requestBody,
-          address: selected.address,
-          family: selected.family,
-          serverName: resolution.hostname,
-          connectTimeoutMs: Math.max(100, Number(connectTimeoutMs) || 5_000),
-          signal: controller.signal,
-        });
-      } catch (error) {
-        if (error instanceof GuardedProviderError || error instanceof AiEgressPolicyError) throw error;
-        if (controller.signal.aborted || error?.name === 'AbortError') {
-          throw new GuardedProviderError('Provider request timed out.', 'AI_EGRESS_TIMEOUT', 504);
-        }
-        throw new GuardedProviderError('Provider network request failed.', 'AI_EGRESS_NETWORK_FAILED', 502);
-      }
-      if (response.status >= 300 && response.status < 400) {
-        response.body?.destroy?.();
-        throw new GuardedProviderError('Provider redirect was blocked.', 'AI_EGRESS_REDIRECT_BLOCKED', 502);
-      }
-      if (response.status < 200 || response.status >= 300) {
-        response.body?.destroy?.();
-        throw responseError(response.status);
-      }
+      const response = await openProviderResponse({ url, method, headers, requestBody, connectTimeoutMs, policy, lookup, transport, scope });
+      validateResponse(response);
       const bytes = await collectBody(response.body, Math.max(1, Number(maxBytes) || 1));
-      const safeHeaders = { 'content-type': String(response.headers?.['content-type'] || response.headers?.get?.('content-type') || '') };
       return {
         status: response.status,
         ok: true,
-        headers: safeHeaders,
+        headers: safeResponseHeaders(response.headers),
         bytes,
         text: async () => bytes.toString('utf8'),
         json: async () => {
@@ -131,15 +173,63 @@ export async function guardedProviderRequest({
         },
       };
     })();
-    const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => {
-        controller.abort();
-        reject(new GuardedProviderError('Provider request timed out.', 'AI_EGRESS_TIMEOUT', 504));
-      }, Math.max(10, Number(timeoutMs) || 15_000));
-    });
-    return await Promise.race([operation, timeout]);
+    return await Promise.race([operation, scope.timeout]);
   } finally {
-    if (timer) clearTimeout(timer);
+    scope.cleanup();
+  }
+}
+
+export async function guardedProviderStream({
+  url: inputUrl,
+  method = 'GET',
+  headers = {},
+  body = null,
+  timeoutMs = 15_000,
+  connectTimeoutMs = 5_000,
+  maxBytes = 2 * 1024 * 1024,
+  maxRequestBytes = 4 * 1024 * 1024,
+  policy = {},
+  lookup,
+  transport = nodeTransport,
+  signal,
+} = {}) {
+  const url = validateProviderUrl(inputUrl, policy);
+  const requestBody = requestBodyBytes(body, maxRequestBytes);
+  const scope = operationScope({ timeoutMs, signal });
+  try {
+    const response = await Promise.race([
+      openProviderResponse({ url, method, headers, requestBody, connectTimeoutMs, policy, lookup, transport, scope }),
+      scope.timeout,
+    ]);
+    validateResponse(response);
+    const limit = Math.max(1, Number(maxBytes) || 1);
+    const source = response.body;
+    return {
+      status: response.status,
+      ok: true,
+      headers: safeResponseHeaders(response.headers),
+      body: (async function* boundedBody() {
+        let size = 0;
+        try {
+          for await (const chunk of source || []) {
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            size += buffer.length;
+            if (size > limit) {
+              source?.destroy?.();
+              throw new GuardedProviderError('Provider response exceeded the safe size limit.', 'AI_EGRESS_RESPONSE_TOO_LARGE', 502);
+            }
+            yield buffer;
+          }
+        } catch (error) {
+          throw normalizeNetworkError(error, scope);
+        } finally {
+          scope.cleanup();
+        }
+      })(),
+    };
+  } catch (error) {
+    scope.cleanup();
+    throw normalizeNetworkError(error, scope);
   }
 }
 

@@ -23,22 +23,25 @@ process.on('exit', () => {
   try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch { /* dibersihkan OS */ }
 });
 
-const realFetch = globalThis.fetch;
 function stubNara(handler) {
   const calls = [];
-  globalThis.fetch = async (url, options = {}) => {
-    const body = JSON.parse(options.body || '{}');
-    calls.push({ url: String(url), options, body });
-    if (String(url).endsWith('/models')) {
-      return new Response(JSON.stringify({ data: [
+  let completionCount = 0;
+  const adapter = {
+    async discoverModels() {
+      return [
         { id: 'mistral-medium-3.5', context_length: 256000, supportsVision: false, supportsReasoning: true, supportsStructuredOutput: true },
         { id: 'stepfun-3.7-flash', context_length: 256000, supportsVision: true, supportsReasoning: true, supportsStructuredOutput: true },
         { id: 'mistral-large', context_length: 256000, supportsVision: false, supportsReasoning: true, supportsStructuredOutput: true },
-      ] }), { status: 200, headers: { 'content-type': 'application/json' } });
-    }
-    return new Response(JSON.stringify(handler(body, calls.length)), { status: 200, headers: { 'content-type': 'application/json' } });
+      ];
+    },
+    async complete(body) {
+      completionCount += 1;
+      const call = { url: 'https://router.test/v1/chat/completions', body: { ...body, max_tokens: body.maxOutputTokens } };
+      calls.push(call);
+      return handler(call.body, completionCount);
+    },
   };
-  return { calls, restore: () => { globalThis.fetch = realFetch; } };
+  return { calls, providerAdapters: { get: () => adapter }, restore() {} };
 }
 
 const reply = (content, finishReason = 'stop') => ({
@@ -56,11 +59,11 @@ const jsonRequest = {
 };
 
 test('respons JSON terpotong dicoba ulang dengan budget token lebih besar', async () => {
-  const stub = stubNara((_body, call) => (call === 3
+  const stub = stubNara((_body, call) => (call === 2
     ? reply('{"evidence":[]}', 'stop')
     : reply('{"evidence":[', 'length')));
   try {
-    const result = await generateAiContent(jsonRequest);
+    const result = await generateAiContent({ ...jsonRequest, providerAdapters: stub.providerAdapters });
     assert.equal(result.text, '{"evidence":[]}');
     const completions = stub.calls.filter((call) => call.url.endsWith('/chat/completions'));
     assert.equal(completions.length, 2);
@@ -70,14 +73,14 @@ test('respons JSON terpotong dicoba ulang dengan budget token lebih besar', asyn
 
 test('JSON yang tetap terpotong menghasilkan error jelas', async () => {
   const stub = stubNara(() => reply('{"evidence":[', 'length'));
-  try { await assert.rejects(() => generateAiContent(jsonRequest), (error) => error.code === 'AI_OUTPUT_TRUNCATED' || error.code === 'AI_SCHEMA_INVALID'); }
+  try { await assert.rejects(() => generateAiContent({ ...jsonRequest, providerAdapters: stub.providerAdapters }), (error) => error.code === 'AI_OUTPUT_TRUNCATED' || error.code === 'AI_SCHEMA_INVALID'); }
   finally { stub.restore(); }
 });
 
 test('respons teks biasa tidak terpengaruh pemeriksaan pemotongan terstruktur', async () => {
   const stub = stubNara(() => reply('jawaban panjang yang terpotong', 'length'));
   try {
-    const result = await generateAiContent({ purpose: 'chat', contents: [{ role: 'user', parts: [{ text: 'halo' }] }], maxOutputTokens: 1200 });
+    const result = await generateAiContent({ purpose: 'chat', contents: [{ role: 'user', parts: [{ text: 'halo' }] }], maxOutputTokens: 1200, providerAdapters: stub.providerAdapters });
     assert.equal(result.text, 'jawaban panjang yang terpotong');
   } finally { stub.restore(); }
 });

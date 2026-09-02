@@ -118,6 +118,7 @@ export const config = {
   aiProviderAllowedHosts: csv(process.env.AI_PROVIDER_ALLOWED_HOSTS || 'router.bynara.id,api.cloudflare.com'),
   aiCustomProviderHosts: csv(process.env.AI_CUSTOM_PROVIDER_HOSTS),
   aiProviderAllowedPorts: csv(process.env.AI_PROVIDER_ALLOWED_PORTS || '443').map(Number).filter((value) => Number.isInteger(value) && value > 0 && value <= 65535),
+  aiAllowTestLoopback: nodeEnv !== 'production' && process.env.AI_ALLOW_TEST_LOOPBACK === 'true',
   aiMaxRetries: boundedInt(process.env.AI_MAX_RETRIES, 2, 1, 4),
   aiMaxRequestsPerHour: boundedInt(process.env.AI_MAX_REQUESTS_PER_HOUR, 60, 5, 500),
   aiMaxRequestsPerDay: boundedInt(process.env.AI_MAX_REQUESTS_PER_DAY, 5000, 100, 100000),

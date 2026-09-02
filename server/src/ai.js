@@ -7,9 +7,10 @@ import { buildProcessorManifest } from './processor-manifest.js';
 import { audit, db } from './db.js';
 import { moderationMessage, moderateText } from './content-safety.js';
 import { HttpError, now } from './utils.js';
-import { responseEvents } from './chat-stream.js';
+import { createAdapterRegistry } from './ai-providers/adapter-registry.js';
+import { createOpenAiCompatibleAdapter } from './ai-providers/openai-compatible.js';
+import { createCloudflareAiAdapter } from './ai-providers/cloudflare-ai.js';
 
-const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 const SAFETY_FINISH_REASONS = new Set(['content_filter', 'safety', 'blocked']);
 const MAX_OUTPUT_TOKEN_CEILING = 32768;
 const registryPath = path.join(config.dataDir, 'ai-model-registry.json');
@@ -34,6 +35,45 @@ export class AiProviderError extends Error {
   }
 }
 
+function runtimeEgressPolicy() {
+  return {
+    isProd: config.isProd,
+    allowHttp: config.aiAllowTestLoopback,
+    allowTestLoopback: config.aiAllowTestLoopback,
+    allowedHosts: config.aiProviderAllowedHosts,
+    customAllowedHosts: config.aiCustomProviderHosts,
+    allowCustomHost: config.aiCustomProviderHosts.length > 0,
+    allowedPorts: config.aiProviderAllowedPorts,
+  };
+}
+
+function createRuntimeProviderAdapters() {
+  const common = {
+    policy: runtimeEgressPolicy(),
+    connectTimeoutMs: config.aiConnectTimeoutMs,
+    requestTimeoutMs: config.aiRequestTimeoutMs,
+    modelListTimeoutMs: config.aiModelListTimeoutMs,
+    maxResponseBytes: config.aiMaxProviderResponseBytes,
+  };
+  return createAdapterRegistry([
+    createOpenAiCompatibleAdapter({
+      ...common,
+      id: 'nararouter',
+      displayName: 'NaraRouter',
+      baseUrl: config.naraRouterBaseUrl,
+      getToken: () => config.naraRouterApiKey,
+    }),
+    createCloudflareAiAdapter({
+      ...common,
+      accountId: config.cloudflareAccountId,
+      configuredModel: config.cloudflareAiModel,
+      getToken: () => config.cloudflareAiToken,
+    }),
+  ]);
+}
+
+const runtimeProviderAdapters = createRuntimeProviderAdapters();
+
 function isDocumentPurpose(purpose = '') {
   const normalized = String(purpose || '').toLowerCase();
   return normalized === 'document' || normalized.startsWith('document_');
@@ -45,7 +85,7 @@ function isVisionRequest({ purpose, mode, requiresVision, contents }) {
 }
 
 function modelName(model) {
-  return String(model?.id || model?.name || '').replace(/^models\//, '').trim();
+  return String(model?.model || model?.modelId || model?.id || model?.name || '').replace(/^models\//, '').trim();
 }
 
 function booleanCapability(model, names) {
@@ -57,20 +97,26 @@ function booleanCapability(model, names) {
 }
 
 function normalizeModel(model) {
-  const id = modelName(model);
-  const lower = id.toLowerCase();
-  const vision = booleanCapability(model, ['supportsVision', 'supports_vision', 'vision', 'multimodal']);
-  const reasoning = booleanCapability(model, ['supportsReasoning', 'supports_reasoning', 'reasoning', 'thinking']);
-  const structured = booleanCapability(model, ['supportsStructuredOutput', 'supports_structured_output', 'structuredOutput', 'jsonMode']);
-  const tools = booleanCapability(model, ['supportsTools', 'supports_tools', 'tools', 'functionCalling']);
+  const id = String(model?.modelId || modelName(model));
+  const vision = model?.capabilities?.vision ?? booleanCapability(model, ['supportsVision', 'supports_vision', 'vision', 'multimodal']);
+  const reasoning = model?.capabilities?.reasoning ?? booleanCapability(model, ['supportsReasoning', 'supports_reasoning', 'reasoning', 'thinking']);
+  const structured = model?.capabilities?.structuredOutput ?? booleanCapability(model, ['supportsStructuredOutput', 'supports_structured_output', 'structuredOutput', 'jsonMode']);
+  const tools = model?.capabilities?.tools ?? booleanCapability(model, ['supportsTools', 'supports_tools', 'tools', 'functionCalling']);
+  const evidence = model?.capabilityEvidence || {};
   return {
     model: id,
-    provider: 'nararouter',
-    contextLimit: Number(model?.context_length || model?.contextLength || model?.inputTokenLimit || 0) || 128000,
-    supportsVision: vision ?? /vision|vl|multimodal|stepfun|step-3/i.test(lower),
-    supportsReasoning: reasoning ?? /reason|thinking|mistral|stepfun|step-3/i.test(lower),
-    supportsStructuredOutput: structured ?? Boolean(model?.supported_generation_methods?.includes?.('json_schema')),
-    supportsTools: tools ?? Boolean(model?.supported_generation_methods?.includes?.('tools')),
+    provider: String(model?.providerId || model?.provider || 'nararouter'),
+    contextLimit: Number(model?.contextLimit || model?.contextWindow || model?.context_length || model?.contextLength || model?.inputTokenLimit || 0) || 128000,
+    supportsVision: vision === true,
+    supportsReasoning: reasoning === true,
+    supportsStructuredOutput: structured === true,
+    supportsTools: tools === true,
+    capabilityEvidence: {
+      vision: evidence.vision || (vision == null ? 'unverified' : 'provider'),
+      reasoning: evidence.reasoning || (reasoning == null ? 'unverified' : 'provider'),
+      structuredOutput: evidence.structuredOutput || (structured == null ? 'unverified' : 'provider'),
+      tools: evidence.tools || (tools == null ? 'unverified' : 'provider'),
+    },
   };
 }
 
@@ -97,39 +143,24 @@ function cacheRegistry(models) {
   }
 }
 
-function timeoutSignal(timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Math.max(5000, Math.min(120000, Number(timeoutMs) || config.aiRequestTimeoutMs)));
-  return { controller, timer };
-}
-
-async function fetchModels() {
+async function fetchModels(adapters = runtimeProviderAdapters) {
   if (!config.naraRouterApiKey) throw new AiProviderError('NaraRouter belum dikonfigurasi.', { code: 'AI_NOT_CONFIGURED', status: 503 });
-  const { controller, timer } = timeoutSignal(config.aiRequestTimeoutMs);
   try {
-    const response = await fetch(`${config.naraRouterBaseUrl}/models`, {
-      headers: { accept: 'application/json', authorization: `Bearer ${config.naraRouterApiKey}` },
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw providerError(response.status, payload);
-    const models = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.models) ? payload.models : [];
+    const models = await adapters.get('nararouter').discoverModels();
     if (!models.length) throw new AiProviderError('NaraRouter tidak mengembalikan daftar model.', { code: 'NARAROUTER_MODELS_EMPTY', status: 502, retryable: true });
     cacheRegistry(models);
     return modelRegistry;
   } catch (error) {
     if (error instanceof AiProviderError) throw error;
-    throw new AiProviderError(error?.name === 'AbortError' ? 'Pencarian model NaraRouter melewati batas waktu.' : 'NaraRouter tidak dapat dihubungi.', {
-      code: error?.name === 'AbortError' ? 'AI_TIMEOUT' : 'AI_NETWORK_ERROR', status: error?.name === 'AbortError' ? 504 : 502, retryable: true,
+    throw new AiProviderError(error?.code === 'AI_EGRESS_TIMEOUT' ? 'Pencarian model NaraRouter melewati batas waktu.' : 'NaraRouter tidak dapat dihubungi.', {
+      code: error?.code || 'AI_NETWORK_ERROR', status: Number(error?.status || 502), retryable: error?.retryable !== false,
     });
-  } finally {
-    clearTimeout(timer);
   }
 }
 
-export async function initializeAiModelRegistry() {
+export async function initializeAiModelRegistry(adapters = runtimeProviderAdapters) {
   if (discoveryPromise) return discoveryPromise;
-  discoveryPromise = fetchModels().catch((error) => {
+  discoveryPromise = fetchModels(adapters).catch((error) => {
     if (!modelRegistry.length) console.warn('[ai] model discovery failed; no cached registry:', error?.code || error?.message || error);
     return modelRegistry;
   }).finally(() => { discoveryPromise = null; });
@@ -243,14 +274,6 @@ function finishUsage(id, { status, usage, latencyMs, errorCode = '', provider = 
   const totalTokens = Number(usage?.total_tokens ?? usage?.totalTokenCount ?? promptTokens + outputTokens);
   db.prepare(`UPDATE ai_usage_events SET provider = ?, model = ?, status = ?, input_tokens = ?, output_tokens = ?, reasoning_tokens = ?, total_tokens = ?, latency_ms = ?, error_code = ?, fallback_count = ?, fallback_reason = ? WHERE id = ?`)
     .run(provider, String(model || '').slice(0, 100), status, promptTokens, outputTokens, reasoningTokens, totalTokens, Math.max(0, Math.round(latencyMs || 0)), String(errorCode || '').slice(0, 80), fallbackCount, String(fallbackReason || '').slice(0, 160), id);
-}
-
-function providerError(status, payload) {
-  const providerCode = String(payload?.error?.code || payload?.error?.type || payload?.error?.status || `HTTP_${status}`).slice(0, 80);
-  const retryable = RETRYABLE_STATUS.has(status);
-  return new AiProviderError(status === 429 ? 'Kapasitas AI sedang penuh. Coba lagi sebentar.' : status === 401 ? 'NARAROUTER_API_KEY ditolak oleh NaraRouter.' : 'Provider AI belum dapat menyelesaikan permintaan ini.', {
-    code: `NARAROUTER_${providerCode.toUpperCase()}`, status: status === 429 ? 429 : status >= 500 ? 502 : status, retryable,
-  });
 }
 
 function sleep(milliseconds) { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }
@@ -417,62 +440,30 @@ function acquireProviderSlot(priority = 0) {
   });
 }
 
-async function requestOpenAiCompatible({ provider, model, messages, maxOutputTokens, responseJsonSchema, supportsStructuredOutput, reasoningEffort, timeoutMs, priority = 0 }) {
-  const isCloudflare = provider === 'cloudflare';
-  const baseUrl = isCloudflare ? `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/ai/v1` : config.naraRouterBaseUrl;
-  const token = isCloudflare ? config.cloudflareAiToken : config.naraRouterApiKey;
-  const body = { model, messages, max_tokens: maxOutputTokens, reasoning_effort: reasoningEffort };
-  if (responseJsonSchema && supportsStructuredOutput) body.response_format = { type: 'json_schema', json_schema: { name: 'laprakin_response', strict: true, schema: responseJsonSchema } };
+function asAiProviderError(error, message = 'Provider AI tidak dapat dihubungi.') {
+  if (error instanceof AiProviderError) return error;
+  return new AiProviderError(message, {
+    code: String(error?.code || 'AI_NETWORK_ERROR').slice(0, 80),
+    status: Number(error?.status || 502),
+    retryable: error?.retryable !== false,
+  });
+}
+
+async function requestOpenAiCompatible({ provider, model, messages, maxOutputTokens, responseJsonSchema, supportsStructuredOutput, reasoningEffort, timeoutMs, priority = 0, signal, providerAdapters = runtimeProviderAdapters }) {
   let lastError;
   for (let attempt = 0; attempt < config.aiMaxRetries; attempt += 1) {
     try {
-      const result = await runInProviderQueue(async () => {
-        const { controller, timer } = timeoutSignal(timeoutMs);
-        try {
-          const response = await fetch(`${baseUrl}/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(body), signal: controller.signal });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) throw providerError(response.status, payload);
-          return payload;
-        } finally { clearTimeout(timer); }
-      }, priority);
+      const result = await runInProviderQueue(() => providerAdapters.get(provider).complete({
+        model, messages, maxOutputTokens, responseJsonSchema, supportsStructuredOutput, reasoningEffort, timeoutMs, signal,
+      }), priority);
       return result;
     } catch (error) {
-      lastError = error?.name === 'AbortError' ? new AiProviderError('Provider AI melewati batas waktu.', { code: 'AI_TIMEOUT', status: 504, retryable: true }) : error instanceof AiProviderError ? error : new AiProviderError('Provider AI tidak dapat dihubungi.', { code: 'AI_NETWORK_ERROR', status: 502, retryable: true });
+      lastError = asAiProviderError(error);
       if (!lastError.retryable || attempt === config.aiMaxRetries - 1) throw lastError;
       await sleep(350 * (2 ** attempt) + Math.floor(Math.random() * 180));
     }
   }
   throw lastError;
-}
-
-function streamEndpoint(provider) {
-  return provider === 'cloudflare'
-    ? `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/ai/v1/chat/completions`
-    : `${config.naraRouterBaseUrl}/chat/completions`;
-}
-
-function streamToken(provider) {
-  return provider === 'cloudflare' ? config.cloudflareAiToken : config.naraRouterApiKey;
-}
-
-function streamDelta(payload) {
-  return String(payload?.choices?.[0]?.delta?.content ?? payload?.choices?.[0]?.message?.content ?? '');
-}
-
-function streamProviderError(payload, status) {
-  const providerCode = String(payload?.error?.code || payload?.error?.type || payload?.error?.status || `HTTP_${status}`).slice(0, 80);
-  return new AiProviderError('Provider AI tidak dapat melanjutkan respons streaming.', {
-    code: status ? `NARAROUTER_${providerCode.toUpperCase()}` : providerCode.toUpperCase(),
-    status: status === 429 ? 429 : status >= 500 ? 502 : status || 502,
-    retryable: status ? RETRYABLE_STATUS.has(status) : false,
-  });
-}
-
-function combinedAbortSignal(controller, signal) {
-  if (!signal) return controller.signal;
-  if (signal.aborted) controller.abort(signal.reason);
-  else signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
-  return controller.signal;
 }
 
 /**
@@ -491,72 +482,28 @@ export async function* streamOpenAiCompatible({
   timeoutMs = config.aiRequestTimeoutMs,
   priority = 0,
   signal,
-  fetchImpl = fetch,
+  providerAdapters = runtimeProviderAdapters,
 }) {
-  const body = { model, messages, max_tokens: maxOutputTokens, reasoning_effort: reasoningEffort, stream: true };
-  if (responseJsonSchema && supportsStructuredOutput) {
-    body.response_format = {
-      type: 'json_schema',
-      json_schema: { name: 'laprakin_response', strict: true, schema: responseJsonSchema },
-    };
-  }
   let lastError;
   for (let attempt = 0; attempt < config.aiMaxRetries; attempt += 1) {
     let release;
     let emitted = false;
     try {
       release = await acquireProviderSlot(priority);
-      const timeout = timeoutSignal(timeoutMs);
       try {
-        const response = await fetchImpl(streamEndpoint(provider), {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: `Bearer ${streamToken(provider)}` },
-          body: JSON.stringify(body),
-          signal: combinedAbortSignal(timeout.controller, signal),
-        });
-        const contentType = response.headers.get('content-type') || '';
-        const payload = contentType.includes('text/event-stream')
-          ? null
-          : await response.json().catch(() => ({}));
-        if (!response.ok) throw streamProviderError(payload, response.status);
-        if (!contentType.includes('text/event-stream')) {
-          const text = streamDelta(payload);
-          if (!text) throw new AiProviderError('Provider AI tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502, retryable: true });
-          emitted = true;
-          yield { type: 'delta', text };
-          yield { type: 'done', message: text, usage: payload?.usage || {}, finishReason: String(payload?.choices?.[0]?.finish_reason || '') };
-          return;
+        for await (const event of providerAdapters.get(provider).stream({
+          model, messages, maxOutputTokens, responseJsonSchema, supportsStructuredOutput, reasoningEffort, timeoutMs, signal,
+        })) {
+          if (event?.type === 'delta') emitted = true;
+          yield event;
         }
-
-        let message = '';
-        let usage = {};
-        let finishReason = '';
-        for await (const event of responseEvents(response)) {
-          if (event?.type === 'error') throw streamProviderError(event, 502);
-          if (event?.usage) usage = event.usage;
-          if (event?.choices?.[0]?.finish_reason) finishReason = String(event.choices[0].finish_reason);
-          const text = streamDelta(event);
-          if (!text) continue;
-          emitted = true;
-          message += text;
-          yield { type: 'delta', text };
-        }
-        if (!message) throw new AiProviderError('Provider AI tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502, retryable: true });
-        const doneEvent = { type: 'done', message, usage };
-        if (finishReason) doneEvent.finishReason = finishReason;
-        yield doneEvent;
         return;
       } finally {
-        clearTimeout(timeout.timer);
         release?.();
       }
     } catch (error) {
       release?.();
-      lastError = error?.name === 'AbortError'
-        ? new AiProviderError('Provider AI melewati batas waktu.', { code: 'AI_TIMEOUT', status: 504, retryable: true })
-        : error instanceof AiProviderError
-          ? error
-          : new AiProviderError('Provider AI tidak dapat dihubungi.', { code: 'AI_NETWORK_ERROR', status: 502, retryable: true });
+      lastError = asAiProviderError(error, 'Provider AI tidak dapat melanjutkan respons streaming.');
       if (!lastError.retryable || emitted || attempt === config.aiMaxRetries - 1) {
         yield { type: 'error', code: lastError.code };
         return;
@@ -567,10 +514,10 @@ export async function* streamOpenAiCompatible({
   yield { type: 'error', code: lastError?.code || 'AI_PROVIDER_ERROR' };
 }
 
-export async function generateAiContent({ userId = null, contextType = '', contextId = '', requestId = '', purpose = 'chat', mode = 'basic', contents, systemInstruction = '', maxOutputTokens = 1200, responseMimeType = 'text/plain', responseJsonSchema, requiresVision = false, requestTimeoutMs = config.aiRequestTimeoutMs, onDelta = null, signal = null }) {
+export async function generateAiContent({ userId = null, contextType = '', contextId = '', requestId = '', purpose = 'chat', mode = 'basic', contents, systemInstruction = '', maxOutputTokens = 1200, responseMimeType = 'text/plain', responseJsonSchema, requiresVision = false, requestTimeoutMs = config.aiRequestTimeoutMs, onDelta = null, signal = null, providerAdapters = runtimeProviderAdapters }) {
   if (!config.naraRouterApiKey) throw new HttpError(503, 'Provider AI belum dikonfigurasi.', 'AI_NOT_CONFIGURED');
   if (userId) requireExternalAiConsent({ userId, manifest: buildProcessorManifest(config) });
-  if (!modelRegistry.length) await initializeAiModelRegistry();
+  if (!modelRegistry.length) await initializeAiModelRegistry(providerAdapters);
   const route = selectAiRoute({ purpose, mode, requiresVision, contents, requiresStructuredOutput: Boolean(responseJsonSchema) });
   const visual = route.requiresVision;
   const candidates = route.candidates.length ? route.candidates : [config.cloudflareAiModel];
@@ -590,7 +537,7 @@ export async function generateAiContent({ userId = null, contextType = '', conte
         ? '\nReturn JSON only. Follow this schema exactly:\n' + JSON.stringify(responseJsonSchema || {})
         : '';
       try {
-        const providerOptions = { provider: 'nararouter', model, messages: toOpenAiMessages(compacted, `${systemInstruction}${schemaInstruction}`), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: capability?.supportsStructuredOutput, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs, priority: isDocumentPurpose(purpose) ? 10 : 0, signal };
+        const providerOptions = { provider: 'nararouter', model, messages: toOpenAiMessages(compacted, `${systemInstruction}${schemaInstruction}`), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: capability?.supportsStructuredOutput, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs, priority: isDocumentPurpose(purpose) ? 10 : 0, signal, providerAdapters };
         const payload = onDelta
           ? await collectProviderStream(providerOptions, onDelta)
           : await requestOpenAiCompatible(providerOptions);
@@ -619,7 +566,7 @@ export async function generateAiContent({ userId = null, contextType = '', conte
       }
     }
     if (!visual && config.cloudflareAiEnabled && config.cloudflareAccountId && config.cloudflareAiToken) {
-      const providerOptions = { provider: 'cloudflare', model: config.cloudflareAiModel, messages: toOpenAiMessages(contents, systemInstruction), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: false, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs, signal };
+      const providerOptions = { provider: 'cloudflare', model: config.cloudflareAiModel, messages: toOpenAiMessages(contents, systemInstruction), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: false, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs, signal, providerAdapters };
       const payload = onDelta
         ? await collectProviderStream(providerOptions, onDelta)
         : await requestOpenAiCompatible(providerOptions);

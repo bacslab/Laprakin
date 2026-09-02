@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { guardedProviderRequest } from '../src/guarded-provider-client.js';
+import { guardedProviderRequest, guardedProviderStream } from '../src/guarded-provider-client.js';
 
 const policy = {
   isProd: true,
@@ -84,6 +84,52 @@ test('guarded provider request applies a bounded operation timeout with safe err
     }),
     (error) => error.code === 'AI_EGRESS_TIMEOUT' && !/router|1\.1\.1\.1/.test(error.message),
   );
+});
+
+test('guarded provider timeout also bounds DNS resolution', async () => {
+  await assert.rejects(
+    guardedProviderRequest({
+      url: 'https://router.bynara.id/v1/models',
+      policy,
+      timeoutMs: 25,
+      lookup: async () => new Promise(() => {}),
+      transport: async () => ({ status: 200, headers: {}, body: [] }),
+    }),
+    (error) => error.code === 'AI_EGRESS_TIMEOUT',
+  );
+});
+
+test('guarded provider stream pins DNS and caps bytes while preserving progressive chunks', async () => {
+  let transportOptions;
+  const response = await guardedProviderStream({
+    url: 'https://router.bynara.id/v1/chat/completions',
+    method: 'POST',
+    body: '{"stream":true}',
+    policy,
+    maxBytes: 12,
+    lookup: async () => [{ address: '1.1.1.1', family: 4 }],
+    transport: async (options) => {
+      transportOptions = options;
+      return { status: 200, headers: { 'content-type': 'text/event-stream' }, body: [Buffer.from('one'), Buffer.from('two')] };
+    },
+  });
+  const chunks = [];
+  for await (const chunk of response.body) chunks.push(chunk.toString('utf8'));
+  assert.deepEqual(chunks, ['one', 'two']);
+  assert.equal(transportOptions.address, '1.1.1.1');
+  assert.equal(response.headers['content-type'], 'text/event-stream');
+
+  const oversized = await guardedProviderStream({
+    url: 'https://router.bynara.id/v1/chat/completions',
+    method: 'POST',
+    policy,
+    maxBytes: 5,
+    lookup: async () => [{ address: '1.1.1.1', family: 4 }],
+    transport: async () => ({ status: 200, headers: {}, body: [Buffer.from('123'), Buffer.from('456')] }),
+  });
+  await assert.rejects(async () => {
+    for await (const _chunk of oversized.body) { /* consume */ }
+  }, (error) => error.code === 'AI_EGRESS_RESPONSE_TOO_LARGE');
 });
 
 test('guarded provider errors never return raw response headers or bodies', async () => {
