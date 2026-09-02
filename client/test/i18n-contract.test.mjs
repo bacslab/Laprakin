@@ -25,6 +25,7 @@ const workspaceControllerSource = await readFile(new URL('../src/pages/Workspace
 const workspaceCollectionsSource = await readFile(new URL('../src/pages/Workspace/WorkspaceCollections.jsx', import.meta.url), 'utf8');
 const workspaceSidebarSource = await readFile(new URL('../src/pages/Workspace/Sidebar/ChatSessionRow.jsx', import.meta.url), 'utf8');
 const identitySource = await readFile(new URL('../src/pages/Workspace/IdentityIntakeModal.jsx', import.meta.url), 'utf8');
+const adminConsoleSource = await readFile(new URL('../src/pages/Admin/LegacyAdminWorkspace.jsx', import.meta.url), 'utf8');
 
 function keys(value, prefix = '') {
   return Object.entries(value).flatMap(([key, nested]) => {
@@ -142,6 +143,15 @@ test('workspace shell navigation and configuration consume keyed locale copy', (
   assert.doesNotMatch(workspaceCollectionsSource, /Belum ada dokumen|Kelompokkan chat|Buat project pertamamu/);
   assert.doesNotMatch(workspaceSidebarSource, /Folder baru|Pindahkan ke folder|Hapus chat/);
   assert.doesNotMatch(identitySource, /Lengkapi identitas laprakmu|Logo institusi wajib/);
+});
+
+test('admin console shell and operational panels consume keyed locale copy', () => {
+  assert.match(adminConsoleSource, /admin\.console\.tabs\.overview/);
+  assert.match(adminConsoleSource, /admin\.console\.privacyDescription/);
+  assert.match(adminConsoleSource, /admin\.console\.credits\.grantNotice/);
+  assert.match(adminConsoleSource, /admin\.console\.alerts\.markResolved/);
+  assert.match(adminConsoleSource, /admin\.console\.retention\.done/);
+  assert.doesNotMatch(adminConsoleSource, /Privacy-first monitoring|Tambahkan kredit|Error operasional|Pembersihan retensi/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {
