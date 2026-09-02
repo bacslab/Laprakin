@@ -1,5 +1,10 @@
 ## 21.0.7 - 2026-09-02
 
+- Menutup checkpoint integritas P0 dengan ledger mutasi idempoten, pemulihan stream tanpa POST ulang, dan bukti satu request ID untuk pesan, penggunaan AI, serta operasi kredit.
+- Menambahkan manifest processor NaraRouter yang bertipe dan consent AI eksternal berversi, default-off, dapat dicabut, serta diwajibkan server sebelum provider, persistensi, atau pemakaian kredit.
+- Menghormati preferensi Enter-to-send beserta Shift/Ctrl/Cmd/IME dan memverifikasinya pada desktop serta viewport mobile.
+- Menyimpan reaksi pesan secara reversibel dan owner-scoped dengan metadata konfigurasi kanonis serta analytics agregat tanpa isi percakapan.
+- Memperbaiki jalur locale Workspace dan menjaga state consent Settings serta composer tetap koheren tanpa reload.
 - Menyimpan enrollment TOTP admin secara terenkripsi, menolak replay code, dan menambahkan challenge step-up pada seluruh route admin dengan UI enrollment yang bisa dipulihkan secara terkontrol.
 - Menjadikan audit admin queryable dengan filter aman dan pencatatan mutation terstruktur yang konsisten tanpa raw IP, token, atau isi dokumen.
 - Menambahkan pemeriksaan password opsional berbasis range query k-anonim serta memigrasikan surface Auth ke translation key Indonesia/Inggris.

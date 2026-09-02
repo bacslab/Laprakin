@@ -179,10 +179,11 @@ test('chat API relays provider deltas before returning the canonical response', 
     assert.equal(consent.response.status, 200, consent.payload?.error?.message);
     assert.equal(consent.payload.consent.active, true);
     const requestId = `chat-${randomUUID()}`;
+    const rawPrompt = 'Jelaskan Static Routing.';
     const streamed = await request(`/chat/sessions/${sessionId}/messages`, {
       method: 'POST',
       headers: { accept: 'text/event-stream', 'idempotency-key': requestId },
-      body: JSON.stringify({ requestId, content: 'Jelaskan Static Routing.', aiMode: 'basic', allowExternalAi: true }),
+      body: JSON.stringify({ requestId, content: rawPrompt, aiMode: 'basic', allowExternalAi: true }),
     });
     assert.equal(streamed.response.status, 200, streamed.payload);
     assert.match(streamed.response.headers.get('content-type') || '', /text\/event-stream/);
@@ -199,7 +200,7 @@ test('chat API relays provider deltas before returning the canonical response', 
     const replayed = await request(`/chat/sessions/${sessionId}/messages`, {
       method: 'POST',
       headers: { accept: 'text/event-stream', 'idempotency-key': requestId },
-      body: JSON.stringify({ requestId, content: 'Jelaskan Static Routing.', aiMode: 'basic', allowExternalAi: true }),
+      body: JSON.stringify({ requestId, content: rawPrompt, aiMode: 'basic', allowExternalAi: true }),
     });
     const replayEvents = replayed.payload.split('\n\n')
       .filter((block) => block.startsWith('data: '))
@@ -213,9 +214,31 @@ test('chat API relays provider deltas before returning the canonical response', 
 
     const database = new DatabaseSync(path.join(sandbox, 'data', 'laprakin.sqlite'), { readOnly: true });
     try {
-      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM chat_messages WHERE request_id = ?').get(requestId).count, 2);
-      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM ai_usage_events WHERE request_id = ?').get(requestId).count, 1);
-      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM wallet_entries WHERE request_id = ?').get(requestId).count, 1);
+      const mutationRows = database.prepare(`
+        SELECT request_id, request_hash, canonical_response_json
+        FROM mutation_requests WHERE request_id = ?
+      `).all(requestId);
+      const messageCounts = database.prepare(`
+        SELECT role, COUNT(*) AS count
+        FROM chat_messages WHERE request_id = ?
+        GROUP BY role ORDER BY role
+      `).all(requestId);
+      const usageRows = database.prepare('SELECT * FROM ai_usage_events WHERE request_id = ?').all(requestId);
+      const walletRows = database.prepare('SELECT * FROM wallet_entries WHERE request_id = ?').all(requestId);
+      const auditRows = database.prepare('SELECT action, target_type, target_id, metadata_json FROM audit_logs').all();
+
+      assert.equal(mutationRows.length, 1);
+      assert.match(mutationRows[0].request_hash, /^[a-f0-9]{64}$/);
+      assert.equal(messageCounts.find((row) => row.role === 'user')?.count, 1);
+      assert.equal(messageCounts.find((row) => row.role === 'assistant')?.count, 1);
+      assert.equal(usageRows.length, 1);
+      assert.equal(walletRows.length, 1);
+      assert.equal(usageRows[0].request_id, requestId);
+      assert.equal(walletRows[0].request_id, requestId);
+
+      const operationalRecords = JSON.stringify({ usageRows, auditRows });
+      assert.equal(operationalRecords.includes(rawPrompt), false);
+      assert.equal(operationalRecords.includes('stream-test-key'), false);
     } finally {
       database.close();
     }

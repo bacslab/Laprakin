@@ -446,7 +446,7 @@ git commit -m "feat: persist message reactions"
 - Consumes: all P0 tests and commit history.
 - Produces: the phase checkpoint required before AI control-plane implementation.
 
-- [ ] **Step 1: Re-run every focused P0 test from a fresh process**
+- [x] **Step 1: Re-run every focused P0 test from a fresh process**
 
 Run:
 
@@ -455,7 +455,7 @@ node --test client/test/api-stream-contract.test.mjs client/test/request-lifecyc
 node --test server/test/mutation-requests.test.mjs server/test/chat-idempotency-api.test.mjs server/test/chat-stream-api.test.mjs server/test/external-ai-consent.test.mjs server/test/provider-contract.test.mjs server/test/message-reactions-api.test.mjs
 ```
 
-- [ ] **Step 2: Run the complete applicable baseline**
+- [x] **Step 2: Run the complete applicable baseline**
 
 Run:
 
@@ -468,15 +468,15 @@ npm run build
 npm run test:e2e
 ```
 
-- [ ] **Step 3: Inspect canonical database evidence**
+- [x] **Step 3: Inspect canonical database evidence**
 
 For one replayed chat request, record privacy-safe counts proving one mutation row, one user message, one assistant message, one usage event, and one credit operation share the request ID. Record zero raw content or credentials in audit/usage records.
 
-- [ ] **Step 4: Update audit findings**
+- [x] **Step 4: Update audit findings**
 
 For AUDIT-001 through AUDIT-005, record severity, user impact, reproduction, root cause, changed files, fix, exact tests, actual pass/fail counts, warnings, and residual risk. Keep AUDIT-006 through AUDIT-010 open unless their specific evidence is already implemented.
 
-- [ ] **Step 5: Add the release note and commit the checkpoint**
+- [x] **Step 5: Add the release note and commit the checkpoint**
 
 ```text
 git add docs/audits/re-audit-baseline.md docs/audits/full-ux-security-audit.md CHANGELOG.md

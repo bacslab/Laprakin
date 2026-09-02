@@ -8,66 +8,61 @@ This is a living evidence register. Findings are closed only by source inspectio
 
 - Severity: P0
 - User impact: duplicate messages, provider usage, credit operations, jobs, or documents after content-type rewriting, disconnect, reload, retry, or double click.
-- Evidence: `client/src/api.js` calls `api(path, requestOptions)` when the original response is not SSE and when the stream ends without the expected event combination. The server message schema has no request ID.
-- Reproduction: behavioral fetch-count and concurrent API tests are introduced in the P0 plan.
+- Reproduction: the original stream client issued a second `POST` when content type was rewritten or an SSE terminal event was missing; concurrent identical requests had no durable uniqueness boundary.
 - Root cause: transport parsing is coupled to mutation retry and the server has no canonical mutation ledger.
-- Changed files: not implemented.
-- Fix: planned durable request ledger, original-response parsing, canonical snapshot recovery, and one request ID across messages, usage, jobs, and credits.
-- Tests: not yet run red.
-- Actual verification result: open.
-- Residual risk: unbounded until implementation.
+- Changed files: `client/src/api.js`, `client/src/lib/request-lifecycle.js`, `client/src/pages/Workspace/useLegacyWorkspaceController.js`, `server/src/db.js`, `server/src/mutation-requests.js`, `server/src/chat-message-mutation.js`, `server/src/index.js`, `server/src/services.js`, `server/src/ai.js`, and their focused tests.
+- Fix: the client now parses the original response only, recovers through a read-only canonical snapshot, and retains the request identity across failure/reload. The server ledger serializes the mutation and uses the same request ID for messages, usage, jobs, and credit operations.
+- Tests: `api-stream-contract`, `request-lifecycle`, `mutation-requests`, `chat-idempotency-api`, `chat-message-mutation`, and `chat-stream-api`; included in the fresh focused P0 results of 33/33 client and 13/13 server tests.
+- Actual verification result: resolved and verified. One streamed request plus replay produced exactly one ledger row, one user message, one assistant message, one AI-usage event, and one credit operation; the provider completion count did not increase on replay. Complete suites passed at 59/59 client and 122/122 server tests.
+- Residual risk: request identity is enforced for the remediated chat path; every future cost-bearing mutation must adopt the ledger before launch. Multi-instance contention still depends on the shared SQLite deployment topology and requires the later production architecture gate.
 
 ## AUDIT-002 — Provider contract and UI drift
 
 - Severity: P0
 - User impact: users and administrators receive false processor information and error handling can ignore the actual provider state.
-- Evidence: `server/src/integrations.js` returns `naraRouter`; `AdminLegacyContentPanels.jsx` renders “Gemini API” and reads `integrationStatus.gemini`.
-- Reproduction: provider-manifest contract test is introduced in the P0 plan.
+- Reproduction: the server returned `naraRouter` while the Admin integration surface read `gemini` and displayed “Gemini API”.
 - Root cause: provider identity is duplicated as hard-coded client and server property names.
-- Changed files: not implemented.
-- Fix: planned server-owned typed processor/provider manifest.
-- Tests: not yet run red.
-- Actual verification result: open.
-- Residual risk: legal and product disclosure remain inaccurate until closure.
+- Changed files: `server/src/processor-manifest.js`, `server/src/integrations.js`, `server/src/index.js`, `client/src/pages/Admin/AdminLegacyContentPanels.jsx`, `client/src/pages/Admin/LegacyAdminWorkspace.jsx`, `client/src/pages/Workspace/Composer.jsx`, and locale resources.
+- Fix: a server-owned, typed, versioned processor manifest now supplies the processor, provider, model, policy, region, retention, and disclosed data-class contract to user and Admin surfaces.
+- Tests: `provider-contract`, `external-ai-consent`, `workspace-helpers`, `ai-consent-labels`, `ai-consent-ui-contract`, and `i18n-contract`; included in the fresh focused P0 results of 33/33 client and 13/13 server tests.
+- Actual verification result: resolved and verified. Browser inspection showed NaraRouter consistently in the first-use gate and Settings; no Gemini label remained on the touched integration surface.
+- Residual risk: the manifest currently describes the single implemented processor. Future provider additions must update the manifest and invalidate consent when its versioned disclosure changes.
 
 ## AUDIT-003 — External AI consent drift
 
 - Severity: P0
 - User impact: a new user can transmit academic material externally without a durable, versioned consent record.
-- Evidence: `defaultChatConfig.configuration.allowExternalAi` is true; no consent table records processor IDs, data classes, policy version, manifest version, source, and timestamp.
-- Reproduction: consent-before-provider-invocation test is introduced in the P0 plan.
+- Reproduction: the authenticated client defaulted `allowExternalAi` to true and had no processor-, manifest-, or policy-versioned consent record.
 - Root cause: a mutable chat/session preference is being treated as processor consent.
-- Changed files: not implemented.
-- Fix: planned default-off versioned consent service tied to the active manifest.
-- Tests: not yet run red.
-- Actual verification result: open.
-- Residual risk: external processing must be treated as a launch blocker.
+- Changed files: `server/src/external-ai-consent.js`, `server/src/db.js`, `server/src/index.js`, `server/src/ai.js`, `client/src/lib/workspace-helpers.js`, `client/src/lib/ai-consent-labels.js`, `client/src/pages/Workspace/Composer.jsx`, `client/src/pages/Workspace/SettingsModal.jsx`, `client/src/pages/Workspace/useLegacyWorkspaceController.js`, and their focused tests.
+- Fix: external AI is default-off and server-enforced before provider invocation, credit use, or message persistence. Consent records the processor/data classes, manifest version, policy version, source surface, and grant/revoke timestamps; stale consent is inactive.
+- Tests: `external-ai-consent`, `chat-stream-api`, `workspace-helpers`, `ai-consent-labels`, and `ai-consent-ui-contract`; included in the fresh focused P0 results of 33/33 client and 13/13 server tests.
+- Actual verification result: resolved and verified. The API returned `412 AI_CONSENT_REQUIRED`, with zero provider calls and zero persisted messages before consent. Browser checks proved first-use grant, immediate revoke, and immediate re-gating without reload.
+- Residual risk: this is explicit application consent, not a substitute for the final legal-policy review. Revocation prevents new sends; downstream provider deletion obligations remain part of the later privacy/retention phase.
 
 ## AUDIT-004 — Enter-to-send preference is ignored
 
 - Severity: P0 correctness/accessibility
 - User impact: users who disable Enter-to-send can submit incomplete content; keyboard behavior is unpredictable across preferences.
-- Evidence: `Composer.jsx` submits any Enter without Shift when not composing and receives no `enterToSend` prop.
-- Reproduction: pure keyboard truth table plus rendered desktop/mobile browser workflow.
+- Reproduction: `Composer.jsx` submitted every Enter press that was not Shift+Enter or an IME composition and never consumed `prefs.enterToSend`.
 - Root cause: Settings persists a preference that the composer never consumes.
-- Changed files: not implemented.
-- Fix: planned pure keyboard decision function and explicit preference wiring.
-- Tests: not yet run red.
-- Actual verification result: open.
-- Residual risk: IME and mobile behavior require browser verification after unit coverage.
+- Changed files: `client/src/lib/composer-keyboard.js`, `client/src/pages/Workspace/Composer.jsx`, `client/src/pages/Workspace/ChatSurface.jsx`, `client/src/pages/Workspace/LegacyWorkspaceView.jsx`, and `scripts/ui-workflow-check.py`.
+- Fix: a pure keyboard decision function now handles Enter, Shift+Enter, Ctrl/Cmd+Enter, composition state, and the persisted preference; the visible hint follows the active mode.
+- Tests: `composer-keyboard` plus the fresh focused client P0 run (33/33) and complete client suite (59/59).
+- Actual verification result: resolved and verified. Browser checks at desktop and 390 px proved Enter-to-send on, Shift+Enter newline, Enter-to-send off, Ctrl+Enter submit, composition suppression, and no horizontal overflow.
+- Residual risk: rendered checks used the interactive browser because the standalone Python Playwright package is not installed in the current workstation interpreter. The script compiles and is updated, but CI must install and execute it before release.
 
 ## AUDIT-005 — Message reactions are local-only
 
 - Severity: P0 trust/data integrity
 - User impact: a reaction can appear saved and disappear after reload; quality analytics cannot be tied safely to the generating configuration.
-- Evidence: no message-reaction table or authenticated reaction endpoint exists.
-- Reproduction: planned create/reload/reverse/remove/authorization API and browser tests.
+- Reproduction: reactions changed component-local state only; reload discarded them and the server had no owner-scoped record.
 - Root cause: reaction state was implemented as a presentation action without persistence.
-- Changed files: not implemented.
-- Fix: planned owner-scoped reaction record populated from canonical assistant-message metadata.
-- Tests: not yet run red.
-- Actual verification result: open.
-- Residual risk: analytics must remain disabled until privacy-safe persistence exists.
+- Changed files: `server/src/message-reactions.js`, `server/src/db.js`, `server/src/index.js`, `client/src/lib/chat-message-actions.js`, `client/src/pages/Workspace/ChatComponents.jsx`, `client/src/pages/Workspace/useLegacyWorkspaceController.js`, and their focused tests.
+- Fix: authenticated `PUT`/`DELETE` endpoints persist one reversible owner-scoped reaction per assistant message. Immutable request/provider/model/configuration/prompt-template metadata comes from the canonical message and mutation ledger, not browser input; Admin analytics exposes aggregates only.
+- Tests: `message-reactions-api` and `chat-message-actions`; included in the fresh focused P0 results of 33/33 client and 13/13 server tests.
+- Actual verification result: resolved and verified. API coverage proved create, reload, reverse, remove, cross-user 404, metadata integrity, and content-free aggregate analytics. Browser checks proved selection, persistence across reload, reversal, and removal across reload.
+- Residual risk: enumerated reasons are implemented but the current UI captures the reaction only. Any future free-text feedback requires a separate privacy and moderation design.
 
 ## AUDIT-006 — Runtime DOM i18n walker
 

@@ -58,3 +58,45 @@ All 38 definition-of-done requirements are initially classified as `not proven`.
 ## Phase Gate
 
 Broad authenticated visual work is blocked until the P0 integrity plan closes AUDIT-001 through AUDIT-005 with fresh server, client, integration, and browser evidence.
+
+## P0 Integrity Checkpoint — 2026-09-03
+
+AUDIT-001 through AUDIT-005 are resolved and verified on `remediation/claude-grade-v2`. This checkpoint lifts only the integrity-phase gate; it does not change the overall `NO-GO` verdict while AUDIT-006 through AUDIT-010 and the remaining production controls are open.
+
+| Evidence | Result | Warnings or limits |
+|---|---:|---|
+| Focused client P0 tests | 33/33 passed | none |
+| Focused server P0 tests | 13/13 passed | Node SQLite experimental warning |
+| Complete client suite | 59/59 passed | none |
+| Complete server suite | 122/122 passed | Node SQLite experimental warnings |
+| ESLint | passed | none |
+| Typecheck | passed | none |
+| Production build | passed | vendor JS 654.85 kB gzip 193.72 kB; CSS 621.82 kB gzip 98.21 kB; PDF worker 1.26 MB |
+| Node API E2E | passed on a fresh isolated server/data directory | auth, profile, evidence, timeline, quality gate, template DOCX, restore, and verified password change; the first attempt against the long-running shared dev database was correctly rejected by accumulated registration-risk state |
+| Rendered browser checks | passed | interactive browser used; workstation Python lacks Playwright, so `scripts/ui-workflow-check.py` was syntax-checked but not executed |
+
+### Canonical replay evidence
+
+The streamed chat integration test sends a successful request and then replays the same payload with the same request ID. Its read-only SQLite inspection proves:
+
+| Record sharing the request ID | Count |
+|---|---:|
+| `mutation_requests` | 1 |
+| `chat_messages` with role `user` | 1 |
+| `chat_messages` with role `assistant` | 1 |
+| `ai_usage_events` | 1 |
+| `wallet_entries` | 1 |
+
+The replay does not call the provider again and returns the same canonical message IDs. The mutation ledger stores a SHA-256 request hash rather than the raw request body. The test also searches serialized AI-usage and audit rows for the unique raw prompt and fake provider credential and finds neither. Message content remains only in the user-owned chat record, where the product requires it.
+
+### Finding disposition
+
+| Finding | Checkpoint state | Primary proof |
+|---|---|---|
+| AUDIT-001 | Resolved and verified | durable mutation ledger, single-POST stream recovery, canonical replay, shared request ID counts |
+| AUDIT-002 | Resolved and verified | server-owned typed processor manifest and rendered NaraRouter disclosure |
+| AUDIT-003 | Resolved and verified | default-off versioned consent enforced before provider, credit, and persistence |
+| AUDIT-004 | Resolved and verified | keyboard truth table plus desktop and 390 px rendered behavior |
+| AUDIT-005 | Resolved and verified | owner-scoped reaction API, persisted reload/reversal/removal, aggregate-only analytics |
+
+Open work proceeds in risk order: secure AI control plane and secrets, capability-based Admin authorization, then the broader privacy, accessibility, performance, reliability, CI, and release evidence phases.
