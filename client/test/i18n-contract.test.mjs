@@ -22,6 +22,9 @@ const [id, en, source, landingSource, statusSource, pricingSource, billingSource
 const runtimeSource = await readFile(new URL('../src/i18n/I18nRuntime.jsx', import.meta.url), 'utf8');
 const workspaceShellSource = await readFile(new URL('../src/pages/Workspace/LegacyWorkspaceView.jsx', import.meta.url), 'utf8');
 const workspaceControllerSource = await readFile(new URL('../src/pages/Workspace/useLegacyWorkspaceController.js', import.meta.url), 'utf8');
+const workspaceCollectionsSource = await readFile(new URL('../src/pages/Workspace/WorkspaceCollections.jsx', import.meta.url), 'utf8');
+const workspaceSidebarSource = await readFile(new URL('../src/pages/Workspace/Sidebar/ChatSessionRow.jsx', import.meta.url), 'utf8');
+const identitySource = await readFile(new URL('../src/pages/Workspace/IdentityIntakeModal.jsx', import.meta.url), 'utf8');
 
 function keys(value, prefix = '') {
   return Object.entries(value).flatMap(([key, nested]) => {
@@ -132,6 +135,13 @@ test('workspace shell navigation and configuration consume keyed locale copy', (
   assert.match(workspaceControllerSource, /workspace\.notices\.quizPassed/);
   assert.match(workspaceControllerSource, /workspace\.dialogs\.newProjectTitle/);
   assert.doesNotMatch(workspaceControllerSource, /Chat disematkan|Project dibuat|DOCX siap diunduh|Pulihkan versi dokumen/);
+  assert.match(workspaceCollectionsSource, /workspace\.collections\.documents\.title/);
+  assert.match(workspaceCollectionsSource, /workspace\.collections\.projects\.emptyTitle/);
+  assert.match(workspaceSidebarSource, /workspace\.sidebar\.deleteMessage/);
+  assert.match(identitySource, /workspace\.identity\.title/);
+  assert.doesNotMatch(workspaceCollectionsSource, /Belum ada dokumen|Kelompokkan chat|Buat project pertamamu/);
+  assert.doesNotMatch(workspaceSidebarSource, /Folder baru|Pindahkan ke folder|Hapus chat/);
+  assert.doesNotMatch(identitySource, /Lengkapi identitas laprakmu|Logo institusi wajib/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {

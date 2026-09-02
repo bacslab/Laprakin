@@ -4,9 +4,11 @@ import { api } from '../../api';
 import { Button } from '../../components/Button';
 import { INSTITUTION_LOGO_MAX_BYTES } from '../../components/InstitutionLogoField';
 import { useApp } from '../../state/ui-context';
+import { useI18n } from '../../i18n';
 
 export default function IdentityIntakeModal({ user, onSave, onBack, busy }) {
   const { setNotice } = useApp();
+  const { t } = useI18n();
   const logoInputRef = useRef(null);
   const identityFirstInputRef = useRef(null);
   const [logoBusy, setLogoBusy] = useState(false);
@@ -40,11 +42,11 @@ export default function IdentityIntakeModal({ user, onSave, onBack, busy }) {
     event.target.value = '';
     if (!file) return;
     if (file.type !== 'image/png' || !/\.png$/i.test(file.name)) {
-      setNotice('Logo institusi wajib berformat PNG.');
+      setNotice(t('workspace.identity.invalidLogoType'));
       return;
     }
     if (file.size > INSTITUTION_LOGO_MAX_BYTES) {
-      setNotice('Ukuran logo maksimal 5 MB.');
+      setNotice(t('workspace.identity.logoTooLarge'));
       return;
     }
     const body = new FormData();
@@ -54,7 +56,7 @@ export default function IdentityIntakeModal({ user, onSave, onBack, busy }) {
       const result = await api('/profile/institution-logo', { method: 'POST', body, form: true });
       setLogoPreviewFailed(false);
       setForm((value) => ({ ...value, institutionLogoUrl: result.user?.institutionLogoUrl || '' }));
-      setNotice('Logo institusi siap dipakai.');
+      setNotice(t('workspace.identity.logoReady'));
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -64,25 +66,25 @@ export default function IdentityIntakeModal({ user, onSave, onBack, busy }) {
   const submit = async (event) => { event.preventDefault(); if (valid) await onSave(form); };
   return <div className="identity-intake-overlay" role="dialog" aria-modal="true" aria-labelledby="identity-intake-title">
     <form className="identity-intake-modal" onSubmit={submit}>
-      <header><span><UserRound size={17} /></span><div><small>Sekali saja</small><h2 id="identity-intake-title">Lengkapi identitas laprakmu</h2><p>Identitas diperlukan hanya untuk pembuatan dokumen. Kami tidak dapat melihat dan mengakses data pengguna untuk keperluan apa pun.</p><p className="identity-intake-follow-up">Setelah disimpan, pesan yang tadi kamu kirim baru diproses.</p></div></header>
+      <header><span><UserRound size={17} /></span><div><small>{t('workspace.identity.oneTime')}</small><h2 id="identity-intake-title">{t('workspace.identity.title')}</h2><p>{t('workspace.identity.description')}</p><p className="identity-intake-follow-up">{t('workspace.identity.followUp')}</p></div></header>
       <div className="identity-intake-grid">
-        <label>Nama lengkap<input ref={identityFirstInputRef} aria-label="Nama lengkap" autoComplete="name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Nama sesuai data kampus" /></label>
-        <label>NPM / NIM<input aria-label="NPM atau NIM" inputMode="numeric" autoComplete="off" value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder="Nomor mahasiswa" /></label>
-        <label>Kelas<input aria-label="Kelas" autoComplete="off" value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder="Kelas anda" /></label>
-        <label>Univ / institusi<input aria-label="Universitas atau institusi" value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder="Contoh: Universitas Republik Indonesia" /></label>
-        <label>Fakultas / Jurusan<input aria-label="Fakultas atau jurusan" value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder="Contoh: Fakultas Hukum" /></label>
-        <label>Program studi<input aria-label="Program studi" value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder="Contoh: S1 Rekayasa Hukum" /></label>
+        <label>{t('workspace.identity.fullName')}<input ref={identityFirstInputRef} aria-label={t('workspace.identity.fullNameAria')} autoComplete="name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder={t('workspace.identity.fullNamePlaceholder')} /></label>
+        <label>{t('workspace.identity.studentId')}<input aria-label={t('workspace.identity.studentIdAria')} inputMode="numeric" autoComplete="off" value={form.nim} onChange={(event) => setForm({ ...form, nim: event.target.value })} placeholder={t('workspace.identity.studentIdPlaceholder')} /></label>
+        <label>{t('workspace.identity.class')}<input aria-label={t('workspace.identity.class')} autoComplete="off" value={form.className} onChange={(event) => setForm({ ...form, className: event.target.value })} placeholder={t('workspace.identity.classPlaceholder')} /></label>
+        <label>{t('workspace.identity.institution')}<input aria-label={t('workspace.identity.institutionAria')} value={form.institutionName} onChange={(event) => setForm({ ...form, institutionName: event.target.value })} placeholder={t('workspace.identity.institutionPlaceholder')} /></label>
+        <label>{t('workspace.identity.faculty')}<input aria-label={t('workspace.identity.facultyAria')} value={form.facultyName} onChange={(event) => setForm({ ...form, facultyName: event.target.value })} placeholder={t('workspace.identity.facultyPlaceholder')} /></label>
+        <label>{t('workspace.identity.studyProgram')}<input aria-label={t('workspace.identity.studyProgram')} value={form.studyProgramName} onChange={(event) => setForm({ ...form, studyProgramName: event.target.value })} placeholder={t('workspace.identity.studyProgramPlaceholder')} /></label>
         <div className="identity-logo-field">
-          <span>Logo institusi</span>
+          <span>{t('workspace.identity.logo')}</span>
           <div className="identity-logo-control">
-            <span className={`identity-logo-preview ${hasLogoPreview ? '' : 'is-empty'}`.trim()}>{hasLogoPreview ? <img src={form.institutionLogoUrl} alt="Logo institusi" onError={() => setLogoPreviewFailed(true)} /> : null}</span>
-            <div><b>{hasLogoPreview ? 'Logo PNG terunggah' : 'Unggah logo PNG'}</b><small>Wajib untuk cover, maksimal 5 MB.</small></div>
-            <input ref={logoInputRef} aria-label="Upload logo institusi" hidden type="file" accept=".png,image/png" onChange={uploadLogo} />
-            <Button type="button" variant="secondary" disabled={busy || logoBusy} onClick={() => logoInputRef.current?.click()}>{logoBusy ? <LoaderCircle className="spin" size={14} /> : <Upload size={14} />}{hasLogoPreview ? 'Ganti' : 'Unggah'}</Button>
+            <span className={`identity-logo-preview ${hasLogoPreview ? '' : 'is-empty'}`.trim()}>{hasLogoPreview ? <img src={form.institutionLogoUrl} alt={t('workspace.identity.logo')} onError={() => setLogoPreviewFailed(true)} /> : null}</span>
+            <div><b>{hasLogoPreview ? t('workspace.identity.logoUploaded') : t('workspace.identity.uploadLogo')}</b><small>{t('workspace.identity.logoHint')}</small></div>
+            <input ref={logoInputRef} aria-label={t('workspace.identity.uploadLogoAria')} hidden type="file" accept=".png,image/png" onChange={uploadLogo} />
+            <Button type="button" variant="secondary" disabled={busy || logoBusy} onClick={() => logoInputRef.current?.click()}>{logoBusy ? <LoaderCircle className="spin" size={14} /> : <Upload size={14} />}{hasLogoPreview ? t('workspace.identity.replace') : t('workspace.identity.upload')}</Button>
           </div>
         </div>
       </div>
-      <footer><button type="button" onClick={onBack} disabled={busy || logoBusy}>Kembali edit pesan</button><Button type="submit" disabled={busy || logoBusy || !valid}>{busy ? <LoaderCircle className="spin" size={14} /> : <ArrowRight size={14} />}Simpan & lanjutkan</Button></footer>
+      <footer><button type="button" onClick={onBack} disabled={busy || logoBusy}>{t('workspace.identity.back')}</button><Button type="submit" disabled={busy || logoBusy || !valid}>{busy ? <LoaderCircle className="spin" size={14} /> : <ArrowRight size={14} />}{t('workspace.identity.saveContinue')}</Button></footer>
     </form>
   </div>;
 }
