@@ -38,7 +38,7 @@ import { useFocusReturn } from './hooks/useFocusReturn';
 import { useFocusTrap } from './hooks/useFocusTrap';
 import { createTranslator } from './i18n';
 import { translateUiText } from './i18n/legacy';
-import { I18nContext, useI18n } from './i18n/context';
+import { I18nContext } from './i18n/context';
 import { FeatureUpdatesAdmin, ProductUpdatePopup } from './FeatureUpdates';
 import { renderAsync as renderDocx } from 'docx-preview';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -46,6 +46,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 const LandingRoutePage = loadPage(() => import('./pages/Landing/LandingPage'));
 const AuthPageModule = loadPage(() => import('./pages/Auth/AuthPage'));
 const AdminWorkspaceBoundary = loadPage(() => import('./pages/Admin/AdminWorkspace'));
+const AdminMfaGate = loadPage(() => import('./pages/Admin/AdminMfaGate'));
 const WorkspaceBoundary = loadPage(() => import('./pages/Workspace/Workspace'));
 
 const textNodeOriginals = new WeakMap();
@@ -751,55 +752,6 @@ function ProtectedBilling() {
   return <BillingPage />;
 }
 function PricingRedirect() { const location = useLocation(); return <Navigate to={`/pricing${location.search || ''}`} replace />; }
-
-function AdminMfaGate({ children }) {
-  const { setNotice } = useApp();
-  const { t } = useI18n();
-  const [state, setState] = useState(null);
-  const [secret, setSecret] = useState('');
-  const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  const load = useCallback(async () => {
-    try {
-      const data = await api('/admin/mfa/status');
-      setState(data.mfa);
-    } catch (error) {
-      setNotice(error.message);
-    }
-  }, [setNotice]);
-  useEffect(() => { load(); }, [load]);
-  if (!state || !state.required || state.verified) return state ? children : <LoadingScreen />;
-  const enroll = async () => {
-    setBusy(true);
-    try {
-      const data = await api('/admin/mfa/enroll', { method: 'POST', body: {} });
-      setSecret(data.secret || '');
-      setState(data.mfa);
-      setNotice(t('admin.enrollmentReady'));
-    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
-  };
-  const verify = async (event) => {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const data = await api('/admin/mfa/verify', { method: 'POST', body: { code } });
-      setCsrfToken(data.csrfToken);
-      setState(data.mfa);
-      setCode('');
-    } catch (error) { setNotice(error.message); } finally { setBusy(false); }
-  };
-  return <main className="admin-mfa-gate" aria-labelledby="admin-mfa-title">
-    <section className="admin-mfa-card">
-      <ShieldCheck size={24} aria-hidden="true" />
-      <span className="admin-eyebrow">{t('admin.securityEyebrow')}</span>
-      <h1 id="admin-mfa-title">{t('admin.mfaTitle')}</h1>
-      <p>{t('admin.mfaDescription')}</p>
-      {!state.enrolled && !secret && <Button onClick={enroll} disabled={busy}>{busy ? t('admin.preparing') : t('admin.startEnrollment')}</Button>}
-      {secret && <div className="admin-mfa-secret"><b>{t('admin.authenticatorSecret')}</b><code>{secret}</code><small>{t('admin.secretHint')}</small></div>}
-      {(state.enrolled || secret) && <form onSubmit={verify} className="admin-mfa-form"><label><span>{t('admin.sixDigitCode')}</span><input required inputMode="numeric" pattern="[0-9]{6}" maxLength="6" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} autoComplete="one-time-code" /></label><Button type="submit" disabled={busy || code.length !== 6}>{busy ? t('admin.checking') : t('admin.verifyAndOpen')}</Button></form>}
-    </section>
-  </main>;
-}
 
 function ProtectedAdmin() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role !== 'admin') return <Navigate to="/app" replace />; return <AdminWorkspaceBoundary render={() => <AdminMfaGate><LegacyAdminWorkspace /></AdminMfaGate>} />; }
 
