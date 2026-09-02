@@ -8,8 +8,10 @@ import { formatCurrency } from '../../lib/formatters';
 import { redirectToMidtransCheckout, validatedMidtransCheckoutUrl } from '../../lib/payment-redirect';
 import { useResolvedTheme } from '../../lib/theme';
 import { useApp } from '../../state/ui-context';
+import { useI18n } from '../../i18n/context';
 
 export default function PublicPricingPage() {
+  const { t } = useI18n();
   const { user, prefs, setNotice, refreshSession } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
@@ -85,22 +87,23 @@ export default function PublicPricingPage() {
 
   const currentPlanKey = billing?.currentPlan?.key || 'free';
   const maxCreditQty = pricing.single?.maxQuantity || 20;
+  const localizedFallbackFeatures = (key, fallback) => fallback.map((_, index) => t(`${key}.${index}`));
   const cards = [
     {
-      key: 'free', label: 'Free', note: 'Mulai tanpa biaya', price: 'Rp0', suffix: '',
-      features: pricingFeatures(pricing.free, pricingFallback.free.features),
+      key: 'free', label: t('pricing.cards.free.label'), note: t('pricing.cards.free.note'), price: 'Rp0', suffix: '',
+      features: pricingFeatures(pricing.free, localizedFallbackFeatures('pricing.features.free', pricingFallback.free.features)),
     },
     {
-      key: 'credit', label: 'Satuan', note: 'Bayar sesuai kebutuhan', price: formatCurrency(pricing.single?.unitPrice || 3900), originalPrice: formatCurrency(pricing.single?.originalPrice || pricing.single?.unitPrice || 3900), discountPercent: pricing.single?.discountPercent || 0, suffix: '/ laprak',
-      features: pricingFeatures(pricing.single, pricingFallback.single.features),
+      key: 'credit', label: t('pricing.cards.single.label'), note: t('pricing.cards.single.note'), price: formatCurrency(pricing.single?.unitPrice || 3900), originalPrice: formatCurrency(pricing.single?.originalPrice || pricing.single?.unitPrice || 3900), discountPercent: pricing.single?.discountPercent || 0, suffix: t('pricing.creditSuffix'),
+      features: pricingFeatures(pricing.single, localizedFallbackFeatures('pricing.features.single', pricingFallback.single.features)),
     },
     {
-      key: 'monthly', label: 'Pro', note: 'Untuk laprak harian', recommended: true, price: formatCurrency(pricing.monthly?.price || 29900), originalPrice: formatCurrency(pricing.monthly?.originalPrice || pricing.monthly?.price || 29900), discountPercent: pricing.monthly?.discountPercent || 0, suffix: '/ 30 hari',
-      features: pricingFeatures(pricing.monthly, pricingFallback.monthly.features),
+      key: 'monthly', label: t('pricing.cards.pro.label'), note: t('pricing.cards.pro.note'), recommended: true, price: formatCurrency(pricing.monthly?.price || 29900), originalPrice: formatCurrency(pricing.monthly?.originalPrice || pricing.monthly?.price || 29900), discountPercent: pricing.monthly?.discountPercent || 0, suffix: t('pricing.monthlySuffix'),
+      features: pricingFeatures(pricing.monthly, localizedFallbackFeatures('pricing.features.pro', pricingFallback.monthly.features)),
     },
     {
-      key: 'pro', label: 'Max', note: 'Untuk semester padat', price: formatCurrency(pricing.pro?.price || 45900), originalPrice: formatCurrency(pricing.pro?.originalPrice || pricing.pro?.price || 45900), discountPercent: pricing.pro?.discountPercent || 0, suffix: '/ 30 hari',
-      features: pricingFeatures(pricing.pro, pricingFallback.pro.features),
+      key: 'pro', label: t('pricing.cards.max.label'), note: t('pricing.cards.max.note'), price: formatCurrency(pricing.pro?.price || 45900), originalPrice: formatCurrency(pricing.pro?.originalPrice || pricing.pro?.price || 45900), discountPercent: pricing.pro?.discountPercent || 0, suffix: t('pricing.monthlySuffix'),
+      features: pricingFeatures(pricing.pro, localizedFallbackFeatures('pricing.features.max', pricingFallback.pro.features)),
     },
   ];
 
@@ -145,7 +148,7 @@ export default function PublicPricingPage() {
     if (order?.status === 'paid') {
       await refreshSession();
       await loadPricing();
-      setNotice(notice || 'Pembayaran QRIS berhasil diverifikasi. Produk sudah aktif.');
+      setNotice(notice || t('pricing.notices.qrisVerified'));
       navigate('/app', { replace: true });
     }
   };
@@ -156,7 +159,7 @@ export default function PublicPricingPage() {
       const response = verifyWithGateway
         ? await api(`/payments/orders/${orderId}/refresh`, { method: 'POST', body: {} })
         : await api(`/payments/orders/${orderId}`, { includeCsrf: false });
-      await updateOrder(response.order, verifyWithGateway && response.order?.status === 'paid' ? 'Pembayaran QRIS berhasil diverifikasi.' : 'Status pembayaran diperbarui.');
+      await updateOrder(response.order, verifyWithGateway && response.order?.status === 'paid' ? t('pricing.notices.paymentVerified') : t('pricing.notices.paymentUpdated'));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -179,26 +182,26 @@ export default function PublicPricingPage() {
 
   const checkout = async () => {
     if (!user) return selectProduct(selected || 'monthly');
-    if (!cartItems.length) return setError('Pilih plan atau credit terlebih dahulu.');
-    if (!user.emailVerified) return setError('Verifikasi email sebelum melakukan pembayaran.');
+    if (!cartItems.length) return setError(t('pricing.errors.choosePlan'));
+    if (!user.emailVerified) return setError(t('pricing.errors.verifyEmail'));
     setBusy(true);
     setError('');
     setCheckoutRecoveryUrl('');
     try {
       const payload = await api('/payments/checkout', { method: 'POST', body: { items: cartItems } });
       if (payload.mode === 'manual') {
-        await updateOrder(payload.order, 'Checkout QRIS lokal diproses untuk pengujian.');
+        await updateOrder(payload.order, t('pricing.notices.localCheckout'));
         return;
       }
       await updateOrder(payload.order);
       window.sessionStorage.setItem('laprakin:active-payment-order', payload.orderId);
       const checkoutUrl = validatedMidtransCheckoutUrl(payload.checkoutUrl);
       if (!checkoutUrl) {
-        throw new Error('URL checkout QRIS dari gateway tidak valid.');
+        throw new Error(t('pricing.errors.invalidCheckoutUrl'));
       }
       setCheckoutRecoveryUrl(checkoutUrl);
       if (!redirectToMidtransCheckout(checkoutUrl)) {
-        throw new Error('Navigasi otomatis diblokir browser. Buka checkout QRIS lewat tombol di bawah.');
+        throw new Error(t('pricing.errors.blockedNavigation'));
       }
     } catch (err) {
       setError(err.message);
@@ -208,36 +211,36 @@ export default function PublicPricingPage() {
   };
 
   const statusCopy = {
-    created: 'Menyiapkan checkout QRIS.',
-    pending: 'Menunggu pembayaran. Scan QRIS di checkout Midtrans.',
-    paid: 'Pembayaran berhasil. Produk sudah aktif.',
-    failed: 'Pembayaran ditolak. Buat checkout baru untuk mencoba lagi.',
-    expired: 'Kode QRIS sudah kedaluwarsa. Buat checkout baru.',
-    canceled: 'Checkout dibatalkan. Belum ada produk yang ditambahkan.',
+    created: t('pricing.status.created'),
+    pending: t('pricing.status.pending'),
+    paid: t('pricing.status.paid'),
+    failed: t('pricing.status.failed'),
+    expired: t('pricing.status.expired'),
+    canceled: t('pricing.status.canceled'),
   };
 
   return <div className={`pricing-compact-page ${isCheckoutPage ? 'pricing-checkout-page' : ''} ${resolvedTheme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
     {/* Dari halaman checkout, Kembali harus mengembalikan ke daftar plan supaya
     user dapat mengganti pilihan; hanya dari daftar plan ia keluar ke workspace. */}
-    <header className="pricing-compact-nav"><button type="button" onClick={() => (isCheckoutPage ? navigate('/pricing') : navigate(user ? '/app' : '/'))} aria-label={isCheckoutPage ? 'Kembali ke pilihan plan' : 'Kembali'} title={isCheckoutPage ? 'Kembali ke pilihan plan' : 'Kembali'}><ArrowLeft size={18}/></button></header>
+    <header className="pricing-compact-nav"><button type="button" onClick={() => (isCheckoutPage ? navigate('/pricing') : navigate(user ? '/app' : '/'))} aria-label={isCheckoutPage ? t('pricing.backToPlans') : t('pricing.back')} title={isCheckoutPage ? t('pricing.backToPlans') : t('pricing.back')}><ArrowLeft size={18}/></button></header>
     <main className="pricing-compact-main">
       <section className="pricing-compact-intro" aria-labelledby="pricing-compact-title">
-        <span>Pilihan Laprakin</span>
-        <h1 id="pricing-compact-title">{isCheckoutPage ? 'Selesaikan pembayaran.' : 'Pilih plan yang pas buat kamu.'}</h1>
-        <p>{isCheckoutPage ? 'Cek ringkasan pembelian, lalu lanjutkan ke QRIS Midtrans.' : 'Mulai gratis, beli credit satuan, atau pilih akses bulanan sesuai ritme praktikum.'}</p>
+        <span>{t('pricing.eyebrow')}</span>
+        <h1 id="pricing-compact-title">{isCheckoutPage ? t('pricing.checkoutTitle') : t('pricing.plansTitle')}</h1>
+        <p>{isCheckoutPage ? t('pricing.checkoutDescription') : t('pricing.plansDescription')}</p>
       </section>
-      {!isCheckoutPage && <section className="pricing-compact-grid" aria-label="Pilihan plan Laprakin">
+      {!isCheckoutPage && <section className="pricing-compact-grid" aria-label={t('pricing.plansAriaLabel')}>
         {cards.map((card) => {
           const isFree = card.key === 'free';
           const isCurrent = card.key === currentPlanKey;
           const isSelected = card.key === selected;
-          const actionLabel = isFree ? (user ? 'Masuk workspace' : 'Mulai gratis') : isSelected && user ? 'Dipilih' : `Pilih ${card.label}`;
+          const actionLabel = isFree ? (user ? t('pricing.enterWorkspace') : t('pricing.startFree')) : isSelected && user ? t('pricing.selected') : t('pricing.choose', { label: card.label });
           return <article key={card.key} className={`pricing-compact-card ${card.recommended ? 'is-recommended' : ''} ${isSelected ? 'is-selected' : ''} ${isCurrent ? 'is-current' : ''}`}>
-            {card.recommended && <span className="pricing-recommended-badge">Rekomendasi</span>}
-            <div className="pricing-compact-card-head"><div><b>{card.label}</b><small>{isCurrent ? 'Plan aktif' : card.note}</small></div></div>
-            <div className="pricing-compact-price">{card.discountPercent > 0 && <small className="pricing-original-price">{card.originalPrice}</small>}<strong>{card.price}</strong>{card.suffix && <span>{card.suffix}</span>}{card.discountPercent > 0 && <em>Hemat {card.discountPercent}%</em>}</div>
+            {card.recommended && <span className="pricing-recommended-badge">{t('pricing.recommended')}</span>}
+            <div className="pricing-compact-card-head"><div><b>{card.label}</b><small>{isCurrent ? t('pricing.activePlan') : card.note}</small></div></div>
+            <div className="pricing-compact-price">{card.discountPercent > 0 && <small className="pricing-original-price">{card.originalPrice}</small>}<strong>{card.price}</strong>{card.suffix && <span>{card.suffix}</span>}{card.discountPercent > 0 && <em>{t('pricing.savings', { percent: card.discountPercent })}</em>}</div>
             <div className="pricing-compact-action-slot">
-              {card.key === 'credit' ? <div className="pricing-compact-quantity" onClick={(event) => event.stopPropagation()}><span>Jumlah</span><div><button type="button" aria-label="Kurangi credit" onClick={() => updateCreditQuantity(creditQuantity - 1)}>-</button><b>{creditQuantity}</b><button type="button" aria-label="Tambah credit" onClick={() => updateCreditQuantity(creditQuantity + 1)}>+</button></div></div> : <span className="pricing-compact-quantity-placeholder" aria-hidden="true" />}
+              {card.key === 'credit' ? <div className="pricing-compact-quantity" onClick={(event) => event.stopPropagation()}><span>{t('pricing.quantity')}</span><div><button type="button" aria-label={t('pricing.decreaseCredit')} onClick={() => updateCreditQuantity(creditQuantity - 1)}>-</button><b>{creditQuantity}</b><button type="button" aria-label={t('pricing.increaseCredit')} onClick={() => updateCreditQuantity(creditQuantity + 1)}>+</button></div></div> : <span className="pricing-compact-quantity-placeholder" aria-hidden="true" />}
             </div>
             <button type="button" className={isCurrent || isFree ? 'is-quiet' : ''} onClick={() => selectProduct(card.key)}>{actionLabel}{!isFree && <ArrowRight size={15}/>}</button>
             <div className="pricing-compact-divider" />
@@ -247,8 +250,8 @@ export default function PublicPricingPage() {
       </section>}
       {user && selected && isCheckoutPage && <section className="checkout-summary" aria-live="polite">
         <header className="checkout-summary-head">
-          <div><b>Ringkasan pesanan</b><small>Periksa kembali sebelum membayar.</small></div>
-          <Link to="/pricing" className="checkout-change-plan">Ubah pilihan</Link>
+          <div><b>{t('pricing.summaryTitle')}</b><small>{t('pricing.summaryHint')}</small></div>
+          <Link to="/pricing" className="checkout-change-plan">{t('pricing.changePlan')}</Link>
         </header>
 
         <ul className="checkout-lines">
@@ -257,35 +260,35 @@ export default function PublicPricingPage() {
               <b>{item.label}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</b>
               <small>
                 {item.kind === 'subscription'
-                  ? `${item.creditPerUnit} credit · aktif ${item.durationDays} hari`
-                  : `${item.creditPerUnit * item.quantity} credit · berlaku 180 hari`}
+                  ? t('pricing.subscriptionLine', { credits: item.creditPerUnit, days: item.durationDays })
+                  : t('pricing.singleLine', { credits: item.creditPerUnit * item.quantity })}
               </small>
             </div>
             <span>{formatCurrency(item.subtotalIdr)}</span>
           </li>)}
-          {!quote?.items?.length && <li className="checkout-lines-empty"><span>{quoteBusy ? 'Menghitung pesanan…' : 'Belum ada produk terpilih.'}</span></li>}
+          {!quote?.items?.length && <li className="checkout-lines-empty"><span>{quoteBusy ? t('pricing.calculatingOrder') : t('pricing.noProduct')}</span></li>}
         </ul>
 
-        {Number(quote?.discountIdr || 0) > 0 && <div className="checkout-discount"><span>Subtotal <s>{formatCurrency(quote.subtotalIdr)}</s></span><b>Diskon -{formatCurrency(quote.discountIdr)}</b></div>}
+        {Number(quote?.discountIdr || 0) > 0 && <div className="checkout-discount"><span>{t('pricing.subtotal')} <s>{formatCurrency(quote.subtotalIdr)}</s></span><b>{t('pricing.discount', { amount: formatCurrency(quote.discountIdr) })}</b></div>}
         <div className="checkout-total">
-          <div><span>Total</span><small>Sudah termasuk seluruh biaya.</small></div>
-          <b>{quoteBusy ? 'Menghitung…' : quote?.displayTotal || 'Rp0'}</b>
+          <div><span>{t('pricing.total')}</span><small>{t('pricing.allCostsIncluded')}</small></div>
+          <b>{quoteBusy ? t('pricing.calculatingOrder') : quote?.displayTotal || 'Rp0'}</b>
         </div>
 
-        {quote?.totalCredits > 0 && <p className="checkout-gain"><Check size={14} />Kamu mendapat <b>{quote.totalCredits} credit</b> begitu pembayaran terverifikasi.</p>}
+        {quote?.totalCredits > 0 && <p className="checkout-gain"><Check size={14} />{t('pricing.creditGain', { credits: quote.totalCredits })}</p>}
 
         <Button className="checkout-pay-button" onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>
-          {busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? 'Bayar dengan QRIS' : 'Gateway belum aktif'}
+          {busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? t('pricing.payWithQris') : t('pricing.gatewayInactive')}
         </Button>
 
         <ul className="checkout-notes">
-          <li>Scan QRIS memakai aplikasi bank atau e-wallet apa pun.</li>
-          <li>Kode QRIS berlaku 15 menit. Lewat itu, buat pesanan baru.</li>
-          <li>Credit masuk otomatis setelah pembayaran diverifikasi—tidak perlu konfirmasi manual.</li>
+          <li>{t('pricing.noteScan')}</li>
+          <li>{t('pricing.noteExpiry')}</li>
+          <li>{t('pricing.noteCredit')}</li>
         </ul>
       </section>}
-      {activeOrder && <section className={`pricing-compact-status ${activeOrder.status || 'pending'}`}><div><b>{activeOrder.statusLabel || 'Status pembayaran'}</b><p>{statusCopy[activeOrder.status] || 'Status pembayaran sedang diproses.'}</p></div>{['created', 'pending'].includes(activeOrder.status) ? <button type="button" onClick={() => refreshOrder(activeOrder.id, true)} disabled={busy}><RefreshCw size={14}/>Refresh</button> : <CheckCircle2 size={20}/>}</section>}
-      {error && <div className="pricing-compact-error"><CircleAlert size={16}/><span>{error}</span>{checkoutRecoveryUrl && <a href={checkoutRecoveryUrl}>Buka checkout QRIS</a>}</div>}
+      {activeOrder && <section className={`pricing-compact-status ${activeOrder.status || 'pending'}`}><div><b>{activeOrder.statusLabel || t('pricing.paymentStatus')}</b><p>{statusCopy[activeOrder.status] || t('pricing.processingStatus')}</p></div>{['created', 'pending'].includes(activeOrder.status) ? <button type="button" onClick={() => refreshOrder(activeOrder.id, true)} disabled={busy}><RefreshCw size={14}/>{t('pricing.refresh')}</button> : <CheckCircle2 size={20}/>}</section>}
+      {error && <div className="pricing-compact-error"><CircleAlert size={16}/><span>{error}</span>{checkoutRecoveryUrl && <a href={checkoutRecoveryUrl}>{t('pricing.openCheckout')}</a>}</div>}
     </main>
   </div>;
 }

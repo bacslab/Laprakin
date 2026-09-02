@@ -29,7 +29,7 @@ passing tests.
 | Workspace state split | Foundation complete | Chat, document, and UI provider contracts plus state boundary tests pass; full reducer/page ownership migration remains. |
 | True progressive AI streaming | Complete for current provider scope | Provider relay emits deltas and heartbeats with cancellation, retries before the first delta, progressive output moderation, canonical persistence, and a tested JSON fallback. |
 | Route-based code splitting | Foundation complete | Lazy boundaries build separate Landing/Auth/Workspace, `LegacyWorkspace`, Admin, `LegacyAdminWorkspace`, `ChatSurface`, Status, and Pricing chunks. The shared vendor chunk remains large. |
-| Proper i18n migration | Incomplete | `id.json`/`en.json` and keyed translator now cover Auth, admin MFA, the public Landing page, and dynamic Status labels; the legacy DOM walker and dictionary are isolated behind `I18nRuntime`, but workspace/admin component migration and pluralization remain. |
+| Proper i18n migration | Incomplete | `id.json`/`en.json` and keyed translator now cover Auth, admin MFA, the public Landing and Pricing pages, and dynamic Status labels; the legacy DOM walker and dictionary are isolated behind `I18nRuntime`, but workspace/admin component migration and pluralization remain. |
 | Keyboard and dialog accessibility | Foundation complete | CustomSelect keyboard model, focus trap/return hooks, dialog attributes, loading live region, and contract tests pass. |
 | Accessibility acceptance gate | Incomplete | `eslint-plugin-jsx-a11y` is active with 0 errors and 0 warnings, and contrast automation passes; the full image-alt audit and mobile/tablet visual checks remain. |
 | Security headers/CORS | Complete for this gate | `helmet` owns CSP, frame, cross-origin, referrer, and production HSTS headers; `cors` owns credentialed explicit-origin handling, while the application keeps a separate origin guard that returns `ORIGIN_DENIED` for unlisted origins. Runtime allow/deny smoke check passed. |
@@ -42,7 +42,7 @@ passing tests.
 ## Verification evidence
 
 - Server suite: 107 passed, 0 failed.
-- Client contract suite: 32 passed, 0 failed.
+- Client contract suite: 36 passed, 0 failed.
 - Clean-data E2E: passed for auth, profile, evidence, timeline, quality gate,
   template DOCX, restore, and verified password changes.
 - Workflow API and admin operations checks: passed.

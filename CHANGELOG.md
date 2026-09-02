@@ -5,6 +5,7 @@
 - Menambahkan pemeriksaan password opsional berbasis range query k-anonim serta memigrasikan surface Auth ke translation key Indonesia/Inggris.
 - Memigrasikan seluruh copy publik Landing, termasuk navigasi, workflow, sumber, fitur, FAQ, CTA, footer, dan label aksesibilitas, ke translation key Indonesia/Inggris.
 - Memindahkan label komponen dan nilai status layanan yang dinamis ke translation key Indonesia/Inggris.
+- Memigrasikan copy publik Pricing, status pembayaran, dan fallback fitur plan ke translation key Indonesia/Inggris.
 - Memindahkan aturan utama Auth yang viewport-locked ke stylesheet section terpisah dengan contract test, sambil mempertahankan responsive behavior.
 - Memindahkan override khusus Auth ke layer stylesheet terpisah dan menurunkan budget compatibility `!important` secara terukur.
 
