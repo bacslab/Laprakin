@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { config } from './config.js';
+import { requireExternalAiConsent } from './external-ai-consent.js';
+import { buildProcessorManifest } from './processor-manifest.js';
 import { audit, db } from './db.js';
 import { moderationMessage, moderateText } from './content-safety.js';
 import { HttpError, now } from './utils.js';
@@ -567,6 +569,7 @@ export async function* streamOpenAiCompatible({
 
 export async function generateAiContent({ userId = null, contextType = '', contextId = '', requestId = '', purpose = 'chat', mode = 'basic', contents, systemInstruction = '', maxOutputTokens = 1200, responseMimeType = 'text/plain', responseJsonSchema, requiresVision = false, requestTimeoutMs = config.aiRequestTimeoutMs, onDelta = null, signal = null }) {
   if (!config.naraRouterApiKey) throw new HttpError(503, 'Provider AI belum dikonfigurasi.', 'AI_NOT_CONFIGURED');
+  if (userId) requireExternalAiConsent({ userId, manifest: buildProcessorManifest(config) });
   if (!modelRegistry.length) await initializeAiModelRegistry();
   const route = selectAiRoute({ purpose, mode, requiresVision, contents, requiresStructuredOutput: Boolean(responseJsonSchema) });
   const visual = route.requiresVision;

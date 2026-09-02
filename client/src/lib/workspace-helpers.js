@@ -4,7 +4,7 @@ import { DARK_ONLY_ACCENTS, LIGHT_FALLBACK_ACCENT, workspaceAccents } from '../d
 export const defaultChatConfig = {
   title: 'Laprak baru',
   structureMode: 'guided',
-  configuration: { courseName: '', moduleTitle: '', lecturerName: '', lecturerNip: '', documentProfile: 'langkah', customStructure: '', instructions: '', tone: 'formal', perspective: 'saya', allowExternalAi: true },
+  configuration: { courseName: '', moduleTitle: '', lecturerName: '', lecturerNip: '', documentProfile: 'langkah', customStructure: '', instructions: '', tone: 'formal', perspective: 'saya', allowExternalAi: false },
 };
 
 export function resolveAccent(accentKey, resolvedTheme) {

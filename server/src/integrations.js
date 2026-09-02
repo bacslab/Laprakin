@@ -73,6 +73,25 @@ export async function verifyProductionIntegrations() {
     verifyGoogleOidcIntegration(),
     verifyAzureBlobIntegration(),
   ]);
-  return { ok: naraRouter.ok && googleOidc.ok, naraRouter, googleOidc, azureBlob, checkedAt: new Date().toISOString() };
+  const checkedAt = new Date().toISOString();
+  return {
+    ok: naraRouter.ok && googleOidc.ok,
+    checkedAt,
+    providers: [{
+      id: 'nararouter',
+      displayName: 'NaraRouter',
+      kind: 'ai_processor',
+      health: naraRouter.ok ? 'ready' : 'not_ready',
+      ...naraRouter,
+      checkedAt,
+    }],
+    integrations: [
+      { id: 'google-oidc', displayName: 'Google OIDC', kind: 'identity', health: googleOidc.ok ? 'ready' : 'not_ready', ...googleOidc, checkedAt },
+      { id: 'azure-blob', displayName: 'Azure Blob Storage', kind: 'storage', health: azureBlob.ok ? 'ready' : 'not_ready', ...azureBlob, checkedAt },
+    ],
+    naraRouter,
+    googleOidc,
+    azureBlob,
+  };
 }
 

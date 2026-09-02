@@ -1114,5 +1114,21 @@ CREATE INDEX IF NOT EXISTS idx_wallet_request
   ON wallet_entries(user_id, request_id)
   WHERE request_id != '';
 `);
+db.exec(`
+CREATE TABLE IF NOT EXISTS external_ai_consents (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  manifest_version TEXT NOT NULL,
+  policy_version TEXT NOT NULL,
+  provider_ids_json TEXT NOT NULL,
+  data_classes_json TEXT NOT NULL,
+  source_surface TEXT NOT NULL,
+  granted_at TEXT NOT NULL,
+  revoked_at TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_external_ai_consents_user
+  ON external_ai_consents(user_id, granted_at DESC);
+`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_usage_context ON ai_usage_events(context_type, context_id, created_at);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_user_devices_profile ON user_devices(profile_hash, user_id);`);

@@ -85,7 +85,7 @@ class AppErrorBoundary extends Component {
 }
 const defaultPrefs = {
   theme: 'system', language: 'id', compact: true, reducedMotion: false, enterToSend: true,
-  tone: 'formal', perspective: 'saya', profile: 'langkah', customInstructions: '', accent: 'lime', productUpdates: true, allowExternalAi: true,
+  tone: 'formal', perspective: 'saya', profile: 'langkah', customInstructions: '', accent: 'lime', productUpdates: true, allowExternalAi: false,
 };
 // Aksen terang tetap boleh dipakai sebagai latar tombol pada tema terang.
 // Untuk ikon, teks, dan focus ring, `lightInk` menyediakan pasangan yang lebih

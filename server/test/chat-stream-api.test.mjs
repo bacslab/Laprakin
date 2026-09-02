@@ -129,12 +129,14 @@ test('chat API relays provider deltas before returning the canonical response', 
 
   try {
     const started = Date.now();
-    while (Date.now() - started < 30000) {
+    let serverReady = false;
+    while (Date.now() - started < 60000) {
       try {
-        if ((await fetch(`${base}/api/health`)).ok) break;
+        if ((await fetch(`${base}/api/health`)).ok) { serverReady = true; break; }
       } catch { /* server masih start */ }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
+    assert.equal(serverReady, true, logs);
     const registration = await request('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email: `stream-${Date.now()}@example.test`, password: 'KataSandi-Uji-2026' }),
@@ -153,6 +155,29 @@ test('chat API relays provider deltas before returning the canonical response', 
     assert.equal(created.response.status, 201, logs);
     const sessionId = created.payload.session.id;
     await request('/wallet/claim-welcome', { method: 'POST', body: '{}' });
+    const deniedRequestId = `chat-${randomUUID()}`;
+    const denied = await request(`/chat/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      headers: { 'idempotency-key': deniedRequestId },
+      body: JSON.stringify({ requestId: deniedRequestId, content: 'Jangan kirim sebelum consent.', aiMode: 'basic', allowExternalAi: true }),
+    });
+    assert.equal(denied.response.status, 412);
+    assert.equal(denied.payload.error.code, 'AI_CONSENT_REQUIRED');
+    assert.equal(completionCalls, 0);
+    const afterDenial = await request(`/chat/sessions/${sessionId}`);
+    assert.equal(afterDenial.payload.messages.length, 0);
+
+    const processorManifest = await request('/ai/processor-manifest');
+    const consent = await request('/privacy/ai-consent', {
+      method: 'POST',
+      body: JSON.stringify({
+        manifestVersion: processorManifest.payload.manifestVersion,
+        policyVersion: processorManifest.payload.policyVersion,
+        sourceSurface: 'workspace_settings',
+      }),
+    });
+    assert.equal(consent.response.status, 200, consent.payload?.error?.message);
+    assert.equal(consent.payload.consent.active, true);
     const requestId = `chat-${randomUUID()}`;
     const streamed = await request(`/chat/sessions/${sessionId}/messages`, {
       method: 'POST',

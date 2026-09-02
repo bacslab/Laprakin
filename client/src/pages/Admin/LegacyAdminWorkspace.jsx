@@ -84,7 +84,7 @@ export default function LegacyAdminWorkspace() {
       const result = await api('/admin/integrations/check', { method: 'POST', body: {} });
       setIntegrationStatus(result); setNotice(t('admin.console.notices.integrationsReady'));
     } catch (error) {
-      if (error.payload?.gemini || error.payload?.googleOidc) setIntegrationStatus(error.payload);
+      if (error.payload?.providers || error.payload?.integrations) setIntegrationStatus(error.payload);
       setNotice(t('admin.console.notices.integrationIssues'));
     } finally { setBusy(false); }
   };

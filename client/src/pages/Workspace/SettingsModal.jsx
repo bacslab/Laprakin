@@ -156,13 +156,22 @@ export default function SettingsModal({ onClose, onSaved, onArchivedChanged, onO
   const [storage, setStorage] = useState(null);
   const [storageBusy, setStorageBusy] = useState('');
   const [safetyStatus, setSafetyStatus] = useState(null);
+  const [aiConsentData, setAiConsentData] = useState(null);
+  const [aiConsentBusy, setAiConsentBusy] = useState(false);
   const [archivedChats, setArchivedChats] = useState([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [settingsQuery, setSettingsQuery] = useState('');
   const loadStorage = async () => { try { setStorage(await api('/storage/summary')); } catch { setStorage(null); } };
-  useEffect(() => { loadStorage(); api('/safety/status').then(setSafetyStatus).catch(() => setSafetyStatus(null)); }, []);
+  const loadAiConsent = async () => {
+    try {
+      const data = await api('/privacy/ai-consent');
+      setAiConsentData(data);
+      updatePrefs({ allowExternalAi: data.consent?.active === true });
+    } catch { setAiConsentData(null); }
+  };
+  useEffect(() => { loadStorage(); loadAiConsent(); api('/safety/status').then(setSafetyStatus).catch(() => setSafetyStatus(null)); }, []);
   useEffect(() => setTab(initialTab), [initialTab]);
   const loadArchivedChats = async () => {
     setArchivedLoading(true);
@@ -172,6 +181,19 @@ export default function SettingsModal({ onClose, onSaved, onArchivedChanged, onO
   };
   useEffect(() => { if (tab === 'archived') loadArchivedChats(); }, [tab]);
   const updatePrefs = (patch) => setPrefs((value) => ({ ...value, ...patch }));
+  const setExternalAiConsent = async (enabled) => {
+    setAiConsentBusy(true);
+    try {
+      const manifest = aiConsentData?.manifest || await api('/ai/processor-manifest');
+      const data = enabled
+        ? await api('/privacy/ai-consent', { method: 'POST', body: { manifestVersion: manifest.manifestVersion, policyVersion: manifest.policyVersion, sourceSurface: 'workspace_settings' } })
+        : await api('/privacy/ai-consent', { method: 'DELETE' });
+      setAiConsentData(data);
+      updatePrefs({ allowExternalAi: data.consent?.active === true });
+      setNotice(t(enabled ? 'workspace.settings.data.aiConsentGranted' : 'workspace.settings.data.aiConsentRevoked'));
+    } catch (err) { setNotice(err.message); }
+    finally { setAiConsentBusy(false); }
+  };
   const saveNickname = async () => {
     setBusy(true);
     try {
@@ -252,7 +274,7 @@ export default function SettingsModal({ onClose, onSaved, onArchivedChanged, onO
          {tab === 'personalization' && <div className="settings-pane"><section className="settings-group nickname-settings"><div className="settings-group-heading"><b>{t('workspace.settings.personalization.nickname')}</b><small>{t('workspace.settings.personalization.nicknameDescription')}</small></div><div className="nickname-settings-control"><label aria-label={t('workspace.settings.personalization.greeting')}><input aria-label={t('workspace.settings.personalization.nicknameLabel')} value={form.nickname} maxLength={20} autoComplete="nickname" onChange={(event) => setForm({ ...form, nickname: event.target.value })} placeholder={userGreetingName({ ...user, nickname: '' })} /></label><small>{form.nickname.length}/20</small><Button type="button" variant="secondary" onClick={saveNickname} disabled={busy}><Save size={14}/>{t('workspace.settings.personalization.save')}</Button></div></section><section className="settings-group"><Row title={t('workspace.settings.personalization.tone')}><CustomSelect ariaLabel={t('workspace.settings.personalization.tone')} value={prefs.tone || 'formal'} onChange={(value) => updatePrefs({ tone: value })} options={[{ value: 'formal', label: t('workspace.settings.personalization.formal') }, { value: 'semi-formal', label: t('workspace.settings.personalization.semiFormal') }]} /></Row><Row title={t('workspace.settings.personalization.perspective')}><CustomSelect ariaLabel={t('workspace.settings.personalization.perspective')} value={prefs.perspective || 'saya'} onChange={(value) => updatePrefs({ perspective: value })} options={[{ value: 'saya', label: t('workspace.settings.personalization.i') }, { value: 'kita', label: t('workspace.settings.personalization.we') }, { value: 'impersonal', label: t('workspace.settings.personalization.impersonal') }]} /></Row><Row title={t('workspace.settings.personalization.structure')}><CustomSelect ariaLabel={t('workspace.settings.personalization.structure')} value={prefs.profile || 'langkah'} onChange={(value) => updatePrefs({ profile: value })} options={[{ value: 'langkah', label: t('workspace.settings.personalization.stepBased') }, { value: 'pengujian', label: t('workspace.settings.personalization.testBased') }, { value: 'proyek', label: t('workspace.settings.personalization.projectBased') }]} /></Row></section><label className="settings-textarea"><span>{t('workspace.settings.personalization.extraInstructions')}</span><small>{t('workspace.settings.personalization.extraInstructionsDescription')}</small><textarea aria-label={t('workspace.settings.personalization.extraInstructions')} value={prefs.customInstructions || ''} onChange={(event) => updatePrefs({ customInstructions: event.target.value })} placeholder={t('workspace.settings.personalization.extraInstructionsPlaceholder')} /></label></div>}
         {tab === 'billing' && <BillingSettingsPane onOpenBilling={onOpenBilling} />}
         {tab === 'referral' && <ReferralSettingsPane />}
-        {tab === 'data' && <div className="settings-pane"><section className="settings-group"><Row title={t('workspace.settings.data.copyTitle')} description={t('workspace.settings.data.copyDescription')}><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>{t('workspace.settings.data.download')}</Button></Row></section><p className="settings-privacy-note"><ShieldCheck size={15}/>{t('workspace.settings.data.privacyNote')}</p>
+        {tab === 'data' && <div className="settings-pane"><section className="settings-group"><Row title={t('workspace.settings.data.aiConsentTitle')} description={t('workspace.settings.data.aiConsentDescription', { providers: aiConsentData?.manifest?.providers?.map((provider) => provider.displayName).join(', ') || t('workspace.settings.data.aiConsentUnavailable'), data: aiConsentData?.manifest?.providers?.flatMap((provider) => provider.dataClasses || []).join(', ') || '-' })}><Toggle checked={aiConsentData?.consent?.active === true} disabled={aiConsentBusy || !aiConsentData?.manifest?.providers?.length} onChange={setExternalAiConsent} title={t('workspace.settings.data.aiConsentToggle')} description={t('workspace.settings.data.aiConsentToggleDescription')} /></Row><Row title={t('workspace.settings.data.copyTitle')} description={t('workspace.settings.data.copyDescription')}><Button variant="secondary" onClick={exportData}><ArrowDownToLine size={14}/>{t('workspace.settings.data.download')}</Button></Row></section><p className="settings-privacy-note"><ShieldCheck size={15}/>{t('workspace.settings.data.privacyNote', { version: aiConsentData?.manifest?.manifestVersion || '-' })}</p>
           {/* Hapus akun berada satu tab dengan unduh data: urutan yang benar
           adalah mengunduh salinan lebih dulu, baru menghapus. */}
           <section className="settings-danger-zone">

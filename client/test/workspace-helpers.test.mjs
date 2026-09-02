@@ -11,7 +11,7 @@ import {
 test('workspace config keeps the guided laprak defaults', () => {
   assert.equal(defaultChatConfig.structureMode, 'guided');
   assert.equal(defaultChatConfig.configuration.documentProfile, 'langkah');
-  assert.equal(defaultChatConfig.configuration.allowExternalAi, true);
+  assert.equal(defaultChatConfig.configuration.allowExternalAi, false);
 });
 
 test('attachment merge deduplicates files by stable browser identity', () => {

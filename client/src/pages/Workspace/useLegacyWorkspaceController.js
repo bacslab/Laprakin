@@ -19,7 +19,7 @@ export function useLegacyWorkspaceController() {
   const resolvedTheme = useResolvedTheme(prefs.theme || 'system');
   const location = useLocation(); const navigate = useNavigate(); const uploadRef = useRef(null);
   const [sessions, setSessions] = useState([]); const [active, setActive] = useState(null); const [messages, setMessages] = useState([]); const [attachments, setAttachments] = useState([]); const [documentState, setDocumentState] = useState(null); const [workflow, setWorkflow] = useState(null); const [activeJob, setActiveJob] = useState(null);
-  const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [editingMessageId, setEditingMessageId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [pendingConfigRequest, setPendingConfigRequest] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
+  const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [editingMessageId, setEditingMessageId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [aiConsentData, setAiConsentData] = useState(null); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [pendingConfigRequest, setPendingConfigRequest] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
   const actionInFlightRef = useRef(false);
   const sendInFlightRef = useRef(false);
   const tutorialAutoOpenedRef = useRef(false);
@@ -64,6 +64,27 @@ export function useLegacyWorkspaceController() {
     const frame = window.requestAnimationFrame(() => recentSearchInputRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [recentSearchOpen]);
+  useEffect(() => {
+    api('/privacy/ai-consent').then((data) => {
+      setAiConsentData(data);
+      setPrefs((value) => ({ ...value, allowExternalAi: data.consent?.active === true }));
+    }).catch(() => setAiConsentData(null));
+  }, [user.id, setPrefs]);
+  const enableExternalAiConsent = async () => {
+    try {
+      const manifest = aiConsentData?.manifest || await api('/ai/processor-manifest');
+      const data = await api('/privacy/ai-consent', {
+        method: 'POST',
+        body: { manifestVersion: manifest.manifestVersion, policyVersion: manifest.policyVersion, sourceSurface: 'composer_first_use' },
+      });
+      setAiConsentData(data);
+      setPrefs((value) => ({ ...value, allowExternalAi: true }));
+      return data;
+    } catch (error) {
+      setNotice(error.message);
+      throw error;
+    }
+  };
   const projectParam = new URLSearchParams(location.search).get('project') || '';
   useEffect(() => { if (location.pathname === '/app/billing') navigate('/pricing', { replace: true }); }, [location.pathname, navigate]);
   const identityComplete = Boolean(user.fullName && user.nim && user.className && user.institutionName && user.institutionLogoUrl && (user.facultyName || user.departmentKey) && (user.studyProgramName || user.studyProgramKey));
@@ -328,7 +349,7 @@ export function useLegacyWorkspaceController() {
       const data = await apiStream(`/chat/sessions/${current.id}/messages`, {
         method: 'POST',
         requestId,
-        body: { requestId, content, aiMode, allowExternalAi: prefs.allowExternalAi !== false },
+        body: { requestId, content, aiMode, allowExternalAi: aiConsentData?.consent?.active === true },
         onDelta: (delta) => {
           const text = String(delta || '');
           if (!text) return;
@@ -824,7 +845,7 @@ export function useLegacyWorkspaceController() {
     leftCollapsed, setLeftCollapsed, rightOpen, setRightOpen, documentOpen, setDocumentOpen,
     quizMode, setQuizMode, modal, setModal, config, contextOpen, setContextOpen,
     attachmentKind, setAttachmentKind, documents, projectPins, billingPlan, aiMode, setAiMode,
-    aiModeAccess, recentSearchOpen, setRecentSearchOpen, recentSearchQuery, setRecentSearchQuery,
+    aiModeAccess, aiConsentData, enableExternalAiConsent, recentSearchOpen, setRecentSearchOpen, recentSearchQuery, setRecentSearchQuery,
     recentSearchInputRef, identityIntake, tutorialOpen, setTutorialFirstUse, setTutorialOpen,
     productUpdate, page, editingMessage, projectParam, updateConfig, closeMobileSidebar, setRoute,
     loadSessions, loadDocuments, openSession, groupLabel, moveSessionToGroup, projectEntries,

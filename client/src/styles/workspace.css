@@ -6,4 +6,51 @@
   .workspace :where(button, a, input, textarea, select):focus-visible {
     outline-color: var(--workspace-focus-ring);
   }
+
+  .workspace .composer-consent {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 auto 8px;
+    border: 1px solid color-mix(in srgb, var(--workspace-accent) 32%, var(--workspace-line));
+    border-radius: 12px;
+    padding: 9px 10px;
+    background: color-mix(in srgb, var(--workspace-accent) 7%, var(--workspace-card));
+  }
+
+  .workspace .composer-consent div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .workspace .composer-consent b {
+    color: var(--workspace-text);
+    font-size: .63rem;
+  }
+
+  .workspace .composer-consent small {
+    color: var(--workspace-muted);
+    font-size: .55rem;
+    line-height: 1.45;
+  }
+
+  .workspace .composer-consent button {
+    flex: none;
+    border: 0;
+    border-radius: 8px;
+    padding: 7px 9px;
+    background: var(--workspace-accent);
+    color: var(--workspace-accent-contrast, #111);
+    font-size: .57rem;
+    font-weight: 750;
+  }
+
+  @media (max-width: 640px) {
+    .workspace .composer-consent {
+      align-items: stretch;
+      flex-direction: column;
+    }
+  }
 }

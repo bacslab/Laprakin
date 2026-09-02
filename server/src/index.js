@@ -25,6 +25,8 @@ import { EMAIL_LOGO_URL } from './emails/_components/email-layout.js';
 import { capitalizeInitial } from './emails/text.js';
 import { verifyProductionIntegrations } from './integrations.js';
 import { getAiReadiness, initializeAiModelRegistry, isAiConfigured } from './ai.js';
+import { buildProcessorManifest } from './processor-manifest.js';
+import { getExternalAiConsent, recordExternalAiConsent, requireExternalAiConsent, revokeExternalAiConsent } from './external-ai-consent.js';
 import { buildRevisionPlan, RevisionError, validateRevisionRequest } from './chat-revisions.js';
 import { moderationMessage, moderateText } from './content-safety.js';
 import { createLogger, reportException, statusSnapshot } from './observability.js';
@@ -120,7 +122,7 @@ const TECHNICAL_AI_ERROR_PATTERN = /^(?:AI_|NARAROUTER_|CLOUDFLARE_)|(?:^|_)(?:A
 function isTechnicalAiError(error) {
   if (error?.name === 'AiProviderError') return true;
   const code = String(error?.code || '');
-  if (/^(?:DEVICE_REGISTRATION_LIMIT|REGISTRATION_RISK_LIMIT|RATE_LIMIT_EXCEEDED)$/i.test(code)) return false;
+  if (/^(?:AI_CONSENT_REQUIRED|AI_CONSENT_MANIFEST_CHANGED|AI_MODE_LOCKED|DEVICE_REGISTRATION_LIMIT|REGISTRATION_RISK_LIMIT|RATE_LIMIT_EXCEEDED)$/i.test(code)) return false;
   return TECHNICAL_AI_ERROR_PATTERN.test(code);
 }
 
@@ -375,6 +377,11 @@ const chatMessageSchema = z.object({
   content: z.string().trim().min(1).max(1800),
   aiMode: z.enum(['basic', 'thinking', 'xtrathink']).optional().default('basic'),
   allowExternalAi: z.boolean().optional().default(false),
+});
+const externalAiConsentSchema = z.object({
+  manifestVersion: z.string().trim().min(1).max(80),
+  policyVersion: z.string().trim().min(1).max(80),
+  sourceSurface: z.enum(['workspace_settings', 'composer_first_use', 'onboarding']),
 });
 const chatActionSchema = z.object({
   idempotencyKey: z.string().trim().min(8).max(120),
@@ -2074,6 +2081,43 @@ app.get('/api/meta', (_req, res) => {
   });
 });
 
+app.get('/api/ai/processor-manifest', (_req, res) => {
+  res.json(buildProcessorManifest(config));
+});
+
+app.get('/api/privacy/ai-consent', requireAuth, (req, res) => {
+  const manifest = buildProcessorManifest(config);
+  res.json({ consent: getExternalAiConsent({ userId: req.user.id, manifest }), manifest });
+});
+
+app.post('/api/privacy/ai-consent', requireAuth, requireCsrf, (req, res) => {
+  const input = externalAiConsentSchema.parse(req.body || {});
+  const manifest = buildProcessorManifest(config);
+  if (input.manifestVersion !== manifest.manifestVersion || input.policyVersion !== manifest.policyVersion) {
+    throw new HttpError(409, 'Daftar pemroses berubah. Tinjau ulang sebelum menyetujui.', 'AI_CONSENT_MANIFEST_CHANGED');
+  }
+  const consent = recordExternalAiConsent({
+    userId: req.user.id,
+    manifest,
+    sourceSurface: input.sourceSurface,
+  });
+  audit(req.user.id, 'privacy.external_ai_consent_granted', 'user', req.user.id, {
+    manifestVersion: manifest.manifestVersion,
+    providerIds: consent.providerIds,
+    sourceSurface: consent.sourceSurface,
+  });
+  res.json({ consent, manifest });
+});
+
+app.delete('/api/privacy/ai-consent', requireAuth, requireCsrf, (req, res) => {
+  const manifest = buildProcessorManifest(config);
+  const consent = revokeExternalAiConsent({ userId: req.user.id, manifest });
+  audit(req.user.id, 'privacy.external_ai_consent_revoked', 'user', req.user.id, {
+    manifestVersion: manifest.manifestVersion,
+  });
+  res.json({ consent, manifest });
+});
+
 app.get('/api/auth/google/start', authLimiter, (req, res, next) => {
   try {
     assertAccessAllowed(req, '');
@@ -3506,8 +3550,11 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
   enforceContentPolicy({ text: input.content, userId: req.user.id, sessionId: session.id, direction: 'input' });
   const userConfiguration = parseJson(session.configuration_json, {});
-  if (!input.allowExternalAi) {
+  if (isAiConfigured() && !input.allowExternalAi) {
     throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum memakai chat.', 'AI_CONSENT_REQUIRED');
+  }
+  if (isAiConfigured()) {
+    requireExternalAiConsent({ userId: req.user.id, manifest: buildProcessorManifest(config) });
   }
   const aiModes = aiModeAccessForUser(req.user.id);
   if (!aiModes[input.aiMode]?.available) {

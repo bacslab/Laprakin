@@ -284,11 +284,11 @@ git commit -m "fix: recover chat streams without replaying posts"
 - Produces: `buildProcessorManifest(config)`, `requireExternalAiConsent(input)`, `recordExternalAiConsent(input)`, and `revokeExternalAiConsent(input)`.
 - Public API: `GET /api/ai/processor-manifest`, `GET /api/privacy/ai-consent`, `POST /api/privacy/ai-consent`, and `DELETE /api/privacy/ai-consent`.
 
-- [ ] **Step 1: Write manifest and consent tests**
+- [x] **Step 1: Write manifest and consent tests**
 
 Assert the active NaraRouter adapter appears as a provider record with a display name and stable ID; no generic UI contract exposes a `gemini` field. Assert a user without a record is denied before provider invocation. Assert consent stores user ID, provider IDs, data classes, policy/manifest versions, source surface, and timestamp. Assert a materially changed manifest invalidates the old record.
 
-- [ ] **Step 2: Run focused tests and capture red evidence**
+- [x] **Step 2: Run focused tests and capture red evidence**
 
 Run:
 
@@ -298,19 +298,19 @@ node --test server/test/external-ai-consent.test.mjs server/test/provider-contra
 
 Expected: no consent table/service and mismatched provider contract.
 
-- [ ] **Step 3: Add consent schema and server services**
+- [x] **Step 3: Add consent schema and server services**
 
 Create versioned consent rows rather than overloading session configuration. Enforce consent in the server immediately before every external AI transmission path. Keep local fallback available where business rules currently permit it.
 
-- [ ] **Step 4: Replace generic provider branches**
+- [x] **Step 4: Replace generic provider branches**
 
 Return arrays of typed provider health records from `verifyProductionIntegrations`. Render `provider.displayName`, health, models, and last-checked state in Admin. Google OIDC and Azure Blob remain separate integration kinds and are not mislabeled as AI providers.
 
-- [ ] **Step 5: Default client configuration to false**
+- [x] **Step 5: Default client configuration to false**
 
 Change `defaultChatConfig.configuration.allowExternalAi` to `false`. Settings and composer read the consent API and show the active processor/data classes before recording first-use consent. Revocation updates persisted server state and prevents subsequent provider calls.
 
-- [ ] **Step 6: Run server/client contract verification**
+- [x] **Step 6: Run server/client contract verification**
 
 Run:
 
