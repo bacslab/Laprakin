@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateProviderUrl } from './ai-egress-policy.js';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const environmentDirectory = path.resolve(directory, '..');
@@ -111,6 +112,12 @@ export const config = {
   cloudflareAiModel: process.env.CLOUDFLARE_AI_MODEL || '@cf/google/gemma-4-26b-a4b-it',
   aiRequired: process.env.AI_REQUIRED ? process.env.AI_REQUIRED !== 'false' : nodeEnv === 'production',
   aiRequestTimeoutMs: boundedInt(process.env.AI_REQUEST_TIMEOUT_MS, 45000, 5000, 120000),
+  aiConnectTimeoutMs: boundedInt(process.env.AI_CONNECT_TIMEOUT_MS, 5000, 500, 30000),
+  aiModelListTimeoutMs: boundedInt(process.env.AI_MODEL_LIST_TIMEOUT_MS, 15000, 1000, 60000),
+  aiMaxProviderResponseBytes: boundedInt(process.env.AI_MAX_PROVIDER_RESPONSE_BYTES, 2 * 1024 * 1024, 64 * 1024, 16 * 1024 * 1024),
+  aiProviderAllowedHosts: csv(process.env.AI_PROVIDER_ALLOWED_HOSTS || 'router.bynara.id,api.cloudflare.com'),
+  aiCustomProviderHosts: csv(process.env.AI_CUSTOM_PROVIDER_HOSTS),
+  aiProviderAllowedPorts: csv(process.env.AI_PROVIDER_ALLOWED_PORTS || '443').map(Number).filter((value) => Number.isInteger(value) && value > 0 && value <= 65535),
   aiMaxRetries: boundedInt(process.env.AI_MAX_RETRIES, 2, 1, 4),
   aiMaxRequestsPerHour: boundedInt(process.env.AI_MAX_REQUESTS_PER_HOUR, 60, 5, 500),
   aiMaxRequestsPerDay: boundedInt(process.env.AI_MAX_REQUESTS_PER_DAY, 5000, 100, 100000),
@@ -205,6 +212,18 @@ export function productionConfigChecks() {
     } catch { return false; }
   })();
   const aiSecretStoreReady = envelopeSecretStoreReady || keyVaultSecretStoreReady;
+  const naraRouterEndpointReady = (() => {
+    try {
+      validateProviderUrl(config.naraRouterBaseUrl, {
+        isProd: true,
+        allowedHosts: config.aiProviderAllowedHosts,
+        customAllowedHosts: config.aiCustomProviderHosts,
+        allowCustomHost: true,
+        allowedPorts: config.aiProviderAllowedPorts,
+      });
+      return true;
+    } catch { return false; }
+  })();
   const originsReady = app.valid && config.allowedOrigins.length > 0 && config.allowedOrigins.every((origin) => {
     const parsed = productionUrl(origin);
     return parsed.valid;
@@ -228,7 +247,7 @@ export function productionConfigChecks() {
     { name: 'application secrets', ok: secretsReady, detail: secretsReady ? '3 secret unik, minimal 32 karakter' : 'JWT_SECRET, DEVICE_HMAC_SECRET, dan TOKEN_HMAC_SECRET wajib unik dan minimal 32 karakter' },
     { name: 'AI credential secret store', ok: aiSecretStoreReady, detail: aiSecretStoreReady ? (keyVaultSecretStoreReady ? 'Azure Key Vault melalui managed identity' : 'AES-256-GCM dengan dedicated master key') : 'Konfigurasikan Azure Key Vault atau AI_CREDENTIAL_MASTER_KEY 32-byte yang terpisah' },
     { name: 'AI required and Nara credential', ok: config.aiRequired && Boolean(config.naraRouterApiKey), detail: config.aiRequired && config.naraRouterApiKey ? 'AI_REQUIRED=true dan NaraRouter API key tersedia' : 'Set AI_REQUIRED=true dan NARAROUTER_API_KEY' },
-    { name: 'NaraRouter endpoint', ok: /^https:\/\//i.test(config.naraRouterBaseUrl), detail: /^https:\/\//i.test(config.naraRouterBaseUrl) ? config.naraRouterBaseUrl : 'NARAROUTER_BASE_URL wajib memakai HTTPS' },
+    { name: 'NaraRouter endpoint', ok: naraRouterEndpointReady, detail: naraRouterEndpointReady ? config.naraRouterBaseUrl : 'NARAROUTER_BASE_URL wajib HTTPS dan host/port harus masuk deployment allowlist' },
     { name: 'NaraRouter limiter', ok: config.naraRouterMaxRpm <= 8 && config.naraRouterMaxConcurrency <= 2, detail: `${config.naraRouterMaxRpm} RPM, concurrency ${config.naraRouterMaxConcurrency}` },
     { name: 'verified email authentication', ok: smtpReady, detail: smtpReady ? 'Registrasi email terverifikasi aktif; Google OAuth dapat berjalan berdampingan' : 'SMTP production wajib untuk verifikasi email manual' },
     { name: 'Google OAuth credential', ok: googleCredentialsReady, detail: config.googleOauthRequired ? (googleCredentialsReady ? 'Credential Google tersedia' : 'Client ID dan client secret wajib tersedia') : 'Google OAuth dinonaktifkan' },

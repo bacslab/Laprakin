@@ -78,12 +78,12 @@
 - `resolveAndValidateHost(hostname, { lookup, allowedHosts, customAllowedHosts })`
 - `guardedProviderRequest({ url, method, headers, body, timeoutMs, maxBytes, policy, fetchImpl })`
 
-- [ ] Write red tests for HTTP, credentials, fragments, disallowed ports, localhost aliases, IPv4/IPv6 loopback/private/link-local/multicast/unspecified/metadata addresses, decimal/hex/octal encodings, internal suffixes, multi-answer DNS, rebinding, redirect targets, oversized responses, and timeout categories.
-- [ ] Implement strict URL canonicalization and known-host allowlisting. Custom hosts require both owner capability and `AI_CUSTOM_PROVIDER_HOSTS` deployment allowlisting.
-- [ ] Validate every DNS answer and pin the approved resolution for the connection; reject redirects by default.
-- [ ] Return sanitized DNS/TLS/auth/rate-limit/model/timeout codes without headers, bodies, addresses, or credentials.
-- [ ] Run focused tests and an external-network-disabled fixture integration.
-- [ ] Commit: `feat: guard provider egress against ssrf`.
+- [x] Write red tests for HTTP, credentials, fragments, disallowed ports, localhost aliases, IPv4/IPv6 loopback/private/link-local/multicast/unspecified/metadata addresses, decimal/hex/octal encodings, internal suffixes, multi-answer DNS, rebinding, redirect targets, oversized responses, and timeout categories.
+- [x] Implement strict URL canonicalization and known-host allowlisting. Custom hosts require both owner capability and `AI_CUSTOM_PROVIDER_HOSTS` deployment allowlisting.
+- [x] Validate every DNS answer and pin the approved resolution for the connection; reject redirects by default.
+- [x] Return sanitized DNS/TLS/auth/rate-limit/model/timeout codes without headers, bodies, addresses, or credentials.
+- [x] Run focused tests and an external-network-disabled fixture integration.
+- [x] Commit: `feat: guard provider egress against ssrf`.
 
 ## Task 4: Persist immutable provider and routing revisions
 
