@@ -30,7 +30,9 @@ function encryptSecret(secret) {
 function decryptSecret(value) {
   try {
     const [ivValue, tagValue, ciphertextValue] = String(value || '').split('.');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', ENCRYPTION_KEY, Buffer.from(ivValue, 'base64url'));
+    const decipher = crypto.createDecipheriv('aes-256-gcm', ENCRYPTION_KEY, Buffer.from(ivValue, 'base64url'), {
+      authTagLength: 16,
+    });
     decipher.setAuthTag(Buffer.from(tagValue, 'base64url'));
     return Buffer.concat([decipher.update(Buffer.from(ciphertextValue, 'base64url')), decipher.final()]).toString('utf8');
   } catch {
