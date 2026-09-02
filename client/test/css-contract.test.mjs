@@ -27,3 +27,13 @@ test('landing stylesheet owns landing section selectors', () => {
   assert.match(css, /\.fg-hero/);
   assert.match(css, /\.fg-footer/);
 });
+
+test('auth stylesheet owns the viewport-locked authentication section', () => {
+  const css = readFileSync('client/src/styles/auth.css', 'utf8');
+
+  assert.match(css, /\.auth-page\s*\{/);
+  assert.match(css, /\.auth-topbar/);
+  assert.match(css, /\.auth-mode-tabs/);
+  assert.match(css, /\.auth-submit/);
+  assert.match(css, /@media\(max-height: 720px\)/);
+});
