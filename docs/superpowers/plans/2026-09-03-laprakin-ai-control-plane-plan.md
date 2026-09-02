@@ -182,12 +182,12 @@
 - `/api/admin/ai/health`
 - `/api/admin/ai/changes`
 
-- [ ] Write red direct-API tests for view/manage/rotate/model/routing/health capabilities, CSRF, recent MFA, typed confirmation, disabled-before-key-deletion, reason, pagination, and secret-free responses.
-- [ ] Implement independent paginated/filterable endpoints and bounded test/discovery/canary operations.
-- [ ] Add activation impact preview, immutable change history, emergency disable/kill switch, and rollback; high-risk actions require explicit reason and audit.
-- [ ] Ensure GET responses expose only environment-configured state, safe fingerprints, health, revisions, models, routes, and aggregate telemetry.
-- [ ] Run API tests plus all admin authorization/MFA/audit tests.
-- [ ] Commit: `feat: add secure admin ai control plane api`.
+- [x] Write red direct-API tests for view/manage/rotate/model/routing/health capabilities, CSRF, recent MFA, typed confirmation, disabled-before-key-deletion, reason, pagination, and secret-free responses.
+- [x] Implement independent paginated/filterable endpoints and bounded test/discovery/canary operations.
+- [x] Add activation impact preview, immutable change history, emergency disable/kill switch, and rollback; high-risk actions require explicit reason and audit.
+- [x] Ensure GET responses expose only environment-configured state, safe fingerprints, health, revisions, models, routes, and aggregate telemetry.
+- [x] Run API tests plus all admin authorization/MFA/audit tests.
+- [x] Commit: `feat: add secure admin ai control plane api`.
 
 ## Task 9: Build route-backed Admin AI modules
 

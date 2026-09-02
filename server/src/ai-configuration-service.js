@@ -85,6 +85,20 @@ export function createAiConfigurationService({
     return draft;
   }
 
+  function createModelDraft({ auth, reason, providers, models, routes, parentRevisionId = null }) {
+    const actorUserId = authorize(auth, 'ai.models.manage');
+    const draft = repository.createDraft({ providers, models, routes, parentRevisionId, actorUserId, reason, production: false });
+    record(actorUserId, 'admin.ai_model_configuration_draft_created', draft.id, { parentRevisionId: parentRevisionId || null, reason: String(reason || '').slice(0, 500) });
+    return draft;
+  }
+
+  function createRoutingDraft({ auth, reason, providers, models, routes, parentRevisionId = null }) {
+    const actorUserId = authorize(auth, 'ai.routing.manage');
+    const draft = repository.createDraft({ providers, models, routes, parentRevisionId, actorUserId, reason, production: false });
+    record(actorUserId, 'admin.ai_routing_configuration_draft_created', draft.id, { parentRevisionId: parentRevisionId || null, reason: String(reason || '').slice(0, 500) });
+    return draft;
+  }
+
   async function replaceCredential({ revisionId, providerId, credential, reason, auth }) {
     const actorUserId = authorize(auth, 'ai.credentials.rotate', { requireMfa: true });
     if (!secretStore?.put) throw new AiConfigurationServiceError('AI credential store is unavailable.', 'AI_CONFIGURATION_SECRET_STORE_UNAVAILABLE', 503);
@@ -105,6 +119,40 @@ export function createAiConfigurationService({
       parentRevisionId: source.id, providerId, secretVersion: String(metadata.secretVersion), credentialFingerprint: metadata.fingerprint,
     });
     return draft;
+  }
+
+  async function deleteCredential({ revisionId, providerId, reason, auth }) {
+    const actorUserId = authorize(auth, 'ai.credentials.rotate', { requireMfa: true });
+    if (!secretStore?.delete) throw new AiConfigurationServiceError('AI credential store is unavailable.', 'AI_CONFIGURATION_SECRET_STORE_UNAVAILABLE', 503);
+    const revision = requireRevision(repository, revisionId);
+    const provider = revision.providers.find((item) => item.providerId === providerId);
+    if (!provider) throw new AiConfigurationServiceError('Provider was not found in the revision.', 'AI_CONFIGURATION_PROVIDER_NOT_FOUND', 404);
+    if (provider.enabled || provider.state !== 'disabled') {
+      throw new AiConfigurationServiceError('Disable the provider before deleting its credential.', 'AI_CONFIGURATION_PROVIDER_MUST_BE_DISABLED', 409);
+    }
+    if (!provider.secretReference || !provider.secretVersion) {
+      throw new AiConfigurationServiceError('Provider credential was not found.', 'AI_CONFIGURATION_CREDENTIAL_NOT_FOUND', 404);
+    }
+    const protectedUsage = repository.credentialUsage?.({
+      providerId,
+      reference: provider.secretReference,
+      version: provider.secretVersion,
+    }) || [];
+    if (protectedUsage.some((usage) => usage.enabled)) {
+      throw new AiConfigurationServiceError('Credential is still referenced by an active, rollback, or tested provider.', 'AI_CONFIGURATION_CREDENTIAL_IN_USE', 409);
+    }
+    const result = await secretStore.delete({
+      providerId,
+      reference: provider.secretReference,
+      version: provider.secretVersion,
+    });
+    record(actorUserId, 'admin.ai_credential_deleted', revision.id, {
+      providerId,
+      reason: String(reason || '').slice(0, 500),
+      secretVersion: String(provider.secretVersion),
+      credentialFingerprint: provider.credentialFingerprint,
+    });
+    return { deleted: result?.deleted === true, providerId, deletedAt: result?.deletedAt || now() };
   }
 
   async function discoverDraftModels({ revisionId, providerId, reason = 'Refresh provider model catalog', auth }) {
@@ -242,6 +290,47 @@ export function createAiConfigurationService({
     return rolledBack;
   }
 
+  function emergencyDisable({ reason, auth }) {
+    const actorUserId = authorize(auth, 'ai.routing.manage', { requireMfa: true });
+    const active = repository.getActiveRevision();
+    if (!active) throw new AiConfigurationServiceError('Active AI configuration is unavailable.', 'AI_CONFIGURATION_ACTIVE_NOT_FOUND', 404);
+    const providers = active.providers.map((provider) => ({ ...provider, enabled: false, state: 'disabled' }));
+    const models = active.models.map((model) => ({ ...model, enabled: false, state: 'disabled', health: 'disabled' }));
+    const routes = active.routes.map((route) => ({ ...route, enabled: false }));
+    const draft = repository.createDraft({
+      providers,
+      models,
+      routes,
+      parentRevisionId: active.id,
+      actorUserId,
+      reason,
+      production: false,
+    });
+    const issuedAt = now();
+    const tested = repository.markTested({
+      revisionId: draft.id,
+      actorUserId,
+      evidence: {
+        revisionId: draft.id,
+        actorUserId,
+        issuedAt,
+        expiresAt: new Date(Date.parse(issuedAt) + evidenceTtlMs).toISOString(),
+        passed: true,
+        syntheticOnly: true,
+        emergencyDisable: true,
+        routeDiff: routeDiff(active, draft),
+        results: { providers: [], routes: [] },
+      },
+    });
+    const disabled = repository.activate({ revisionId: tested.id, actorUserId, reason });
+    record(actorUserId, 'admin.ai_emergency_disabled', disabled.id, {
+      reason: String(reason || '').slice(0, 500),
+      previousRevisionId: active.id,
+      routeDiff: routeDiff(active, disabled),
+    });
+    return disabled;
+  }
+
   function captureActiveConfiguration() {
     const revision = repository.getActiveRevision();
     return revision ? deepFreezeCopy({
@@ -253,13 +342,17 @@ export function createAiConfigurationService({
 
   return {
     createDraft,
+    createModelDraft,
+    createRoutingDraft,
     replaceCredential,
+    deleteCredential,
     discoverDraftModels,
     runDraftCanaries,
     testDraft,
     previewActivation,
     activateRevision,
     rollbackRevision,
+    emergencyDisable,
     captureActiveConfiguration,
   };
 }

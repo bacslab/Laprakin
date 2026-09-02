@@ -34,6 +34,7 @@ import { CHAT_MESSAGE_OPERATION, runCanonicalChatMutation } from './chat-message
 import { getMutationSnapshot } from './mutation-requests.js';
 import { getMessageReactionAnalytics, removeMessageReaction, setMessageReaction } from './message-reactions.js';
 import { listAdminAudit, recordAdminAudit } from './admin-audit.js';
+import { registerAdminAiRoutes } from './admin-ai-routes.js';
 import { capabilitiesForUser, isPrivilegedUser, requireCapability } from './admin-capabilities.js';
 import { createTotpSecret, getAdminMfaStatus, verifyTotpCode, adminMfaRequired } from './mfa.js';
 import { checkPasswordBreach } from './password-breach.js';
@@ -5025,6 +5026,17 @@ function requireAdminMfa(req, _res, next) {
   return next(new HttpError(428, 'Masukkan kode verifikasi dua langkah untuk melanjutkan.', 'ADMIN_MFA_REQUIRED'));
 }
 
+function requireRecentAdminMfa(req, _res, next) {
+  const state = adminMfaState(req);
+  if (!state.enrolled) {
+    return next(new HttpError(428, 'Aktifkan verifikasi dua langkah sebelum mengubah konfigurasi AI.', 'ADMIN_MFA_ENROLLMENT_REQUIRED'));
+  }
+  if (!state.verified) {
+    return next(new HttpError(428, 'Verifikasi dua langkah terbaru diperlukan untuk tindakan ini.', 'ADMIN_MFA_REQUIRED'));
+  }
+  return next();
+}
+
 // Keep the step-up check uniform across every admin surface. Enrollment and
 // challenge endpoints remain reachable so an administrator can recover a
 // session without weakening the protection on operational mutations.
@@ -5162,6 +5174,18 @@ app.post('/api/admin/mfa/verify', requireAuth, requireCsrf, requirePrivilegedUse
 
 app.get('/api/admin/capabilities', requireAuth, requirePrivilegedUser, (req, res) => {
   res.json({ role: req.user.role, capabilities: capabilitiesForUser(req.user) });
+});
+
+registerAdminAiRoutes(app, {
+  store: db,
+  config,
+  requireAuth,
+  requireCsrf,
+  requireCapability,
+  requireRecentMfa: requireRecentAdminMfa,
+  mutationLimiter: adminMutationLimiter,
+  asyncHandler,
+  audit,
 });
 
 app.get('/api/admin/events', requireAuth, requireCapability('incidents.manage'), (req, res) => {
@@ -6213,10 +6237,12 @@ app.use((err, req, res, _next) => {
     });
   }
 
+  const typedAdminAiError = String(req.path || '').includes('/admin/ai/') && status < 500;
+
   return res.status(status).json({
     error: {
-      message: friendlyErrorMessage(err, status),
-      code: friendlyErrorCode(err),
+      message: typedAdminAiError ? (err.message || 'Tindakan konfigurasi AI tidak valid.') : friendlyErrorMessage(err, status),
+      code: typedAdminAiError ? (err.code || 'AI_CONFIGURATION_INVALID') : friendlyErrorCode(err),
       ...(status < 500 && err.details ? { details: err.details } : {}),
       requestId: req.requestId,
     },

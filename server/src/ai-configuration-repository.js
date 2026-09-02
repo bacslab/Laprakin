@@ -269,6 +269,49 @@ export function createAiConfigurationRepository({ store = db, now = currentTimes
     return activeRevisionId ? getRevision(activeRevisionId) : null;
   }
 
+  function listRevisions({ state = '', beforeRevisionNumber = Number.MAX_SAFE_INTEGER, limit = 25 } = {}) {
+    const normalizedState = String(state || '').trim().toLowerCase();
+    const boundedLimit = integer(limit, 25, 1, 100);
+    const before = integer(beforeRevisionNumber, Number.MAX_SAFE_INTEGER, 1);
+    const rows = store.prepare(`
+      SELECT id, revision_number
+      FROM ai_configuration_revisions
+      WHERE revision_number < ? AND (? = '' OR state = ?)
+      ORDER BY revision_number DESC
+      LIMIT ?
+    `).all(before, normalizedState, normalizedState, boundedLimit + 1);
+    const hasMore = rows.length > boundedLimit;
+    const page = rows.slice(0, boundedLimit);
+    return {
+      revisions: page.map((row) => getRevision(row.id)),
+      nextCursor: hasMore ? String(page.at(-1)?.revision_number || '') : null,
+    };
+  }
+
+  function credentialUsage({ providerId, reference, version }) {
+    const pointers = getPointers();
+    const protectedRevisionIds = [pointers.activeRevisionId, pointers.lastKnownGoodRevisionId].filter(Boolean);
+    const rows = store.prepare(`
+      SELECT provider.configuration_revision_id, provider.enabled, revision.state
+      FROM ai_provider_revisions provider
+      JOIN ai_configuration_revisions revision ON revision.id = provider.configuration_revision_id
+      WHERE provider.provider_id = ? AND provider.secret_reference = ? AND provider.secret_version = ?
+        AND (
+          revision.state = 'tested'
+          OR provider.configuration_revision_id = ?
+          OR provider.configuration_revision_id = ?
+        )
+    `).all(
+      String(providerId || ''), String(reference || ''), String(version || ''),
+      protectedRevisionIds[0] || '', protectedRevisionIds[1] || '',
+    );
+    return rows.map((row) => ({
+      revisionId: row.configuration_revision_id,
+      enabled: Boolean(row.enabled),
+      state: row.state,
+    }));
+  }
+
   function rollback({ targetRevisionId = null, actorUserId = null, reason = '' } = {}) {
     let transactionOpen = false;
     try {
@@ -304,5 +347,5 @@ export function createAiConfigurationRepository({ store = db, now = currentTimes
     }
   }
 
-  return { createDraft, markTested, activate, rollback, getRevision, getActiveRevision, getPointers };
+  return { createDraft, markTested, activate, rollback, getRevision, getActiveRevision, getPointers, listRevisions, credentialUsage };
 }
