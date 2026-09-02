@@ -24,8 +24,7 @@ import {
 import { EMAIL_LOGO_URL } from './emails/_components/email-layout.js';
 import { capitalizeInitial } from './emails/text.js';
 import { verifyProductionIntegrations } from './integrations.js';
-import { getAiReadiness, initializeAiModelRegistry, isAiConfigured } from './ai.js';
-import { buildProcessorManifest } from './processor-manifest.js';
+import { captureAiRuntimeConfiguration, getAiReadiness, initializeAiModelRegistry, isAiConfigured } from './ai.js';
 import { getExternalAiConsent, recordExternalAiConsent, requireExternalAiConsent, revokeExternalAiConsent } from './external-ai-consent.js';
 import { buildRevisionPlan, RevisionError, validateRevisionRequest } from './chat-revisions.js';
 import { moderationMessage, moderateText } from './content-safety.js';
@@ -1478,12 +1477,18 @@ function ensureNoActiveJob(documentId, jobType) {
 
 function enqueueJob({ documentId, userId, jobType, payload = {}, maxAttempts = config.jobMaxAttempts }) {
   const jobId = nanoid();
+  const runtimeSnapshot = captureAiRuntimeConfiguration();
+  const durablePayload = {
+    ...payload,
+    aiConfigurationRevision: runtimeSnapshot.revisionId,
+    aiConfigurationSource: runtimeSnapshot.source,
+  };
   db.prepare(`
     INSERT INTO jobs (
       id, document_id, owner_user_id, job_type, status, progress, message,
       payload_json, attempt_count, max_attempts, created_at
     ) VALUES (?, ?, ?, ?, 'queued', 0, 'Masuk antrean', ?, 0, ?, ?)
-  `).run(jobId, documentId, userId, jobType, JSON.stringify(payload), Math.max(1, maxAttempts), now());
+  `).run(jobId, documentId, userId, jobType, JSON.stringify(durablePayload), Math.max(1, maxAttempts), now());
   recordJobEvent(jobId);
   audit(userId, 'job.enqueued', 'document', documentId, { jobId, jobType });
   publishJob(jobId);
@@ -1690,15 +1695,18 @@ async function runJob(job) {
   };
 
   const payload = jobPayload(job);
+  const runtimeSnapshot = ['active', 'revision'].includes(payload.aiConfigurationSource)
+    ? captureAiRuntimeConfiguration({ revisionId: payload.aiConfigurationRevision })
+    : captureAiRuntimeConfiguration();
   try {
     let result;
     let completionSummary = null;
     if (job.job_type === 'scan') {
       result = await scanDocumentFiles(job.document_id, job.owner_user_id, update);
     } else if (job.job_type === 'analyze') {
-      result = await analyzeDocument(job.document_id, job.owner_user_id, update);
+      result = await analyzeDocument(job.document_id, job.owner_user_id, update, { runtimeSnapshot });
     } else if (job.job_type === 'generate') {
-      result = await generateDocument(job.document_id, job.owner_user_id, update, payload);
+      result = await generateDocument(job.document_id, job.owner_user_id, update, { ...payload, runtimeSnapshot });
       update(96, 'Memeriksa susunan dokumen Word');
       const preview = await buildDocumentDocxBuffer(job.document_id, job.owner_user_id, { enforceExportQuality: false });
       if (!preview?.buffer?.length) throw new HttpError(500, 'Dokumen Word belum tersusun utuh.', 'DOCX_BUILD_INCOMPLETE');
@@ -1746,6 +1754,7 @@ async function runJob(job) {
         isRevision: Boolean(payload.isRevision),
         instruction: payload.revisionInstruction || '',
         aiMode: payload.aiMode || 'basic',
+        runtimeSnapshot,
       });
     }
     const completedAt = now();
@@ -1776,7 +1785,10 @@ async function runJob(job) {
           kind: 'document_ready',
           jobId: job.id,
           isRevision: Boolean(payload.isRevision),
+          provider: completionSummary?.provider || 'local',
           model: completionSummary?.model || 'local-summary',
+          configurationRevision: completionSummary?.configurationRevision || runtimeSnapshot.revisionId,
+          routeId: completionSummary?.routeId || '',
           workPlan: parseJson(session.work_plan_json, {}),
           thinkingStartedAt: liveJob?.started_at || job.created_at,
           thinkingFinishedAt: completedAt,
@@ -2036,9 +2048,10 @@ app.get('/api/status', (_req, res) => {
   } catch {
     database = false;
   }
-  const aiReadiness = getAiReadiness();
+  const runtimeSnapshot = captureAiRuntimeConfiguration();
+  const aiReadiness = getAiReadiness(runtimeSnapshot);
   return res.status(200).json(statusSnapshot({
-    aiConfigured: isAiConfigured(),
+    aiConfigured: isAiConfigured(runtimeSnapshot),
     aiReady: aiReadiness.textReady,
     database,
     worker: { status: workerBusy ? 'busy' : 'idle' },
@@ -2047,13 +2060,14 @@ app.get('/api/status', (_req, res) => {
 
 app.get('/api/health', (_req, res) => {
   const queue = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE status IN ('queued', 'running')").get().count;
-  const aiReadiness = getAiReadiness();
+  const runtimeSnapshot = captureAiRuntimeConfiguration();
+  const aiReadiness = getAiReadiness(runtimeSnapshot);
   res.json({
     ok: true,
     mode: config.nodeEnv,
-    aiConfigured: isAiConfigured(),
+    aiConfigured: isAiConfigured(runtimeSnapshot),
     visionReady: aiReadiness.visionReady,
-    aiCredentialIssue: config.naraRouterApiKey && !isAiConfigured() ? 'Model NaraRouter belum siap atau capability registry belum tersedia.' : '',
+    aiCredentialIssue: aiReadiness.configured && !isAiConfigured(runtimeSnapshot) ? 'Provider AI belum siap atau capability registry belum tersedia.' : '',
     googleLoginConfigured: Boolean(!config.manualEmailAuthOnly && config.googleOauthRequired && config.googleClientId && config.googleClientSecret),
     paymentsMode: config.paymentsMode,
     queueDepth: queue,
@@ -2076,31 +2090,32 @@ app.get('/api/health/ready', (_req, res) => {
 });
 
 app.get('/api/meta', (_req, res) => {
+  const runtimeSnapshot = captureAiRuntimeConfiguration();
   res.json({
     departments,
     programs,
     features: {
-      nararouterConfigured: isAiConfigured(),
+      nararouterConfigured: isAiConfigured(runtimeSnapshot),
       manualPayments: config.paymentsMode === 'manual' && !config.isProd,
       uploadMaxMb: config.maxUploadBytes / 1024 / 1024,
       googleLoginEnabled: Boolean(!config.manualEmailAuthOnly && config.googleOauthRequired && config.googleClientId && config.googleClientSecret),
-      supportAiEnabled: Boolean(config.supportAiEnabled && isAiConfigured()),
+      supportAiEnabled: Boolean(config.supportAiEnabled && isAiConfigured(runtimeSnapshot)),
     },
   });
 });
 
 app.get('/api/ai/processor-manifest', (_req, res) => {
-  res.json(buildProcessorManifest(config));
+  res.json(captureAiRuntimeConfiguration().processorManifest);
 });
 
 app.get('/api/privacy/ai-consent', requireAuth, (req, res) => {
-  const manifest = buildProcessorManifest(config);
+  const manifest = captureAiRuntimeConfiguration().processorManifest;
   res.json({ consent: getExternalAiConsent({ userId: req.user.id, manifest }), manifest });
 });
 
 app.post('/api/privacy/ai-consent', requireAuth, requireCsrf, (req, res) => {
   const input = externalAiConsentSchema.parse(req.body || {});
-  const manifest = buildProcessorManifest(config);
+  const manifest = captureAiRuntimeConfiguration().processorManifest;
   if (input.manifestVersion !== manifest.manifestVersion || input.policyVersion !== manifest.policyVersion) {
     throw new HttpError(409, 'Daftar pemroses berubah. Tinjau ulang sebelum menyetujui.', 'AI_CONSENT_MANIFEST_CHANGED');
   }
@@ -2118,7 +2133,7 @@ app.post('/api/privacy/ai-consent', requireAuth, requireCsrf, (req, res) => {
 });
 
 app.delete('/api/privacy/ai-consent', requireAuth, requireCsrf, (req, res) => {
-  const manifest = buildProcessorManifest(config);
+  const manifest = captureAiRuntimeConfiguration().processorManifest;
   const consent = revokeExternalAiConsent({ userId: req.user.id, manifest });
   audit(req.user.id, 'privacy.external_ai_consent_revoked', 'user', req.user.id, {
     manifestVersion: manifest.manifestVersion,
@@ -2790,12 +2805,12 @@ function refreshChatWorkflow(sessionOrId, user, { deferAnalysis = false, forceRe
   return db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(session.id, user.id);
 }
 
-async function refreshChatWorkPlan(sessionOrId, user, { content = '', aiMode = 'basic', onlyIfCourseMissing = false } = {}) {
+async function refreshChatWorkPlan(sessionOrId, user, { content = '', aiMode = 'basic', onlyIfCourseMissing = false, runtimeSnapshot = null } = {}) {
   const session = typeof sessionOrId === 'string'
     ? db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(sessionOrId, user.id)
     : sessionOrId;
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
-  const plan = await createChatWorkPlan({ session, user, content, aiMode });
+  const plan = await createChatWorkPlan({ session, user, content, aiMode, runtimeSnapshot });
   const updated = db.prepare(`
     UPDATE chat_sessions
     SET work_plan_json = ?, work_plan_generated_at = ?, updated_at = ?
@@ -3560,13 +3575,14 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       }
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  const aiRuntimeSnapshot = captureAiRuntimeConfiguration();
   enforceContentPolicy({ text: input.content, userId: req.user.id, sessionId: session.id, direction: 'input' });
   const userConfiguration = parseJson(session.configuration_json, {});
-  if (isAiConfigured() && !input.allowExternalAi) {
+  if (isAiConfigured(aiRuntimeSnapshot) && !input.allowExternalAi) {
     throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum memakai chat.', 'AI_CONSENT_REQUIRED');
   }
-  if (isAiConfigured()) {
-    requireExternalAiConsent({ userId: req.user.id, manifest: buildProcessorManifest(config) });
+  if (isAiConfigured(aiRuntimeSnapshot)) {
+    requireExternalAiConsent({ userId: req.user.id, manifest: aiRuntimeSnapshot.processorManifest });
   }
   const aiModes = aiModeAccessForUser(req.user.id);
   if (!aiModes[input.aiMode]?.available) {
@@ -3586,7 +3602,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       messages: [...priorUserMessages, { role: 'user', content: input.content }],
       configuration: parseJson(session.configuration_json, {}),
     });
-    const configurationRevision = sha256(JSON.stringify(inferredContext.configuration));
+    const configurationRevision = aiRuntimeSnapshot.revisionId;
     if (previousState === 'CLARIFICATION_REQUIRED') {
       const answer = input.content.replace(/\s+/g, ' ').trim().slice(0, 150);
       const parts = answer.split(/\s*(?:,|;|\|| - )\s*/).filter(isPlausibleAcademicContext);
@@ -3617,8 +3633,8 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     let refreshed = refreshChatWorkflow(session.id, req.user);
     let assistant;
     try {
-      assistant = isAiConfigured()
-        ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode, requestId: input.requestId, onDelta, signal: sseChannel?.signal })
+      assistant = isAiConfigured(aiRuntimeSnapshot)
+        ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode, requestId: input.requestId, onDelta, signal: sseChannel?.signal, runtimeSnapshot: aiRuntimeSnapshot })
         : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
     } catch (error) {
       if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id, input.requestId);
@@ -3642,7 +3658,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       && !isClarification
       && (assistant.shouldGenerate === true || fallbackShouldGenerate);
     if (!isClarification && refreshed.course_name) {
-      refreshed = await refreshChatWorkPlan(refreshed, req.user, { content: input.content, aiMode: input.aiMode });
+      refreshed = await refreshChatWorkPlan(refreshed, req.user, { content: input.content, aiMode: input.aiMode, runtimeSnapshot: aiRuntimeSnapshot });
     }
     const currentTitle = String(refreshed.title || '').trim();
     const titleIsGeneric = /^(?:laprak baru|chat baru|untitled)$/i.test(String(session.title || '').trim())
@@ -3666,9 +3682,10 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
         JSON.stringify({
           kind: isClarification ? 'clarification' : 'assistant_response',
           aiMode: input.aiMode,
-          provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+          provider: assistant.provider || (isAiConfigured(aiRuntimeSnapshot) ? 'nararouter' : 'local'),
           model: assistant.model,
           configurationRevision,
+          routeId: assistant.routeId || '',
           promptTemplateRevision: WORKSPACE_CHAT_PROMPT_REVISION,
           workflow: assistant.workflow || null,
           workPlan: isClarification ? null : parseJson(refreshed.work_plan_json, {}),
@@ -3689,7 +3706,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       statusCode: 200,
       response: chatConversationPayload(refreshed, req.user, { autoGenerate }),
       resourceId: refreshed.id,
-      providerId: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+      providerId: assistant.provider || (isAiConfigured(aiRuntimeSnapshot) ? 'nararouter' : 'local'),
       modelId: assistant.model || '',
       configurationRevision,
       promptTemplateRevision: WORKSPACE_CHAT_PROMPT_REVISION,
@@ -3709,12 +3726,12 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     configuration_json: JSON.stringify(inferredContext.configuration),
     configuration: inferredContext.configuration,
   };
-  const configurationRevision = sha256(effectiveSession.configuration_json);
+  const configurationRevision = aiRuntimeSnapshot.revisionId;
   const links = Array.from(input.content.matchAll(/https?:\/\/[^\s)]+/g)).map((match) => match[0]).slice(0, 8);
   let assistant;
   try {
-    assistant = isAiConfigured()
-      ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode, requestId: input.requestId, onDelta, signal: sseChannel?.signal })
+    assistant = isAiConfigured(aiRuntimeSnapshot)
+      ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode, requestId: input.requestId, onDelta, signal: sseChannel?.signal, runtimeSnapshot: aiRuntimeSnapshot })
       : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
   } catch (error) {
     if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id, input.requestId);
@@ -3735,9 +3752,10 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       content: assistant.text,
       meta: {
         aiMode: input.aiMode,
-        provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+        provider: assistant.provider || (isAiConfigured(aiRuntimeSnapshot) ? 'nararouter' : 'local'),
         model: assistant.model,
         configurationRevision,
+        routeId: assistant.routeId || '',
         promptTemplateRevision: WORKSPACE_CHAT_PROMPT_REVISION,
         workflow: assistant.workflow || null,
       },
@@ -3752,14 +3770,14 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     const autoTitle = (candidate || 'Laprak baru').slice(0, 72);
     db.prepare(`UPDATE chat_sessions SET title = ?, course_group = CASE WHEN course_group = '' OR course_group = 'Belum dikelompokkan' THEN ? ELSE course_group END WHERE id = ?`).run(autoTitle, cfg.courseName || 'Belum dikelompokkan', session.id);
   }
-  audit(req.user.id, 'ai.chat_completed', 'chat_session', session.id, { mode: input.aiMode, model: assistant.model, provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local') });
+  audit(req.user.id, 'ai.chat_completed', 'chat_session', session.id, { mode: input.aiMode, model: assistant.model, provider: assistant.provider || (isAiConfigured(aiRuntimeSnapshot) ? 'nararouter' : 'local'), configurationRevision, routeId: assistant.routeId || '' });
   const messages = listChatMessages(session.id, req.user.id);
   const refreshedSession = exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id));
   return {
     statusCode: 200,
     response: { session: refreshedSession, messages, attachments: listChatAttachments(session.id, req.user.id), workflow: chatWorkflow(refreshedSession, req.user) },
     resourceId: session.id,
-    providerId: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+    providerId: assistant.provider || (isAiConfigured(aiRuntimeSnapshot) ? 'nararouter' : 'local'),
     modelId: assistant.model || '',
     configurationRevision,
     promptTemplateRevision: WORKSPACE_CHAT_PROMPT_REVISION,
@@ -3819,6 +3837,7 @@ app.get('/api/mutations/:requestId', requireAuth, asyncHandler(async (req, res) 
 app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requireCsrf, aiChatLimiter, asyncHandler(async (req, res) => {
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  const aiRuntimeSnapshot = captureAiRuntimeConfiguration();
 
   let input;
   try {
@@ -3873,7 +3892,7 @@ app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requi
   };
   let assistant;
   try {
-    assistant = isAiConfigured()
+    assistant = isAiConfigured(aiRuntimeSnapshot)
       ? await answerWorkspaceChat({
         session: effectiveSession,
         user: req.user,
@@ -3881,6 +3900,7 @@ app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requi
         aiMode: sourceAiMode,
         historyRowsOverride: [...retainedMessages, { role: 'user', content: revisionPlan.userContent }],
         attachmentRowsOverride: retainedAttachments,
+        runtimeSnapshot: aiRuntimeSnapshot,
       })
       : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
   } catch (error) {
@@ -3912,8 +3932,10 @@ app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requi
       content: assistant.text,
       meta: {
         aiMode: sourceAiMode,
-        provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+        provider: assistant.provider || (isAiConfigured(aiRuntimeSnapshot) ? 'nararouter' : 'local'),
         model: assistant.model,
+        configurationRevision: assistant.configurationRevision || aiRuntimeSnapshot.revisionId,
+        routeId: assistant.routeId || '',
         workflow: assistant.workflow || null,
         revision: revisionMeta,
       },
@@ -3945,7 +3967,7 @@ app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requi
     sourceMessageId: revisionPlan.source.id,
     revisionNumber: revisionPlan.revisionNumber,
     model: assistant.model,
-    provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+    provider: assistant.provider || (isAiConfigured(aiRuntimeSnapshot) ? 'nararouter' : 'local'),
   });
   return res.json(chatConversationPayload(refreshed, req.user, {
     revision: revisionMeta,
@@ -4444,7 +4466,8 @@ app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentO
   ensureNoActiveJob(req.document.id, 'generate');
   const recipe = parseJson(req.document.recipe_json, {});
   if (!recipe.allowExternalAi) throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum merevisi draft.', 'AI_CONSENT_REQUIRED');
-  if (!isAiConfigured()) throw new HttpError(503, FRIENDLY_AI_NOT_READY_MESSAGE, 'AI_NOT_READY');
+  const aiRuntimeSnapshot = captureAiRuntimeConfiguration();
+  if (!isAiConfigured(aiRuntimeSnapshot)) throw new HttpError(503, FRIENDLY_AI_NOT_READY_MESSAGE, 'AI_NOT_READY');
   const entitlement = revisionEntitlementForUser(req.user.id);
   const revisionCount = Number(req.document.revision_count || 0);
   if (revisionCount >= entitlement.maxRevisions) {
@@ -4474,6 +4497,7 @@ app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentO
       user: req.user,
       instruction: input.instruction,
       aiMode: input.aiMode || 'basic',
+      runtimeSnapshot: aiRuntimeSnapshot,
     });
   } catch {
     const cleanInstruction = String(input.instruction || '').trim();
@@ -4508,6 +4532,7 @@ app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentO
     const plannedSession = await refreshChatWorkPlan(session, req.user, {
       content: input.instruction,
       aiMode: input.aiMode || 'basic',
+      runtimeSnapshot: aiRuntimeSnapshot,
     });
     const finishedAt = now();
     db.prepare(`
@@ -4545,6 +4570,7 @@ app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentO
   await refreshChatWorkPlan(session, req.user, {
     content: input.instruction,
     aiMode: input.aiMode || 'basic',
+    runtimeSnapshot: aiRuntimeSnapshot,
   });
   const jobId = enqueueJob({
     documentId: req.document.id,
@@ -4570,7 +4596,8 @@ app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentO
 }));
 
 app.post('/api/documents/:id/quiz', requireAuth, requireCsrf, requireDocumentOwner, aiChatLimiter, asyncHandler(async (req, res) => {
-  const attempt = await createDocumentQuizAttempt(req.document.id, req.user.id);
+  const runtimeSnapshot = captureAiRuntimeConfiguration();
+  const attempt = await createDocumentQuizAttempt(req.document.id, req.user.id, { runtimeSnapshot });
   db.prepare(`UPDATE chat_sessions SET workflow_state = 'QUIZ_REQUIRED', updated_at = ? WHERE document_id = ? AND owner_user_id = ?`)
     .run(now(), req.document.id, req.user.id);
   res.status(201).json(attempt);

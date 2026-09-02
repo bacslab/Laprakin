@@ -159,13 +159,13 @@
 - Test: `server/test/ai-runtime-configuration.test.mjs`
 - Test: `server/test/ai-usage-privacy.test.mjs`
 
-- [ ] Write red tests for precedence: active tested revision, environment bootstrap, then disabled/unavailable.
-- [ ] Capture one configuration snapshot at request/job start and pass it through route selection, adapter calls, streaming, worker execution, mutation metadata, and reaction metadata.
-- [ ] Record provider ID, configuration revision, model ID, route, product mode, latency, token usage, fallback count/reason, and error code—never prompt/output content.
-- [ ] Enforce consent-aware fallback and explicit degraded-state errors when no disclosed route remains.
-- [ ] Add circuit state and queue-depth snapshots without leaking provider responses.
-- [ ] Run existing AI/chat/document workflows plus new runtime/privacy tests.
-- [ ] Commit: `refactor: run ai from captured configuration revisions`.
+- [x] Write red tests for precedence: active tested revision, environment bootstrap, then disabled/unavailable.
+- [x] Capture one configuration snapshot at request/job start and pass it through route selection, adapter calls, streaming, worker execution, mutation metadata, and reaction metadata.
+- [x] Record provider ID, configuration revision, model ID, route, product mode, latency, token usage, fallback count/reason, and error code—never prompt/output content.
+- [x] Enforce consent-aware fallback and explicit degraded-state errors when no disclosed route remains.
+- [x] Add circuit state and queue-depth snapshots without leaking provider responses.
+- [x] Run existing AI/chat/document workflows plus new runtime/privacy tests.
+- [x] Commit: `refactor: run ai from captured configuration revisions`.
 
 ## Task 8: Expose secure Admin AI APIs
 

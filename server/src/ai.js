@@ -3,13 +3,16 @@ import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { config } from './config.js';
 import { requireExternalAiConsent } from './external-ai-consent.js';
-import { buildProcessorManifest } from './processor-manifest.js';
 import { audit, db } from './db.js';
 import { moderationMessage, moderateText } from './content-safety.js';
 import { HttpError, now } from './utils.js';
 import { createAdapterRegistry } from './ai-providers/adapter-registry.js';
 import { createOpenAiCompatibleAdapter } from './ai-providers/openai-compatible.js';
 import { createCloudflareAiAdapter } from './ai-providers/cloudflare-ai.js';
+import { createAiConfigurationRepository } from './ai-configuration-repository.js';
+import { createAiRuntimeResolver, resolveRuntimeRoute } from './ai-runtime-configuration.js';
+import { createAiSecretStore } from './ai-secret-store.js';
+import { routeIdForRequest } from './ai-routing.js';
 
 const SAFETY_FINISH_REASONS = new Set(['content_filter', 'safety', 'blocked']);
 const MAX_OUTPUT_TOKEN_CEILING = 32768;
@@ -132,6 +135,42 @@ function readCachedRegistry() {
 
 readCachedRegistry();
 
+const runtimeConfigurationResolver = createAiRuntimeResolver({
+  repository: createAiConfigurationRepository({ store: db }),
+  environment: config,
+  getEnvironmentModels: () => modelRegistry,
+  now,
+});
+
+export function captureAiRuntimeConfiguration(options = {}) {
+  return runtimeConfigurationResolver.capture(options);
+}
+
+let managedSecretStore = null;
+function providerAdaptersForSnapshot(snapshot) {
+  if (snapshot.source === 'environment') return runtimeProviderAdapters;
+  if (!['active', 'revision'].includes(snapshot.source)) return createAdapterRegistry();
+  if (!managedSecretStore) managedSecretStore = createAiSecretStore({ config, store: db });
+  const common = {
+    policy: runtimeEgressPolicy(),
+    connectTimeoutMs: config.aiConnectTimeoutMs,
+    requestTimeoutMs: config.aiRequestTimeoutMs,
+    modelListTimeoutMs: config.aiModelListTimeoutMs,
+    maxResponseBytes: config.aiMaxProviderResponseBytes,
+  };
+  return createAdapterRegistry(snapshot.providers.map((provider) => createOpenAiCompatibleAdapter({
+    ...common,
+    id: provider.providerId,
+    displayName: provider.displayName,
+    baseUrl: provider.baseUrl,
+    getToken: () => managedSecretStore.get({
+      providerId: provider.providerId,
+      reference: provider.secretReference,
+      version: provider.secretVersion,
+    }),
+  })));
+}
+
 function cacheRegistry(models) {
   modelRegistry = models.map(normalizeModel).filter((model) => model.model);
   registryLoadedAt = Date.now();
@@ -167,24 +206,35 @@ export async function initializeAiModelRegistry(adapters = runtimeProviderAdapte
   return discoveryPromise;
 }
 
-export function getAiReadiness() {
-  const textModels = modelRegistry.filter((model) => !model.supportsVision || model.supportsReasoning || /text|mistral|qwen|llama/i.test(model.model));
-  const visionModels = modelRegistry.filter((model) => model.supportsVision);
-  const documentModels = modelRegistry.filter((model) => !model.supportsVision || model.supportsReasoning || model.supportsStructuredOutput);
+export function getAiReadiness(snapshot = captureAiRuntimeConfiguration()) {
+  const models = snapshot.source === 'environment'
+    ? modelRegistry
+    : snapshot.models.map((model) => normalizeModel(model));
+  const textModels = models.filter((model) => !model.supportsVision || model.supportsReasoning || /text|mistral|qwen|llama/i.test(model.model));
+  const visionModels = models.filter((model) => model.supportsVision);
+  const documentModels = models.filter((model) => !model.supportsVision || model.supportsReasoning || model.supportsStructuredOutput);
   return {
-    provider: 'nararouter',
-    configured: Boolean(config.naraRouterApiKey),
-    registryCached: modelRegistry.length > 0,
+    provider: snapshot.providers[0]?.providerId || 'nararouter',
+    source: snapshot.source,
+    configurationRevision: snapshot.revisionId,
+    configured: snapshot.source !== 'unavailable',
+    registryCached: models.length > 0,
     registryUpdatedAt: registryLoadedAt ? new Date(registryLoadedAt).toISOString() : null,
     textReady: textModels.length > 0,
     documentReady: documentModels.length > 0,
     visionReady: visionModels.length > 0,
-    models: modelRegistry,
+    models,
+    degradedReason: snapshot.degradedReason,
   };
 }
 
-export function isAiConfigured() {
-  return Boolean(config.naraRouterApiKey && getAiReadiness().textReady && getAiReadiness().documentReady);
+export function isAiConfigured(snapshot = captureAiRuntimeConfiguration()) {
+  if (!snapshot.available) return false;
+  if (snapshot.source !== 'environment') return true;
+  const models = snapshot.models.map((model) => normalizeModel(model));
+  const textReady = models.some((model) => !model.supportsVision || model.supportsReasoning);
+  const documentReady = models.some((model) => !model.supportsVision || model.supportsReasoning || model.supportsStructuredOutput);
+  return textReady && documentReady;
 }
 
 function preferredModel(route, models) {
@@ -238,7 +288,7 @@ export function aiThinkingConfigFor({ model, mode = 'basic', purpose = 'chat' })
   return { model: model || '', reasoning_effort: effort };
 }
 
-function reserveUsage({ userId, purpose, mode, model, contextType = '', contextId = '', requestId = '' }) {
+function reserveUsage({ userId, purpose, mode, provider, model, configurationRevision = '', routeId = '', contextType = '', contextId = '', requestId = '', queueDepth = 0, circuitStatus = 'closed' }) {
   const id = nanoid();
   let transactionOpen = false;
   try {
@@ -255,9 +305,15 @@ function reserveUsage({ userId, purpose, mode, model, contextType = '', contextI
       }
     }
     db.prepare(`
-      INSERT INTO ai_usage_events (id, user_id, purpose, mode, provider, model, status, input_tokens, output_tokens, reasoning_tokens, total_tokens, latency_ms, error_code, fallback_count, fallback_reason, created_at, context_type, context_id, request_id)
-      VALUES (?, ?, ?, ?, 'nararouter', ?, 'pending', 0, 0, 0, 0, 0, '', 0, '', ?, ?, ?, ?)
-    `).run(id, userId || null, String(purpose || 'chat').slice(0, 32), String(mode || 'basic').slice(0, 24), String(model || 'unresolved').slice(0, 100), now(), String(contextType || '').slice(0, 32), String(contextId || '').slice(0, 120), String(requestId || '').slice(0, 120));
+      INSERT INTO ai_usage_events (id, user_id, purpose, mode, provider, model, status, input_tokens, output_tokens, reasoning_tokens, total_tokens, latency_ms, error_code, fallback_count, fallback_reason, created_at, context_type, context_id, request_id, configuration_revision, route_id, queue_depth, circuit_state)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, 0, 0, 0, 0, '', 0, '', ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, userId || null, String(purpose || 'chat').slice(0, 32), String(mode || 'basic').slice(0, 24),
+      String(provider || '').slice(0, 64), String(model || 'unresolved').slice(0, 100), now(),
+      String(contextType || '').slice(0, 32), String(contextId || '').slice(0, 120), String(requestId || '').slice(0, 120),
+      String(configurationRevision || '').slice(0, 160), String(routeId || '').slice(0, 80), Math.max(0, Number(queueDepth || 0)),
+      ['closed', 'open', 'half_open'].includes(circuitStatus) ? circuitStatus : 'closed',
+    );
     db.exec('COMMIT');
     transactionOpen = false;
     return id;
@@ -267,13 +323,13 @@ function reserveUsage({ userId, purpose, mode, model, contextType = '', contextI
   }
 }
 
-function finishUsage(id, { status, usage, latencyMs, errorCode = '', provider = 'nararouter', model = '', fallbackCount = 0, fallbackReason = '' }) {
+function finishUsage(id, { status, usage, latencyMs, errorCode = '', provider = 'nararouter', model = '', fallbackCount = 0, fallbackReason = '', queueDepth = 0, circuitStatus = 'closed' }) {
   const promptTokens = Number(usage?.prompt_tokens ?? usage?.promptTokenCount ?? 0);
   const outputTokens = Number(usage?.completion_tokens ?? usage?.candidatesTokenCount ?? 0);
   const reasoningTokens = Number(usage?.completion_tokens_details?.reasoning_tokens ?? usage?.reasoning_tokens ?? 0);
   const totalTokens = Number(usage?.total_tokens ?? usage?.totalTokenCount ?? promptTokens + outputTokens);
-  db.prepare(`UPDATE ai_usage_events SET provider = ?, model = ?, status = ?, input_tokens = ?, output_tokens = ?, reasoning_tokens = ?, total_tokens = ?, latency_ms = ?, error_code = ?, fallback_count = ?, fallback_reason = ? WHERE id = ?`)
-    .run(provider, String(model || '').slice(0, 100), status, promptTokens, outputTokens, reasoningTokens, totalTokens, Math.max(0, Math.round(latencyMs || 0)), String(errorCode || '').slice(0, 80), fallbackCount, String(fallbackReason || '').slice(0, 160), id);
+  db.prepare(`UPDATE ai_usage_events SET provider = ?, model = ?, status = ?, input_tokens = ?, output_tokens = ?, reasoning_tokens = ?, total_tokens = ?, latency_ms = ?, error_code = ?, fallback_count = ?, fallback_reason = ?, queue_depth = ?, circuit_state = ? WHERE id = ?`)
+    .run(provider, String(model || '').slice(0, 100), status, promptTokens, outputTokens, reasoningTokens, totalTokens, Math.max(0, Math.round(latencyMs || 0)), String(errorCode || '').slice(0, 80), fallbackCount, String(fallbackReason || '').slice(0, 160), Math.max(0, Number(queueDepth || 0)), ['closed', 'open', 'half_open'].includes(circuitStatus) ? circuitStatus : 'closed', id);
 }
 
 function sleep(milliseconds) { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }
@@ -449,6 +505,13 @@ function asAiProviderError(error, message = 'Provider AI tidak dapat dihubungi.'
   });
 }
 
+function circuitStatus(model) {
+  const state = circuitState.get(model);
+  if (!state) return 'closed';
+  if (state.openUntil > Date.now()) return 'open';
+  return state.failures >= config.aiCircuitFailureThreshold ? 'half_open' : 'closed';
+}
+
 async function requestOpenAiCompatible({ provider, model, messages, maxOutputTokens, responseJsonSchema, supportsStructuredOutput, reasoningEffort, timeoutMs, priority = 0, signal, providerAdapters = runtimeProviderAdapters }) {
   let lastError;
   for (let attempt = 0; attempt < config.aiMaxRetries; attempt += 1) {
@@ -514,30 +577,74 @@ export async function* streamOpenAiCompatible({
   yield { type: 'error', code: lastError?.code || 'AI_PROVIDER_ERROR' };
 }
 
-export async function generateAiContent({ userId = null, contextType = '', contextId = '', requestId = '', purpose = 'chat', mode = 'basic', contents, systemInstruction = '', maxOutputTokens = 1200, responseMimeType = 'text/plain', responseJsonSchema, requiresVision = false, requestTimeoutMs = config.aiRequestTimeoutMs, onDelta = null, signal = null, providerAdapters = runtimeProviderAdapters }) {
-  if (!config.naraRouterApiKey) throw new HttpError(503, 'Provider AI belum dikonfigurasi.', 'AI_NOT_CONFIGURED');
-  if (userId) requireExternalAiConsent({ userId, manifest: buildProcessorManifest(config) });
-  if (!modelRegistry.length) await initializeAiModelRegistry(providerAdapters);
-  const route = selectAiRoute({ purpose, mode, requiresVision, contents, requiresStructuredOutput: Boolean(responseJsonSchema) });
-  const visual = route.requiresVision;
-  const candidates = route.candidates.length ? route.candidates : [config.cloudflareAiModel];
-  const usageEventId = reserveUsage({ userId, purpose, mode, model: route.model, contextType, contextId, requestId });
+export async function generateAiContent({ userId = null, contextType = '', contextId = '', requestId = '', purpose = 'chat', mode = 'basic', contents, systemInstruction = '', maxOutputTokens = 1200, responseMimeType = 'text/plain', responseJsonSchema, requiresVision = false, requestTimeoutMs = config.aiRequestTimeoutMs, onDelta = null, signal = null, providerAdapters = null, runtimeSnapshot = null }) {
+  let snapshot = runtimeSnapshot || captureAiRuntimeConfiguration();
+  const adaptersForDiscovery = providerAdapters || runtimeProviderAdapters;
+  if (snapshot.source === 'environment' && !snapshot.models.length) {
+    await initializeAiModelRegistry(adaptersForDiscovery);
+    snapshot = runtimeSnapshot || captureAiRuntimeConfiguration();
+  }
+  if (!snapshot.available) {
+    throw new HttpError(503, 'Konfigurasi AI aktif tidak tersedia.', snapshot.degradedReason || 'AI_RUNTIME_UNAVAILABLE');
+  }
+  if (userId) requireExternalAiConsent({ userId, manifest: snapshot.processorManifest });
+  const visualRequest = isVisionRequest({ purpose, mode, requiresVision, contents });
+  const activeRoute = ['active', 'revision'].includes(snapshot.source)
+    ? resolveRuntimeRoute(snapshot, { purpose, mode, requiresVision: visualRequest })
+    : null;
+  if (['active', 'revision'].includes(snapshot.source) && !activeRoute) {
+    throw new HttpError(503, 'Rute AI aktif tidak tersedia untuk pekerjaan ini.', 'AI_ROUTE_UNAVAILABLE');
+  }
+  const legacyRoute = activeRoute ? null : selectAiRoute({ purpose, mode, requiresVision: visualRequest, contents, requiresStructuredOutput: Boolean(responseJsonSchema) });
+  const routeId = activeRoute?.routeId || routeIdForRequest({ purpose, mode, requiresVision: legacyRoute?.requiresVision });
+  const candidates = activeRoute
+    ? activeRoute.candidates
+    : [
+      ...(legacyRoute.candidates || []).map((modelId) => ({ providerId: 'nararouter', modelId })),
+      ...(!legacyRoute.requiresVision && config.cloudflareAiEnabled && config.cloudflareAccountId && config.cloudflareAiToken
+        ? [{ providerId: 'cloudflare', modelId: config.cloudflareAiModel }]
+        : []),
+    ];
+  if (!candidates.length) {
+    throw new HttpError(503, 'Tidak ada rute AI yang telah diungkapkan dan tersedia.', activeRoute?.filteredUndisclosed ? 'AI_CONSENT_ROUTE_UNAVAILABLE' : 'AI_ROUTE_UNAVAILABLE');
+  }
+  const runtimeAdapters = providerAdapters || providerAdaptersForSnapshot(snapshot);
+  const visual = visualRequest || Boolean(activeRoute?.requiresVision ?? legacyRoute.requiresVision);
+  const routeReasoningEffort = activeRoute?.reasoningEffort || legacyRoute.reasoningEffort;
+  const routeTimeoutMs = activeRoute?.timeoutMs || requestTimeoutMs;
+  const effectiveOutputTokens = activeRoute?.outputTokenLimit
+    ? Math.min(maxOutputTokens, activeRoute.outputTokenLimit)
+    : maxOutputTokens;
+  const primary = candidates[0];
+  const primaryCircuitKey = `${primary.providerId}\u0000${primary.modelId}`;
+  const usageEventId = reserveUsage({
+    userId, purpose, mode, provider: primary.providerId, model: primary.modelId,
+    configurationRevision: snapshot.revisionId, routeId, contextType, contextId, requestId,
+    queueDepth: providerQueue.length, circuitStatus: circuitStatus(primaryCircuitKey),
+  });
   const startedAt = Date.now();
   let fallbackCount = 0;
   let fallbackReason = '';
   let lastError;
+  let lastProvider = primary.providerId;
+  let lastModel = primary.modelId;
   const structured = Boolean(responseJsonSchema) || responseMimeType === 'application/json';
   try {
-    for (const model of candidates) {
-      if (circuitOpen(model)) { fallbackCount += 1; fallbackReason = 'model_circuit_open'; continue; }
-      const capability = modelRegistry.find((item) => item.model === model);
+    for (const candidate of candidates) {
+      const { providerId, modelId } = candidate;
+      lastProvider = providerId;
+      lastModel = modelId;
+      const circuitKey = `${providerId}\u0000${modelId}`;
+      if (circuitOpen(circuitKey)) { fallbackCount += 1; fallbackReason = 'model_circuit_open'; continue; }
+      const rawCapability = snapshot.models.find((item) => String(item.providerId || item.provider) === providerId && String(item.modelId || item.model) === modelId);
+      const capability = rawCapability ? normalizeModel(rawCapability) : null;
       if (visual && !capability?.supportsVision) { fallbackCount += 1; fallbackReason = 'vision_capability_required'; continue; }
       const compacted = compactContents(contents, systemInstruction, capability?.contextLimit || 128000);
       const schemaInstruction = structured && !capability?.supportsStructuredOutput
         ? '\nReturn JSON only. Follow this schema exactly:\n' + JSON.stringify(responseJsonSchema || {})
         : '';
       try {
-        const providerOptions = { provider: 'nararouter', model, messages: toOpenAiMessages(compacted, `${systemInstruction}${schemaInstruction}`), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: capability?.supportsStructuredOutput, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs, priority: isDocumentPurpose(purpose) ? 10 : 0, signal, providerAdapters };
+        const providerOptions = { provider: providerId, model: modelId, messages: toOpenAiMessages(compacted, `${systemInstruction}${schemaInstruction}`), maxOutputTokens: effectiveOutputTokens, responseJsonSchema, supportsStructuredOutput: capability?.supportsStructuredOutput, reasoningEffort: routeReasoningEffort, timeoutMs: routeTimeoutMs, priority: isDocumentPurpose(purpose) ? 10 : 0, signal, providerAdapters: runtimeAdapters };
         const payload = onDelta
           ? await collectProviderStream(providerOptions, onDelta)
           : await requestOpenAiCompatible(providerOptions);
@@ -554,27 +661,23 @@ export async function generateAiContent({ userId = null, contextType = '', conte
           try { parsed = JSON.parse(extractedText); } catch { parsed = null; }
           if (!parsed || !schemaValid(parsed, responseJsonSchema)) throw new AiProviderError('Provider AI mengembalikan JSON yang tidak valid.', { code: 'AI_SCHEMA_INVALID', status: 502, retryable: true });
         }
-        recordCircuitSuccess(model);
-        finishUsage(usageEventId, { status: 'success', usage: payload.usage, latencyMs: Date.now() - startedAt, model, fallbackCount, fallbackReason });
-        return { text, provider: 'nararouter', model, usage: payload.usage || {}, finishReason: finishReason(payload), latencyMs: Date.now() - startedAt, fallbackCount };
+        recordCircuitSuccess(circuitKey);
+        finishUsage(usageEventId, { status: 'success', usage: payload.usage, latencyMs: Date.now() - startedAt, provider: providerId, model: modelId, fallbackCount, fallbackReason, queueDepth: providerQueue.length, circuitStatus: circuitStatus(circuitKey) });
+        return {
+          text, provider: providerId, model: modelId, usage: payload.usage || {}, finishReason: finishReason(payload),
+          latencyMs: Date.now() - startedAt, fallbackCount, configurationRevision: snapshot.revisionId,
+          routeId, runtimeSource: snapshot.source,
+        };
       } catch (error) {
         lastError = error;
-        recordCircuitFailure(model);
+        recordCircuitFailure(circuitKey);
         fallbackCount += 1;
         fallbackReason = error?.code || 'provider_failure';
         if (error?.code === 'AI_SAFETY_BLOCKED' || error?.code === 'CONTENT_POLICY_BLOCKED') throw error;
       }
     }
-    if (!visual && config.cloudflareAiEnabled && config.cloudflareAccountId && config.cloudflareAiToken) {
-      const providerOptions = { provider: 'cloudflare', model: config.cloudflareAiModel, messages: toOpenAiMessages(contents, systemInstruction), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: false, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs, signal, providerAdapters };
-      const payload = onDelta
-        ? await collectProviderStream(providerOptions, onDelta)
-        : await requestOpenAiCompatible(providerOptions);
-      const text = payload.text ?? responseText(payload);
-      if (!text) throw new AiProviderError('Emergency provider tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502 });
-      assertOutputAllowed(text);
-      finishUsage(usageEventId, { status: 'success', usage: payload.usage, latencyMs: Date.now() - startedAt, provider: 'cloudflare', model: config.cloudflareAiModel, fallbackCount, fallbackReason: 'nararouter_exhausted' });
-      return { text, provider: 'cloudflare', model: config.cloudflareAiModel, usage: payload.usage || {}, finishReason: finishReason(payload), latencyMs: Date.now() - startedAt, fallbackCount };
+    if (activeRoute?.filteredUndisclosed) {
+      throw new AiProviderError('Tidak ada fallback yang sesuai dengan persetujuan pemroses aktif.', { code: 'AI_CONSENT_ROUTE_UNAVAILABLE', status: 503 });
     }
     throw lastError || new AiProviderError(visual ? 'Kapasitas AI visual sedang tidak tersedia.' : 'Kapasitas AI sedang tidak tersedia.', { code: visual ? 'AI_VISION_UNAVAILABLE' : 'AI_CAPACITY_UNAVAILABLE', status: 503, retryable: true });
   } catch (error) {
@@ -583,7 +686,8 @@ export async function generateAiContent({ userId = null, contextType = '', conte
         audit(userId, 'content_policy.blocked', contextType || 'ai', contextId || null, { direction: 'output', code: error.policyCode, purpose });
       } catch { /* safety logging must not replace the policy response */ }
     }
-    finishUsage(usageEventId, { status: 'error', latencyMs: Date.now() - startedAt, errorCode: error?.code || 'AI_PROVIDER_ERROR', fallbackCount, fallbackReason });
+    const finalCircuitKey = `${lastProvider}\u0000${lastModel}`;
+    finishUsage(usageEventId, { status: 'error', latencyMs: Date.now() - startedAt, errorCode: error?.code || 'AI_PROVIDER_ERROR', provider: lastProvider, model: lastModel, fallbackCount, fallbackReason, queueDepth: providerQueue.length, circuitStatus: circuitStatus(finalCircuitKey) });
     throw error;
   }
 }
