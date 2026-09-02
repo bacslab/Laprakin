@@ -1156,4 +1156,27 @@ CREATE INDEX IF NOT EXISTS idx_message_reactions_analytics
   ON message_reactions(reaction, provider_id, model_id, updated_at DESC);
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_usage_context ON ai_usage_events(context_type, context_id, created_at);`);
+
+// V32: encrypted AI credential envelopes. Plaintext credentials are never
+// written to SQLite; provider configuration stores only the opaque `id`.
+db.exec(`
+CREATE TABLE IF NOT EXISTS ai_provider_secrets (
+  id TEXT PRIMARY KEY,
+  provider_id TEXT NOT NULL,
+  secret_version INTEGER NOT NULL,
+  key_version TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  auth_tag TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  last_four TEXT NOT NULL,
+  actor_user_id TEXT,
+  created_at TEXT NOT NULL,
+  rotated_at TEXT,
+  deleted_at TEXT,
+  UNIQUE(provider_id, secret_version)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_provider_secrets_provider
+  ON ai_provider_secrets(provider_id, secret_version DESC);
+`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_user_devices_profile ON user_devices(profile_hash, user_id);`);

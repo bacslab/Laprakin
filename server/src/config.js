@@ -70,6 +70,13 @@ function csv(value = '') {
   return String(value).split(',').map((item) => item.trim()).filter(Boolean);
 }
 
+function jsonObject(value = '') {
+  try {
+    const parsed = JSON.parse(String(value || '{}'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch { return {}; }
+}
+
 export const config = {
   port: positiveInt(process.env.PORT, 4000),
   nodeEnv,
@@ -110,6 +117,12 @@ export const config = {
   aiContextCharacters: boundedInt(process.env.AI_CONTEXT_CHARACTERS, 24000, 4000, 80000),
   aiAttachmentCharacters: boundedInt(process.env.AI_ATTACHMENT_CHARACTERS, 18000, 2000, 60000),
   aiOperationalContextTokens: boundedInt(process.env.AI_OPERATIONAL_CONTEXT_TOKENS, 220000, 16000, 1000000),
+  aiSecretStore: process.env.AI_SECRET_STORE || (process.env.AZURE_KEY_VAULT_URL ? 'azure-key-vault' : 'envelope'),
+  aiCredentialMasterKey: process.env.AI_CREDENTIAL_MASTER_KEY || '',
+  aiCredentialKeyVersion: process.env.AI_CREDENTIAL_KEY_VERSION || 'v1',
+  aiCredentialPreviousKeys: jsonObject(process.env.AI_CREDENTIAL_PREVIOUS_KEYS),
+  azureKeyVaultUrl: (process.env.AZURE_KEY_VAULT_URL || '').replace(/\/$/, ''),
+  azureManagedIdentityClientId: process.env.AZURE_MANAGED_IDENTITY_CLIENT_ID || '',
   referralHoldDays: Math.max(0, Number(process.env.REFERRAL_HOLD_DAYS ?? 7)),
   paymentsMode: process.env.PAYMENTS_MODE || 'manual',
   // MIDTRANS_ENVIRONMENT is canonical; MIDTRANS_IS_PRODUCTION is accepted for deployment compatibility.
@@ -174,6 +187,24 @@ export function productionConfigChecks() {
   const secretValues = [process.env.JWT_SECRET, process.env.DEVICE_HMAC_SECRET, process.env.TOKEN_HMAC_SECRET];
   const secretsReady = secretValues.every((value) => typeof value === 'string' && value.length >= 32)
     && new Set(secretValues).size === secretValues.length;
+  const credentialMasterKey = (() => {
+    const source = String(config.aiCredentialMasterKey || '').trim();
+    if (/^[a-f0-9]{64}$/i.test(source)) return Buffer.from(source, 'hex');
+    if (!/^[a-z0-9+/]+={0,2}$/i.test(source) || source.length % 4 !== 0) return null;
+    const parsed = Buffer.from(source, 'base64');
+    return parsed.length === 32 ? parsed : null;
+  })();
+  const envelopeSecretStoreReady = config.aiSecretStore === 'envelope'
+    && credentialMasterKey?.length === 32
+    && !secretValues.includes(config.aiCredentialMasterKey);
+  const keyVaultSecretStoreReady = config.aiSecretStore === 'azure-key-vault' && (() => {
+    try {
+      const url = new URL(config.azureKeyVaultUrl);
+      return url.protocol === 'https:' && /^[a-z0-9-]+\.vault\.azure\.net$/i.test(url.hostname)
+        && url.username === '' && url.password === '' && url.pathname === '/' && !url.search && !url.hash;
+    } catch { return false; }
+  })();
+  const aiSecretStoreReady = envelopeSecretStoreReady || keyVaultSecretStoreReady;
   const originsReady = app.valid && config.allowedOrigins.length > 0 && config.allowedOrigins.every((origin) => {
     const parsed = productionUrl(origin);
     return parsed.valid;
@@ -195,6 +226,7 @@ export function productionConfigChecks() {
     { name: 'allowed origins', ok: originsReady, detail: originsReady ? `${config.allowedOrigins.length} origin HTTPS` : 'ALLOWED_ORIGINS wajib HTTPS dan memuat origin APP_URL' },
     { name: 'reverse proxy trust', ok: config.trustProxyHops >= 1, detail: config.trustProxyHops >= 1 ? `${config.trustProxyHops} hop` : 'TRUST_PROXY_HOPS minimal 1 di belakang Cloudflare/reverse proxy' },
     { name: 'application secrets', ok: secretsReady, detail: secretsReady ? '3 secret unik, minimal 32 karakter' : 'JWT_SECRET, DEVICE_HMAC_SECRET, dan TOKEN_HMAC_SECRET wajib unik dan minimal 32 karakter' },
+    { name: 'AI credential secret store', ok: aiSecretStoreReady, detail: aiSecretStoreReady ? (keyVaultSecretStoreReady ? 'Azure Key Vault melalui managed identity' : 'AES-256-GCM dengan dedicated master key') : 'Konfigurasikan Azure Key Vault atau AI_CREDENTIAL_MASTER_KEY 32-byte yang terpisah' },
     { name: 'AI required and Nara credential', ok: config.aiRequired && Boolean(config.naraRouterApiKey), detail: config.aiRequired && config.naraRouterApiKey ? 'AI_REQUIRED=true dan NaraRouter API key tersedia' : 'Set AI_REQUIRED=true dan NARAROUTER_API_KEY' },
     { name: 'NaraRouter endpoint', ok: /^https:\/\//i.test(config.naraRouterBaseUrl), detail: /^https:\/\//i.test(config.naraRouterBaseUrl) ? config.naraRouterBaseUrl : 'NARAROUTER_BASE_URL wajib memakai HTTPS' },
     { name: 'NaraRouter limiter', ok: config.naraRouterMaxRpm <= 8 && config.naraRouterMaxConcurrency <= 2, detail: `${config.naraRouterMaxRpm} RPM, concurrency ${config.naraRouterMaxConcurrency}` },

@@ -56,13 +56,13 @@
 - `createEnvelopeSecretStore({ masterKey, keyVersion, store })`
 - `createProductionSecretStore(config)` with Azure Key Vault preference and envelope fallback.
 
-- [ ] Write red tests for AES-256-GCM round-trip, 12-byte IV, 16-byte tag, AAD binding, key/version mismatch, malformed ciphertext, rotation, deletion, metadata masking, and absence of plaintext in SQLite/audit/error output.
-- [ ] Add a metadata table containing opaque reference, provider ID, secret/key versions, fingerprint, last four, actor, created/rotated/deleted timestamps, IV/tag/ciphertext for the envelope implementation, and no plaintext column.
-- [ ] Derive no key from JWT/device/token/MFA/CSRF material. Accept only an independently configured 32-byte base64/hex master key.
-- [ ] Fail closed in production without an external vault or valid dedicated key; permit an explicit ephemeral test store only in test/development.
-- [ ] Ensure successful replacement returns only `Configured •••• ABCD` metadata and credential inputs can be cleared by the client.
-- [ ] Run focused tests plus production configuration checks.
-- [ ] Commit: `feat: add authenticated ai secret storage`.
+- [x] Write red tests for AES-256-GCM round-trip, 12-byte IV, 16-byte tag, AAD binding, key/version mismatch, malformed ciphertext, rotation, deletion, metadata masking, and absence of plaintext in SQLite/audit/error output.
+- [x] Add a metadata table containing opaque reference, provider ID, secret/key versions, fingerprint, last four, actor, created/rotated/deleted timestamps, IV/tag/ciphertext for the envelope implementation, and no plaintext column.
+- [x] Derive no key from JWT/device/token/MFA/CSRF material. Accept only an independently configured 32-byte base64/hex master key.
+- [x] Fail closed in production without an external vault or valid dedicated key; permit an explicit ephemeral test store only in test/development.
+- [x] Ensure successful replacement returns only `Configured •••• ABCD` metadata and credential inputs can be cleared by the client.
+- [x] Run focused tests plus production configuration checks.
+- [x] Commit: `feat: add authenticated ai secret storage`.
 
 ## Task 3: Guard all configurable provider egress
 
