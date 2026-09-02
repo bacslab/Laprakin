@@ -3,7 +3,7 @@ import { Save } from 'lucide-react';
 import { api } from '../../api';
 import { pricingFallback, pricingFeatures } from '../../data/pricing';
 import { Button } from '../../components/Button';
-import { useI18n } from '../../i18n';
+import { useI18n } from '../../i18n/context';
 
 export default function AdminPricingPanel({ setNotice }) {
   const { t } = useI18n();

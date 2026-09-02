@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Archive, ChevronRight, FolderOpen, MoreHorizontal, Pencil, Pin, PinOff, Plus, Trash2 } from 'lucide-react';
 import { normalizedCourseKey } from '../../../lib/academic';
 import { useApp } from '../../../state/ui-context';
-import { useI18n } from '../../../i18n';
+import { useI18n } from '../../../i18n/context';
 
 export function SessionGroup({ group, items, activeId, page, onOpen, renamingId, setRenamingId, onRename, draggingSession, setDraggingSession, onDropSession, onDropGroup, folders = [], onPin, onMove, onArchive, onDelete }) {
   const { t } = useI18n();

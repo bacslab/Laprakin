@@ -6,7 +6,7 @@ import { courseTokens, normalizedCourseKey } from '../../lib/academic';
 import { inferPendingAttachmentKind } from '../../lib/attachments';
 import { useResolvedTheme } from '../../lib/theme';
 import { useApp } from '../../state/ui-context';
-import { useI18n } from '../../i18n';
+import { useI18n } from '../../i18n/context';
 import {
   canonicalCourseLabel, clipboardImageFiles, courseLabelsMatch, defaultChatConfig, mergeFiles,
   preferredCourseLabel, resolveAccent, takeLandingDraft,

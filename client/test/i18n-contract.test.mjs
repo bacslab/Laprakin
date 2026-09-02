@@ -29,6 +29,9 @@ const adminConsoleSource = await readFile(new URL('../src/pages/Admin/LegacyAdmi
 const adminPricingSource = await readFile(new URL('../src/pages/Admin/AdminPricingPanel.jsx', import.meta.url), 'utf8');
 const adminAccessSource = await readFile(new URL('../src/pages/Admin/AdminAccessPanel.jsx', import.meta.url), 'utf8');
 const adminAppealsSource = await readFile(new URL('../src/pages/Admin/AdminAppealsPanel.jsx', import.meta.url), 'utf8');
+const adminBroadcastSource = await readFile(new URL('../src/pages/Admin/AdminBroadcastPanel.jsx', import.meta.url), 'utf8');
+const featureUpdatesSource = await readFile(new URL('../src/FeatureUpdates.jsx', import.meta.url), 'utf8');
+const adminContentPanelsSource = await readFile(new URL('../src/pages/Admin/AdminLegacyContentPanels.jsx', import.meta.url), 'utf8');
 
 function keys(value, prefix = '') {
   return Object.entries(value).flatMap(([key, nested]) => {
@@ -161,6 +164,19 @@ test('admin console shell and operational panels consume keyed locale copy', () 
   assert.doesNotMatch(adminPricingSource, /Plan dan benefit|Simpan plan/);
   assert.doesNotMatch(adminAccessSource, /Jenis pembatasan|Terapkan pembatasan/);
   assert.doesNotMatch(adminAppealsSource, /Appeal akun|Belum ada appeal/);
+});
+
+test('remaining admin content surfaces consume keyed locale copy', () => {
+  assert.match(adminBroadcastSource, /admin\.console\.broadcasts\.delivered/);
+  assert.match(featureUpdatesSource, /admin\.console\.updates\.draftCreated/);
+  assert.match(featureUpdatesSource, /workspace\.productUpdate\.close/);
+  assert.match(adminContentPanelsSource, /admin\.console\.integrations\.privacyDescription/);
+  assert.match(adminContentPanelsSource, /admin\.console\.feedback\.replyPlaceholder/);
+  assert.match(adminContentPanelsSource, /admin\.console\.risk\.title/);
+  assert.match(adminContentPanelsSource, /admin\.console\.cms\.copyTitle/);
+  assert.doesNotMatch(adminBroadcastSource, /Promosi, update, atau maintenance|Semua user terverifikasi|Kirim email/);
+  assert.doesNotMatch(featureUpdatesSource, /Kelola draft, jadwal tayang|Buat draft untuk mulai|Tutup update fitur/);
+  assert.doesNotMatch(adminContentPanelsSource, /Credential tetap di server|Feedback pengguna|Kejadian perlu ditinjau|Landing CMS/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {

@@ -4,7 +4,7 @@ import { api } from '../../api';
 import { Button } from '../../components/Button';
 import { INSTITUTION_LOGO_MAX_BYTES } from '../../components/InstitutionLogoField';
 import { useApp } from '../../state/ui-context';
-import { useI18n } from '../../i18n';
+import { useI18n } from '../../i18n/context';
 
 export default function IdentityIntakeModal({ user, onSave, onBack, busy }) {
   const { setNotice } = useApp();

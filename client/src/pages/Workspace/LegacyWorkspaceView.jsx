@@ -21,7 +21,7 @@ import IdentityIntakeModal from './IdentityIntakeModal';
 import WorkspaceTutorial from './WorkspaceTutorial';
 import DocumentSidePanel from './DocumentSidePanel';
 import { loadPage } from '../../lib/load-page';
-import { useI18n } from '../../i18n';
+import { useI18n } from '../../i18n/context';
 
 const ChatSurface = loadPage(() => import('./ChatSurface'));
 

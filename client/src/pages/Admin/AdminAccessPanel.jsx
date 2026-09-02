@@ -4,7 +4,7 @@ import { api } from '../../api';
 import { formatDate } from '../../lib/formatters';
 import { Button } from '../../components/Button';
 import { CustomSelect } from '../../components/CustomSelect';
-import { useI18n } from '../../i18n';
+import { useI18n } from '../../i18n/context';
 
 export default function AdminAccessPanel({ users, setNotice, onRefresh }) {
   const { t } = useI18n();

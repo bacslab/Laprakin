@@ -21,6 +21,9 @@
 - Memigrasikan sidebar chat, library dokumen, Projects, dan intake identitas akademik ke translation key Indonesia/Inggris.
 - Memigrasikan shell Admin Console, monitoring, kredit, alert, audit, dan retensi ke translation key Indonesia/Inggris.
 - Memigrasikan panel Admin Pricing, akses user, dan appeal ke translation key Indonesia/Inggris.
+- Memigrasikan email broadcast, update produk, dan popup update ke translation key Indonesia/Inggris.
+- Memecah panel Admin integrasi, feedback, risk review, dan Landing CMS menjadi komponen terpisah dengan copy keyed serta status dinamis yang terlokalisasi.
+- Menyamakan import hook i18n ke context provider agar seluruh panel client ter-build melalui kontrak yang sama.
 
 ## 21.0.6 - 2026-09-02
 

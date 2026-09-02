@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import { formatDate } from '../../lib/formatters';
-import { useI18n } from '../../i18n';
+import { useI18n } from '../../i18n/context';
 
 export default function AdminAppealsPanel({ setNotice, onRefresh }) {
   const { t } = useI18n();
