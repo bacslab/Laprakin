@@ -156,7 +156,7 @@ git commit -m "feat: add canonical mutation ledger"
 - Produces: `executeChatMessageMutation({ requestId, session, user, input, signal, onDelta })` and `GET /api/mutations/:requestId`.
 - Chat schema requires `requestId` matching `/^[a-zA-Z0-9._:-]{12,120}$/` and the header must equal the body value.
 
-- [ ] **Step 1: Write API reproductions for replay and concurrency**
+- [x] **Step 1: Write API reproductions for replay and concurrency**
 
 Use a counted fake provider and assert:
 
@@ -175,25 +175,25 @@ assert.deepEqual(canonicalPayload(first, second), true);
 
 Cover response loss after commit by closing the first response and replaying the same key. Cover different content with the same key returning `409 IDEMPOTENCY_KEY_REUSED`.
 
-- [ ] **Step 2: Run the focused API test and verify duplicate behavior**
+- [x] **Step 2: Run the focused API test and verify duplicate behavior**
 
 Run: `node --test server/test/chat-idempotency-api.test.mjs`
 
 Expected: the current endpoint either rejects the request ID or calls the provider/persists more than once.
 
-- [ ] **Step 3: Extract the mutation executor**
+- [x] **Step 3: Extract the mutation executor**
 
 Move the existing chat orchestration behind `executeChatMessageMutation`. Acquire the ledger before credit reservation. Stamp the request ID on user/assistant messages, usage, jobs, and credit operations. Complete the ledger only with the same canonical payload returned to clients.
 
-- [ ] **Step 4: Add the canonical snapshot endpoint**
+- [x] **Step 4: Add the canonical snapshot endpoint**
 
 Return only the authenticated owner's mutation. Map states to `202 processing`, `200 completed`, `409 retryable_failed`, `422 terminal_failed`, or `410 canceled`. Never return raw prompts, credentials, provider errors, or another user's record.
 
-- [ ] **Step 5: Propagate cancellation**
+- [x] **Step 5: Propagate cancellation**
 
 Pass the composed abort signal through the chat executor and provider fetch. If abort occurs before canonical commit, set an explicit retryable/canceled state according to the abort reason and refund an unconsumed reservation. If commit already occurred, return the completed snapshot on replay.
 
-- [ ] **Step 6: Run the complete chat integrity matrix**
+- [x] **Step 6: Run the complete chat integrity matrix**
 
 Run:
 
@@ -225,11 +225,11 @@ git commit -m "fix: make chat mutations idempotent"
 - Produces: `composeRequestSignal({ signal, timeoutMs })`, `parseOriginalResponse(response)`, `classifyRequestFailure(error)`, and `loadCanonicalMutation(requestId, options)`.
 - `apiStream` accepts `requestId`, `timeoutMs`, `signal`, `onDelta`, and `onState` and performs exactly one mutation fetch.
 
-- [ ] **Step 1: Write failing fetch-count tests**
+- [x] **Step 1: Write failing fetch-count tests**
 
 Inject a fetch implementation and cover non-SSE JSON, proxied JSON with a wrong content type, disconnect before first delta, disconnect after a delta, and completed response whose final frame is lost. Assert the POST fetch count remains one in every case.
 
-- [ ] **Step 2: Run the focused client tests**
+- [x] **Step 2: Run the focused client tests**
 
 Run:
 
@@ -239,19 +239,19 @@ node --test client/test/request-lifecycle.test.mjs client/test/api-stream-contra
 
 Expected: current fallback tests fail because `apiStream` invokes `api()`.
 
-- [ ] **Step 3: Implement original-response parsing**
+- [x] **Step 3: Implement original-response parsing**
 
 For non-SSE responses, read the original body once, attempting JSON from either content type or parseable text. For incomplete SSE, classify interruption and query the read-only canonical snapshot endpoint. Do not infer completion from the presence of any delta.
 
-- [ ] **Step 4: Add timeout and caller cancellation**
+- [x] **Step 4: Add timeout and caller cancellation**
 
 Compose the caller signal with `AbortSignal.timeout(timeoutMs)`. Preserve the first abort reason and surface distinct `REQUEST_TIMEOUT`, `REQUEST_CANCELED`, `STREAM_INTERRUPTED`, and `CANONICAL_COMPLETED` states.
 
-- [ ] **Step 5: Persist request identity with the draft**
+- [x] **Step 5: Persist request identity with the draft**
 
 Generate the request ID once before optimistic messages are added. Keep it through failure/reload/manual retry and clear it only after canonical acknowledgement. Use the same ID in header and body.
 
-- [ ] **Step 6: Verify the red-green regression cycle**
+- [x] **Step 6: Verify the red-green regression cycle**
 
 Run the focused tests green, temporarily restore the old `return api(...)` fallback, prove the fetch-count test fails, restore the fix, and rerun green.
 
@@ -342,7 +342,7 @@ git commit -m "fix: require truthful external ai consent"
 - Produces: `shouldSubmitComposerKey({ key, shiftKey, ctrlKey, metaKey, isComposing, enterToSend })`.
 - Composer receives `enterToSend` as an explicit boolean prop.
 
-- [ ] **Step 1: Complete the keyboard truth table test**
+- [x] **Step 1: Complete the keyboard truth table test**
 
 ```js
 assert.equal(shouldSubmitComposerKey({ key: 'Enter', enterToSend: true }), true);
@@ -353,13 +353,13 @@ assert.equal(shouldSubmitComposerKey({ key: 'Enter', metaKey: true, enterToSend:
 assert.equal(shouldSubmitComposerKey({ key: 'Enter', ctrlKey: true, isComposing: true, enterToSend: false }), false);
 ```
 
-- [ ] **Step 2: Run the focused test red**
+- [x] **Step 2: Run the focused test red**
 
 Run: `node --test client/test/composer-keyboard.test.mjs`
 
 Expected: missing helper and current hard-coded behavior fail.
 
-- [ ] **Step 3: Implement the pure helper and wire the preference**
+- [x] **Step 3: Implement the pure helper and wire the preference**
 
 Use both React's composition state and `nativeEvent.isComposing`. Call `requestSubmit()` only when the pure helper returns true. The send button remains independent of the keyboard preference.
 

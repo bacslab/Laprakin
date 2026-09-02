@@ -9,7 +9,7 @@ import Composer from './Composer';
 import { ThinkingRail, WorkPlanRail, WorkflowPanel } from './WorkspaceWorkflow';
 import { AssistantMessageActions, ChatBriefPanel, DocumentCard, DocumentQuiz, InlineContext, MessageContent, UserMessageActions } from './ChatComponents';
 
-export default function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz, editingMessage, onEditMessage, onCancelEdit, onRevise }) {
+export default function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, enterToSend = true, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz, editingMessage, onEditMessage, onCancelEdit, onRevise }) {
   const { t } = useI18n();
   const blankChat = !active || (!messages.length && !attachments.length && !active.document_id);
   const [previewFile, setPreviewFile] = useState(null);
@@ -93,7 +93,7 @@ export default function ChatSurface({ active, messages, attachments, documentSta
         : !hasEmbeddedPlan && <WorkflowPanel workflow={workflow} busy={busy} onCreate={createDocument} onAction={onWorkflowAction} aiMode={aiMode} />}
       {busy && !active?.document_id && !['queued', 'running', 'retry_queued'].includes(activeJob?.status) && <ThinkingRail />}
     </div>}</div>
-    {!quizMode && <Composer input={input} setInput={setInput} busy={busy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} centered={blankChat} pendingFiles={pendingFiles} onPasteImages={onPasteImages} onAddPendingFiles={onAddPendingFiles} onRemovePending={onRemovePending} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={onUpgrade} editingMessage={editingMessage} onCancelEdit={onCancelEdit} />}
+    {!quizMode && <Composer input={input} setInput={setInput} busy={busy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} centered={blankChat} pendingFiles={pendingFiles} onPasteImages={onPasteImages} onAddPendingFiles={onAddPendingFiles} onRemovePending={onRemovePending} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} onUpgrade={onUpgrade} enterToSend={enterToSend} editingMessage={editingMessage} onCancelEdit={onCancelEdit} />}
     {previewFile && <AttachmentPreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />}
   </div>;
 }

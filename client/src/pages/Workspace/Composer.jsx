@@ -3,6 +3,7 @@ import { Check, ChevronDown, ChevronRight, ClipboardList, FileText, GraduationCa
 import { CustomSelect } from '../../components/CustomSelect';
 import { useI18n } from '../../i18n/context';
 import { PendingAttachmentChip } from './AttachmentComponents';
+import { shouldSubmitComposerKey } from '../../lib/composer-keyboard';
 
 function AiModeMenu({ value, onChange, access = {}, onUpgrade }) {
   const { t } = useI18n();
@@ -44,7 +45,7 @@ function resizeComposerTextarea(textarea) {
   textarea.style.overflowY = overflowing ? 'auto' : 'hidden';
 }
 
-export default function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, centered, pendingFiles = [], onPasteImages, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, editingMessage = null, onCancelEdit }) {
+export default function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, centered, pendingFiles = [], onPasteImages, onRemovePending, aiMode, setAiMode, aiModeAccess, onUpgrade, enterToSend = true, editingMessage = null, onCancelEdit }) {
   const { t } = useI18n();
   const textareaRef = useRef(null);
   const shortcutItems = [
@@ -84,7 +85,7 @@ export default function Composer({ input, setInput, busy, attachmentKind, setAtt
     {pendingFiles.length ? <div className="pending-files">{pendingFiles.map((file, index) => <PendingAttachmentChip file={file} index={index} key={`${file.name}-${index}`} onRemove={onRemovePending} />)}</div> : null}
     {editingMessage && <div className="composer-editing-banner" role="status" aria-live="polite"><span><Pencil size={13} />{t('workspace.composer.editBanner')}</span><button type="button" onClick={onCancelEdit} disabled={busy}>{t('workspace.composer.cancelEdit')}</button></div>}
     <form className={`composer ${centered ? 'composer-style-reference' : ''}`} onSubmit={send}>
-      <textarea ref={textareaRef} aria-label={placeholder || t('workspace.composer.chatMessage')} rows="2" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={placeholder} />
+      <textarea ref={textareaRef} aria-label={placeholder || t('workspace.composer.chatMessage')} rows="2" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (shouldSubmitComposerKey({ key: event.key, shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey, isComposing: event.nativeEvent.isComposing, enterToSend })) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={placeholder} />
       <div className="composer-bottom-row">
         <div className="composer-left">
           <CustomSelect className="composer-select" value={attachmentKind} onChange={setAttachmentKind} ariaLabel={t('workspace.composer.attachmentKind')} options={[{ value: '', label: t('workspace.composer.autoDetect') }, { value: 'module', label: t('workspace.composer.module') }, { value: 'instruction', label: t('workspace.composer.instruction') }, { value: 'practice_evidence', label: t('workspace.composer.practiceEvidence') }, { value: 'template', label: t('workspace.composer.template') }, { value: 'supporting_document', label: t('workspace.composer.supportingDocument') }]} />
