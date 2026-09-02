@@ -3,6 +3,8 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
+import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import mime from 'mime-types';
@@ -23,6 +25,13 @@ import { EMAIL_LOGO_URL } from './emails/_components/email-layout.js';
 import { capitalizeInitial } from './emails/text.js';
 import { verifyProductionIntegrations } from './integrations.js';
 import { getAiReadiness, initializeAiModelRegistry, isAiConfigured } from './ai.js';
+import { buildRevisionPlan, RevisionError, validateRevisionRequest } from './chat-revisions.js';
+import { moderationMessage, moderateText } from './content-safety.js';
+import { createLogger, reportException, statusSnapshot } from './observability.js';
+import { createSseChannel } from './chat-stream.js';
+import { listAdminAudit, recordAdminAudit } from './admin-audit.js';
+import { createTotpSecret, getAdminMfaStatus, verifyTotpCode, adminMfaRequired } from './mfa.js';
+import { checkPasswordBreach } from './password-breach.js';
 import {
   analyzeChatRequest,
   assessChatReadiness,
@@ -51,6 +60,7 @@ import {
   listVersions,
   observeDevice,
   publicUser,
+  persistChatExchange,
   refundCredit,
   refundLaprakCredit,
   reserveLaprakCredit,
@@ -120,6 +130,18 @@ function friendlyErrorMessage(error, status) {
 function friendlyErrorCode(error) {
   return isTechnicalAiError(error) ? 'REQUEST_NOT_COMPLETED' : (error?.code || 'INTERNAL_ERROR');
 }
+
+function actorClass(req) {
+  if (req.user?.role === 'admin') return 'admin';
+  return req.user ? 'user' : 'anonymous';
+}
+
+function enforceContentPolicy({ text, userId, sessionId, direction = 'input', targetType = 'chat_session' }) {
+  const decision = moderateText(text, direction);
+  if (decision.action === 'allow') return decision;
+  audit(userId, 'content_policy.blocked', targetType, sessionId, { direction, code: decision.code });
+  throw new HttpError(422, moderationMessage(decision.code, direction), 'CONTENT_POLICY_BLOCKED');
+}
 import {
   buildOrderQuote,
   checkoutRequestSchema,
@@ -138,6 +160,37 @@ validateProductionConfig();
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', config.trustProxyHops || false);
+const logger = createLogger({ level: config.logLevel });
+
+const securityCspDirectives = {
+  defaultSrc: ["'self'"],
+  baseUri: ["'self'"],
+  objectSrc: ["'none'"],
+  frameAncestors: ["'none'"],
+  formAction: ["'self'"],
+  scriptSrc: ["'self'", 'https://*.midtrans.com', 'https://*.veritrans.co.id', 'https://*.mixpanel.com', 'https://*.google-analytics.com'],
+  styleSrc: ["'self'", "'unsafe-inline'"],
+  imgSrc: ["'self'", 'data:', 'blob:', 'https://*.cloudfront.net', 'https://*.midtrans.com', 'https://*.veritrans.co.id', 'https://*.mixpanel.com', 'https://*.google-analytics.com'],
+  mediaSrc: ["'self'", 'blob:'],
+  fontSrc: ["'self'", 'data:'],
+  connectSrc: ["'self'", 'https://*.midtrans.com', 'https://*.veritrans.co.id', 'https://*.mixpanel.com', 'https://*.google-analytics.com'],
+  frameSrc: ['https://*.midtrans.com', 'https://*.veritrans.co.id'],
+};
+
+app.use(helmet({
+  contentSecurityPolicy: { directives: securityCspDirectives },
+  frameguard: { action: 'deny' },
+  crossOriginOpenerPolicy: { policy: 'same-origin' },
+  crossOriginResourcePolicy: { policy: 'same-site' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  hsts: config.isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+}));
+app.use(cors({
+  origin(origin, callback) { callback(null, !origin || config.allowedOrigins.includes(origin)); },
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'X-Laprakin-Device', 'X-Laprakin-Client-Profile', 'X-Laprakin-CSRF'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+}));
 
 const departments = [
   { key: 'jkb', label: 'Jurusan Komputer dan Bisnis' },
@@ -174,6 +227,13 @@ const securePasswordSchema = z.string()
   .min(12, 'Kata sandi minimal 12 karakter.')
   .max(64, 'Kata sandi maksimal 64 karakter.')
   .refine((value) => Buffer.byteLength(value, 'utf8') <= 72, 'Kata sandi terlalu panjang untuk diproses dengan aman.');
+
+async function enforcePasswordSafety(password) {
+  if (!config.passwordBreachCheck) return;
+  const result = await checkPasswordBreach(password);
+  if (result.breached) throw new HttpError(400, 'Kata sandi ini pernah muncul dalam kebocoran data. Pilih kata sandi yang berbeda.', 'PASSWORD_BREACHED');
+  if (!result.checked) logger.warn({ errorCode: 'PASSWORD_BREACH_CHECK_UNAVAILABLE' }, 'password breach check unavailable');
+}
 
 const registerSchema = z.object({
   email: z.string().email('Masukkan email yang valid.'),
@@ -356,6 +416,23 @@ const quizAttemptSchema = z.object({
 const supportMessageSchema = z.object({
   content: z.string().trim().min(1).max(900),
 });
+
+function revisionHttpError(error) {
+  if (!(error instanceof RevisionError)) return error;
+  if (error.code === 'MESSAGE_NOT_FOUND') {
+    return new HttpError(404, 'Pesan sumber tidak ditemukan.', 'CHAT_MESSAGE_NOT_FOUND');
+  }
+  if (error.code === 'USER_MESSAGE_REQUIRED') {
+    return new HttpError(409, 'Hanya pesan pengguna yang bisa direvisi.', 'USER_MESSAGE_REQUIRED');
+  }
+  if (error.code === 'CONTENT_REQUIRED') {
+    return new HttpError(422, 'Tulis perubahan yang kamu inginkan sebelum merevisi pesan ini.', 'CONTENT_REQUIRED');
+  }
+  if (error.code === 'MODE_INVALID') {
+    return new HttpError(400, 'Mode revisi tidak valid.', 'MODE_INVALID');
+  }
+  return new HttpError(400, 'Permintaan revisi tidak valid.', error.code || 'REVISION_INVALID');
+}
 
 // Checkout schema and all QRIS-only Midtrans logic live in payments.js. The
 // server only accepts SKU + quantity and computes the final order here.
@@ -1094,37 +1171,15 @@ function securityHeaders(req, res, next) {
     return res.status(403).json({ error: { message: 'Origin request tidak diizinkan.', code: 'ORIGIN_DENIED' } });
   }
 
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Vary', 'Origin');
-  }
-
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('Content-Security-Policy', [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "frame-ancestors 'none'",
-    "form-action 'self'",
-    "script-src 'self' https://*.midtrans.com https://*.veritrans.co.id https://*.mixpanel.com https://*.google-analytics.com",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://*.cloudfront.net https://*.midtrans.com https://*.veritrans.co.id https://*.mixpanel.com https://*.google-analytics.com",
-    "media-src 'self' blob:",
-    "font-src 'self' data:",
-    "connect-src 'self' https://*.midtrans.com https://*.veritrans.co.id https://*.mixpanel.com https://*.google-analytics.com",
-    "frame-src https://*.midtrans.com https://*.veritrans.co.id",
-  ].join('; '));
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Laprakin-Device, X-Laprakin-Client-Profile, X-Laprakin-CSRF');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     return res.status(204).end();
   }
 
@@ -1135,8 +1190,21 @@ app.use(securityHeaders);
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(deviceCookieMiddleware);
-app.use((req, _res, next) => {
+app.use((req, res, next) => {
   req.requestId = nanoid(10);
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    const requestLogger = logger.child({
+      requestId: req.requestId,
+      method: req.method,
+      route: req.route?.path || req.path || req.originalUrl,
+    });
+    requestLogger.info({
+      status: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      actorClass: actorClass(req),
+    }, 'request completed');
+  });
   next();
 });
 
@@ -1312,7 +1380,7 @@ function createAdminAlert({
       text: adminSecurityAlertText(emailProps),
       react: AdminSecurityAlertEmail(emailProps),
     }).catch((error) => {
-      console.error('[admin-alert-email]', { code: error?.code || 'EMAIL_FAILED' });
+      logger.warn({ code: error?.code || 'EMAIL_FAILED' }, 'admin alert email failed');
     });
   }
   return id;
@@ -1555,7 +1623,7 @@ function resumePendingDocumentPipelines() {
       });
     }
   }
-  if (resumed) console.log(`[jobs] resumed ${resumed} document pipeline(s)`);
+  if (resumed) logger.info({ resumed }, 'document pipelines resumed');
   return resumed;
 }
 
@@ -1877,7 +1945,7 @@ function recoverInterruptedJobs() {
     UPDATE jobs SET status = 'queued', message = 'Dilanjutkan setelah server aktif kembali', run_after = NULL
     WHERE status = 'running'
   `).run();
-  if (result.changes) console.log(`[jobs] recovered ${result.changes} interrupted job(s)`);
+  if (result.changes) logger.info({ recovered: result.changes }, 'interrupted jobs recovered');
 }
 
 function recoverFailedGenerationSessions() {
@@ -1941,6 +2009,22 @@ const institutionLogoUpload = multer({
     if (file.mimetype !== 'image/png') return callback(new HttpError(400, 'Logo institusi wajib berformat PNG.', 'INSTITUTION_LOGO_TYPE'));
     return callback(null, true);
   },
+});
+
+app.get('/api/status', (_req, res) => {
+  let database = true;
+  try {
+    db.prepare('SELECT 1').get();
+  } catch {
+    database = false;
+  }
+  const aiReadiness = getAiReadiness();
+  return res.status(200).json(statusSnapshot({
+    aiConfigured: isAiConfigured(),
+    aiReady: aiReadiness.textReady,
+    database,
+    worker: { status: workerBusy ? 'busy' : 'idle' },
+  }));
 });
 
 app.get('/api/health', (_req, res) => {
@@ -2025,9 +2109,14 @@ app.get('/api/auth/google/callback', async (req, res) => {
     setSession(res, completed.user);
     return res.redirect(`${config.appUrl}${completed.redirectPath.startsWith('/app') ? completed.redirectPath : '/app'}?welcome=google`);
   } catch (error) {
-    console.error('[google-auth]', {
+    logger.warn({
       requestId: req.requestId,
       code: error?.code || 'GOOGLE_LOGIN_FAILED',
+      status: Number(error?.status || 500),
+    }, 'google authentication failed');
+    if (Number(error?.status || 500) >= 500) reportException(error, {
+      requestId: req.requestId,
+      purpose: 'google_authentication',
       status: Number(error?.status || 500),
     });
     return res.redirect(`${config.appUrl}/auth?google=${error?.code === 'ACCOUNT_RESTRICTED' ? 'restricted' : 'failed'}`);
@@ -2037,6 +2126,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
 app.post('/api/auth/register', authLimiter, asyncHandler(async (req, res) => {
   assertAccessAllowed(req, '');
   const input = registerSchema.parse(req.body || {});
+  await enforcePasswordSafety(input.password);
   const guardId = reserveRegistration(req, input.email);
   let created;
   try {
@@ -2086,6 +2176,7 @@ app.post('/api/auth/request-password-reset', authLimiter, asyncHandler(async (re
 
 app.post('/api/auth/reset-password', authLimiter, asyncHandler(async (req, res) => {
   const input = passwordResetSchema.parse(req.body || {});
+  await enforcePasswordSafety(input.password);
   const user = await resetPassword(input.token, input.password);
   assertAccessAllowed(req, user.id);
   if (!user.emailVerified) {
@@ -3257,6 +3348,14 @@ app.post('/api/chat/sessions/:id/actions', requireAuth, requireCsrf, asyncHandle
   const input = chatActionSchema.parse(req.body || {});
   let session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  if (input.type === 'SUBMIT_CLARIFICATION') {
+    enforceContentPolicy({
+      text: [input.payload.courseName, input.payload.practiceTopic, input.payload.answer].filter(Boolean).join(' - '),
+      userId: req.user.id,
+      sessionId: session.id,
+      direction: 'input',
+    });
+  }
   const existing = db.prepare(`
     SELECT id FROM chat_session_actions
     WHERE session_id = ? AND owner_user_id = ? AND idempotency_key = ?
@@ -3374,8 +3473,24 @@ app.post('/api/chat/sessions/:id/actions', requireAuth, requireCsrf, asyncHandle
 
 app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimiter, asyncHandler(async (req, res) => {
   const input = chatMessageSchema.parse(req.body || {});
+  const wantsStream = String(req.headers.accept || '').includes('text/event-stream');
+  const sseChannel = wantsStream ? createSseChannel(res) : null;
+  if (sseChannel) res.locals.sseChannel = sseChannel;
+  let streamedText = false;
+  const onDelta = sseChannel
+    ? (text) => {
+      streamedText = true;
+      sseChannel.writeDelta(text);
+    }
+    : null;
+  const respond = (payload, text) => {
+    if (!sseChannel) return res.json(payload);
+    if (!streamedText && text) sseChannel.writeDelta(text);
+    return sseChannel.finish(payload);
+  };
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
   if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+  enforceContentPolicy({ text: input.content, userId: req.user.id, sessionId: session.id, direction: 'input' });
   const userConfiguration = parseJson(session.configuration_json, {});
   if (!input.allowExternalAi) {
     throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum memakai chat.', 'AI_CONSENT_REQUIRED');
@@ -3429,12 +3544,13 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     let assistant;
     try {
       assistant = isAiConfigured()
-        ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode })
+        ? await answerWorkspaceChat({ session: refreshed, user: req.user, content: input.content, aiMode: input.aiMode, onDelta, signal: sseChannel?.signal })
         : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
     } catch (error) {
       if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
       throw error;
     }
+    enforceContentPolicy({ text: assistant.text, userId: req.user.id, sessionId: session.id, direction: 'output' });
     const analysis = analyzeChatRequest({
       session: refreshed,
       messages: listChatMessages(refreshed.id, req.user.id),
@@ -3492,7 +3608,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       workflowState: workflow.state,
       documentType: workflow.documentType,
     });
-    return res.json(chatConversationPayload(refreshed, req.user, { autoGenerate }));
+    return respond(chatConversationPayload(refreshed, req.user, { autoGenerate }), assistant.text);
   }
   const priorUserMessages = db.prepare(`
     SELECT role, content FROM chat_messages
@@ -3512,31 +3628,34 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   let assistant;
   try {
     assistant = isAiConfigured()
-      ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode })
+      ? await answerWorkspaceChat({ session: effectiveSession, user: req.user, content: input.content, aiMode: input.aiMode, onDelta, signal: sseChannel?.signal })
       : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
   } catch (error) {
     if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
     throw error;
   }
+  enforceContentPolicy({ text: assistant.text, userId: req.user.id, sessionId: session.id, direction: 'output' });
   const timestamp = now();
-  db.exec('BEGIN');
-  try {
-    const userMessageId = nanoid();
-    db.prepare(`INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at) VALUES (?, ?, ?, 'user', ?, ?, ?)`)
-      .run(userMessageId, session.id, req.user.id, input.content, JSON.stringify({ links, aiMode: input.aiMode }), timestamp);
-    db.prepare(`
-      UPDATE chat_attachments SET message_id = ?
-      WHERE session_id = ? AND owner_user_id = ? AND message_id IS NULL AND deleted_at IS NULL
-    `).run(userMessageId, session.id, req.user.id);
-    db.prepare(`INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at) VALUES (?, ?, ?, 'assistant', ?, ?, ?)`)
-      .run(nanoid(), session.id, req.user.id, assistant.text, JSON.stringify({ aiMode: input.aiMode, provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'), model: assistant.model, workflow: assistant.workflow || null }), timestamp);
-    db.prepare('UPDATE chat_sessions SET configuration_json = ?, updated_at = ? WHERE id = ?')
-      .run(effectiveSession.configuration_json, timestamp, session.id);
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
+  persistChatExchange({
+    sessionId: session.id,
+    ownerUserId: req.user.id,
+    userMessage: {
+      content: input.content,
+      meta: { links, aiMode: input.aiMode },
+      createdAt: timestamp,
+    },
+    assistantMessage: {
+      content: assistant.text,
+      meta: {
+        aiMode: input.aiMode,
+        provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+        model: assistant.model,
+        workflow: assistant.workflow || null,
+      },
+      createdAt: timestamp,
+    },
+    sessionConfigurationJson: effectiveSession.configuration_json,
+  });
   const workflow = chatWorkflow(effectiveSession, req.user);
   if (workflow.stage !== 'intake' && (!session.title || /^laprak baru$/i.test(session.title.trim()))) {
     const cfg = inferredContext.configuration;
@@ -3547,7 +3666,143 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
   audit(req.user.id, 'ai.chat_completed', 'chat_session', session.id, { mode: input.aiMode, model: assistant.model, provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local') });
   const messages = db.prepare('SELECT id, role, content, meta_json, created_at FROM chat_messages WHERE session_id = ? AND owner_user_id = ? ORDER BY created_at ASC').all(session.id, req.user.id).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) }));
   const refreshedSession = exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id));
-  res.json({ session: refreshedSession, messages, attachments: listChatAttachments(session.id, req.user.id), workflow: chatWorkflow(refreshedSession, req.user) });
+  respond({ session: refreshedSession, messages, attachments: listChatAttachments(session.id, req.user.id), workflow: chatWorkflow(refreshedSession, req.user) }, assistant.text);
+}));
+
+app.post('/api/chat/sessions/:id/messages/:messageId/revise', requireAuth, requireCsrf, aiChatLimiter, asyncHandler(async (req, res) => {
+  const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL').get(req.params.id, req.user.id);
+  if (!session) throw new HttpError(404, 'Percakapan tidak ditemukan.', 'CHAT_NOT_FOUND');
+
+  let input;
+  try {
+    input = validateRevisionRequest(req.body || {});
+  } catch (error) {
+    throw revisionHttpError(error);
+  }
+  const userConfiguration = parseJson(session.configuration_json, {});
+  if (userConfiguration.allowExternalAi !== true) {
+    throw new HttpError(412, 'Izinkan Laprakin memproses bahanmu di Pengaturan sebelum memakai chat.', 'AI_CONSENT_REQUIRED');
+  }
+
+  const messages = listChatMessages(session.id, req.user.id);
+  let revisionPlan;
+  try {
+    revisionPlan = buildRevisionPlan(messages, req.params.messageId, input.mode, input.content);
+  } catch (error) {
+    throw revisionHttpError(error);
+  }
+  enforceContentPolicy({ text: revisionPlan.userContent, userId: req.user.id, sessionId: session.id, direction: 'input' });
+
+  const sourceAiMode = String(revisionPlan.source.meta?.aiMode || 'basic');
+  const aiModes = aiModeAccessForUser(req.user.id);
+  if (!aiModes[sourceAiMode]?.available) {
+    const message = sourceAiMode === 'xtrathink'
+      ? 'Mode XtraThink hanya tersedia untuk subscription Max aktif.'
+      : 'Mode Thinking membutuhkan pembelian kredit Laprakin atau subscription Pro/Max aktif.';
+    throw new HttpError(403, message, 'AI_MODE_LOCKED');
+  }
+
+  const hadCreditReservation = Boolean(session.processing_credit_bucket && !session.processing_credit_refunded_at);
+  reserveLaprakCredit(req.user.id, session.id);
+
+  const retainedMessages = revisionPlan.retainedMessages;
+  const retainedMessageIds = new Set(retainedMessages.map((message) => message.id));
+  const priorUserMessages = retainedMessages
+    .filter((message) => message.role === 'user')
+    .slice(-40);
+  const retainedAttachments = db.prepare(`
+    SELECT * FROM chat_attachments
+    WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL
+    ORDER BY created_at DESC LIMIT 24
+  `).all(session.id, req.user.id).filter((attachment) => !attachment.message_id || retainedMessageIds.has(attachment.message_id));
+  const inferredContext = inferChatContext({
+    messages: [...priorUserMessages, { role: 'user', content: revisionPlan.userContent }],
+    configuration: userConfiguration,
+  });
+  const effectiveSession = {
+    ...session,
+    configuration_json: JSON.stringify(inferredContext.configuration),
+    configuration: inferredContext.configuration,
+  };
+  let assistant;
+  try {
+    assistant = isAiConfigured()
+      ? await answerWorkspaceChat({
+        session: effectiveSession,
+        user: req.user,
+        content: revisionPlan.userContent,
+        aiMode: sourceAiMode,
+        historyRowsOverride: [...retainedMessages, { role: 'user', content: revisionPlan.userContent }],
+        attachmentRowsOverride: retainedAttachments,
+      })
+      : { text: FRIENDLY_AI_NOT_READY_MESSAGE, model: 'local-unconfigured', provider: 'local' };
+  } catch (error) {
+    if (!hadCreditReservation) refundLaprakCredit(req.user.id, session.id);
+    throw error;
+  }
+  enforceContentPolicy({ text: assistant.text, userId: req.user.id, sessionId: session.id, direction: 'output' });
+
+  const timestamp = now();
+  const links = Array.from(revisionPlan.userContent.matchAll(/https?:\/\/[^\s)]+/g)).map((match) => match[0]).slice(0, 8);
+  const revisionMeta = {
+    sourceMessageId: revisionPlan.source.id,
+    mode: input.mode,
+    revisionNumber: revisionPlan.revisionNumber,
+  };
+  persistChatExchange({
+    sessionId: session.id,
+    ownerUserId: req.user.id,
+    userMessage: {
+      content: revisionPlan.userContent,
+      meta: {
+        links,
+        aiMode: sourceAiMode,
+        revision: revisionMeta,
+      },
+      createdAt: timestamp,
+    },
+    assistantMessage: {
+      content: assistant.text,
+      meta: {
+        aiMode: sourceAiMode,
+        provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+        model: assistant.model,
+        workflow: assistant.workflow || null,
+        revision: revisionMeta,
+      },
+      createdAt: timestamp,
+    },
+    sessionConfigurationJson: effectiveSession.configuration_json,
+    sourceMessageId: revisionPlan.source.id,
+    sourceMessageMeta: {
+      revision: {
+        latestRevisionNumber: revisionPlan.revisionNumber,
+      },
+    },
+    deleteMessageIds: messages.slice(retainedMessages.length).map((message) => message.id),
+  });
+
+  let refreshed = refreshChatWorkflow(session.id, req.user);
+  const currentTitle = String(refreshed.title || '').trim();
+  const titleIsGeneric = /^(?:laprak baru|chat baru|untitled)$/i.test(String(session.title || '').trim())
+    || /^(?:laprak baru|chat baru|untitled)$/i.test(currentTitle)
+    || currentTitle === String(refreshed.generated_title || '').trim();
+  if (assistant.title && titleIsGeneric) {
+    db.prepare('UPDATE chat_sessions SET title = ?, generated_title = ?, updated_at = ? WHERE id = ? AND owner_user_id = ?')
+      .run(assistant.title, assistant.title, now(), refreshed.id, req.user.id);
+    refreshed = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND owner_user_id = ?').get(refreshed.id, req.user.id);
+  }
+
+  audit(req.user.id, 'ai.chat_revised', 'chat_session', session.id, {
+    mode: input.mode,
+    sourceMessageId: revisionPlan.source.id,
+    revisionNumber: revisionPlan.revisionNumber,
+    model: assistant.model,
+    provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
+  });
+  return res.json(chatConversationPayload(refreshed, req.user, {
+    revision: revisionMeta,
+  }));
 }));
 
 app.post('/api/chat/sessions/:id/document', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
@@ -3610,7 +3865,9 @@ app.post('/api/support/message', requireAuth, requireCsrf, supportLimiter, async
     thread = { id: nanoid(), owner_user_id: req.user.id, created_at: now(), updated_at: now() };
     db.prepare('INSERT INTO support_threads (id, owner_user_id, created_at, updated_at) VALUES (?, ?, ?, ?)').run(thread.id, req.user.id, thread.created_at, thread.updated_at);
   }
+  enforceContentPolicy({ text: input.content, userId: req.user.id, sessionId: thread.id, direction: 'input', targetType: 'support_thread' });
   const decision = await answerScopedSupportMessage(input.content, req.user.id);
+  enforceContentPolicy({ text: decision.answer, userId: req.user.id, sessionId: thread.id, direction: 'output', targetType: 'support_thread' });
   db.prepare(`INSERT INTO support_messages (id, thread_id, owner_user_id, role, content, scope_status, created_at) VALUES (?, ?, ?, 'user', ?, ?, ?)`)
     .run(nanoid(), thread.id, req.user.id, input.content, decision.scopeStatus, now());
   db.prepare(`INSERT INTO support_messages (id, thread_id, owner_user_id, role, content, scope_status, created_at) VALUES (?, ?, ?, 'assistant', ?, ?, ?)`)
@@ -4035,6 +4292,7 @@ app.post('/api/documents/:id/generate', requireAuth, requireCsrf, requireDocumen
 
 app.post('/api/documents/:id/revise', requireAuth, requireCsrf, requireDocumentOwner, aiChatLimiter, asyncHandler(async (req, res) => {
   const input = revisionSchema.parse(req.body || {});
+  enforceContentPolicy({ text: input.instruction, userId: req.user.id, sessionId: req.document.id, direction: 'input', targetType: 'document' });
   if (!req.document.generated_at) throw new HttpError(409, 'Dokumen masih disiapkan. Revisi dapat ditulis setelah hasilnya tersedia.', 'REVISION_DRAFT_REQUIRED');
   ensureNoActiveJob(req.document.id, 'generate');
   const recipe = parseJson(req.document.recipe_json, {});
@@ -4569,6 +4827,55 @@ function requireAdmin(req, _res, next) {
   return next();
 }
 
+function adminMfaState(req) {
+  const status = getAdminMfaStatus(req.user.id);
+  const required = adminMfaRequired({ role: req.user.role, mfaEnrolled: status.enrolled }, { enforced: config.adminMfaRequired });
+  const verifiedAt = Number(req.session?.mfaVerifiedAt || 0);
+  const verified = required && verifiedAt > 0
+    && (Date.now() - verifiedAt) <= config.adminMfaWindowMinutes * 60 * 1000;
+  return { ...status, required, verified, verifiedAt: verifiedAt || null };
+}
+
+function requireAdminMfa(req, _res, next) {
+  if (/^\/mfa\/(?:status|enroll|verify)$/.test(req.path)) return next();
+  if (!req.user || req.user.role !== 'admin') return next(new HttpError(403, 'Khusus admin.', 'ADMIN_ONLY'));
+  const state = adminMfaState(req);
+  if (!state.required || state.verified) return next();
+  if (!state.enrolled) {
+    return next(new HttpError(428, 'Aktifkan verifikasi dua langkah sebelum memakai console admin.', 'ADMIN_MFA_ENROLLMENT_REQUIRED'));
+  }
+  return next(new HttpError(428, 'Masukkan kode verifikasi dua langkah untuk melanjutkan.', 'ADMIN_MFA_REQUIRED'));
+}
+
+// Keep the step-up check uniform across every admin surface. Enrollment and
+// challenge endpoints remain reachable so an administrator can recover a
+// session without weakening the protection on operational mutations.
+app.use('/api/admin', requireAuth, requireAdminMfa);
+
+function adminMutationAction(req) {
+  const segments = String(req.path || '').split('/').filter(Boolean).slice(0, 3);
+  return `admin.${String(req.method || 'unknown').toLowerCase()}.${segments.join('.') || 'request'}`.slice(0, 120);
+}
+
+app.use('/api/admin', (req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  res.on('finish', () => {
+    if (req.user?.role !== 'admin') return;
+    try {
+      recordAdminAudit({
+        actorUserId: req.user.id,
+        action: adminMutationAction(req),
+        target: String(req.path || '/').replace(/\/[^/]{18,}/g, '/:id').slice(0, 160),
+        payloadDiff: { method: req.method, status: res.statusCode },
+        ipAddress: req.ip,
+      });
+    } catch (error) {
+      logger.error({ errorCode: 'ADMIN_AUDIT_WRITE_FAILED' }, 'admin audit write failed');
+    }
+  });
+  return next();
+});
+
 function escapeEmailHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (character) => ({
     '&': '&amp;',
@@ -4648,6 +4955,32 @@ function exposeRestriction(row) {
     revokedAt: row.revoked_at || null,
   };
 }
+
+app.get('/api/admin/mfa/status', requireAuth, requireAdmin, (req, res) => {
+  return res.json({ mfa: adminMfaState(req) });
+});
+
+app.post('/api/admin/mfa/enroll', requireAuth, requireCsrf, requireAdmin, (req, res) => {
+  const secret = createTotpSecret(req.user.id);
+  const label = encodeURIComponent(`Laprakin:${req.user.email}`);
+  const issuer = encodeURIComponent('Laprakin');
+  audit(req.user.id, 'admin.mfa_enrolled', 'admin_mfa', req.user.id, {});
+  return res.status(201).json({
+    mfa: adminMfaState(req),
+    secret,
+    otpauthUrl: `otpauth://totp/${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`,
+  });
+});
+
+app.post('/api/admin/mfa/verify', requireAuth, requireCsrf, requireAdmin, (req, res) => {
+  const code = String(req.body?.code || '').trim();
+  const status = getAdminMfaStatus(req.user.id);
+  if (!status.enrolled) throw new HttpError(409, 'Buat enrollment verifikasi dua langkah terlebih dahulu.', 'ADMIN_MFA_NOT_ENROLLED');
+  if (!verifyTotpCode(req.user.id, code)) throw new HttpError(401, 'Kode verifikasi tidak valid atau sudah dipakai.', 'ADMIN_MFA_INVALID');
+  const csrfToken = setSession(res, req.user, { mfaVerifiedAt: Date.now() });
+  audit(req.user.id, 'admin.mfa_verified', 'admin_mfa', req.user.id, {});
+  return res.json({ csrfToken, mfa: adminMfaState({ ...req, session: { ...req.session, mfaVerifiedAt: Date.now() } }) });
+});
 
 app.get('/api/admin/events', requireAuth, requireAdmin, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -5580,13 +5913,19 @@ app.put('/api/admin/risk-events/:id', requireAuth, requireCsrf, requireAdmin, as
 }));
 
 app.get('/api/admin/audit', requireAuth, requireAdmin, (req, res) => {
-  const events = db.prepare(`SELECT id, actor_user_id, action, target_type, target_id, metadata_json, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 100`).all()
+  const rows = listAdminAudit({
+    actorUserId: String(req.query.actorUserId || '').trim() || null,
+    action: String(req.query.action || '').trim(),
+    limit: req.query.limit,
+    cursor: String(req.query.cursor || '').trim() || null,
+  });
+  const events = rows
     .map((row) => ({
       id: row.id,
       actorRef: row.actor_user_id ? anonymousUserRef(row.actor_user_id) : 'Sistem',
       action: row.action,
-      targetType: row.target_type,
-      metadata: parseJson(row.metadata_json, {}),
+      targetType: 'admin',
+      metadata: row.metadata || {},
       createdAt: row.created_at,
     }));
   res.json({ events });
@@ -5633,6 +5972,26 @@ if ((config.isProd || config.serveStatic) && fs.existsSync(config.staticClientDi
 
 app.use((err, req, res, _next) => {
   const status = err.status || 500;
+  const route = req.route?.path || req.path || 'unknown';
+  const requestLogger = logger.child({
+    requestId: req.requestId,
+    method: req.method,
+    route,
+    actorClass: actorClass(req),
+  });
+  requestLogger.error({ status, errorCode: err.code || 'INTERNAL_ERROR' }, 'request failed');
+  if (status >= 500) reportException(err, {
+    requestId: req.requestId,
+    method: req.method,
+    route,
+    status,
+    actorClass: actorClass(req),
+  });
+  if (res.headersSent) {
+    res.locals.sseChannel?.fail(friendlyErrorCode(err));
+    if (!res.writableEnded) res.end();
+    return;
+  }
   if (err instanceof z.ZodError) {
     return res.status(400).json({
       error: {
@@ -5666,7 +6025,6 @@ app.use((err, req, res, _next) => {
     });
   }
 
-  if (status >= 500) console.error(`[${req.requestId}]`, err);
   return res.status(status).json({
     error: {
       message: friendlyErrorMessage(err, status),
@@ -5679,18 +6037,31 @@ app.use((err, req, res, _next) => {
 
 recoverInterruptedJobs();
 recoverFailedGenerationSessions();
-initializeAiModelRegistry().catch((error) => console.error('[ai] startup model discovery:', error?.code || error?.message || error));
+initializeAiModelRegistry().catch((error) => {
+  logger.error({ code: error?.code || 'AI_STARTUP_FAILED' }, 'AI model discovery failed');
+  reportException(error, { purpose: 'ai_model_discovery' });
+});
 queueMicrotask(drainJobQueue);
-setInterval(() => { drainJobQueue().catch((error) => console.error('[jobs]', error)); }, config.jobPollMs).unref();
+setInterval(() => {
+  drainJobQueue().catch((error) => {
+    logger.error({ code: error?.code || 'JOB_DRAIN_FAILED' }, 'job queue drain failed');
+    reportException(error, { purpose: 'job_queue_drain' });
+  });
+}, config.jobPollMs).unref();
 setInterval(() => { resumePendingDocumentPipelines(); }, 30 * 1000).unref();
-setInterval(() => { cleanupExpiredResources().catch((error) => console.error('[retention]', error)); }, config.retentionSweepMinutes * 60 * 1000).unref();
+setInterval(() => {
+  cleanupExpiredResources().catch((error) => {
+    logger.error({ code: error?.code || 'RETENTION_SWEEP_FAILED' }, 'retention sweep failed');
+    reportException(error, { purpose: 'retention_sweep' });
+  });
+}, config.retentionSweepMinutes * 60 * 1000).unref();
 
 const server = app.listen(config.port, () => {
-  console.log(`Laprakin API berjalan pada http://localhost:${config.port}`);
+  logger.info({ port: config.port, version: config.appVersion }, 'Laprakin API started');
 });
 
 function shutdown(signal) {
-  console.log(`${signal} diterima. Menutup Laprakin API dengan aman...`);
+  logger.info({ signal }, 'Laprakin API shutting down');
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 8000).unref();
 }

@@ -2,8 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { config } from './config.js';
-import { db } from './db.js';
+import { audit, db } from './db.js';
+import { moderationMessage, moderateText } from './content-safety.js';
 import { HttpError, now } from './utils.js';
+import { responseEvents } from './chat-stream.js';
 
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 const SAFETY_FINISH_REASONS = new Set(['content_filter', 'safety', 'blocked']);
@@ -263,10 +265,21 @@ function pumpQueue() {
       const job = providerQueue.shift();
       activeRequests += 1;
       lastDispatchAt = Date.now();
-      Promise.resolve().then(job.run).then(job.resolve, job.reject).finally(() => {
-        activeRequests -= 1;
-        pumpQueue();
-      });
+      if (job.lease) {
+        let released = false;
+        const release = () => {
+          if (released) return;
+          released = true;
+          activeRequests -= 1;
+          pumpQueue();
+        };
+        Promise.resolve().then(() => job.resolve(release)).catch(job.reject);
+      } else {
+        Promise.resolve().then(job.run).then(job.resolve, job.reject).finally(() => {
+          activeRequests -= 1;
+          pumpQueue();
+        });
+      }
     }
     if (providerQueue.length && (activeRequests >= config.naraRouterMaxConcurrency || queueDelayMs() > 0)) {
       queueTimer = setTimeout(dispatch, Math.max(25, queueDelayMs()));
@@ -362,6 +375,46 @@ function responseText(payload) { return String(payload?.choices?.[0]?.message?.c
 function finishReason(payload) { return String(payload?.choices?.[0]?.finish_reason || '').trim(); }
 function isTruncated(payload, maxOutputTokens) { return finishReason(payload) === 'length' || Number(payload?.usage?.completion_tokens || 0) >= Number(maxOutputTokens || 0); }
 
+function assertOutputAllowed(text) {
+  const decision = moderateText(text, 'output');
+  if (decision.action === 'allow') return;
+  const error = new HttpError(422, moderationMessage('OUTPUT_POLICY_BLOCKED', 'output'), 'CONTENT_POLICY_BLOCKED');
+  error.policyCode = decision.code;
+  throw error;
+}
+
+async function collectProviderStream(options, onDelta) {
+  let text = '';
+  let usage = {};
+  let finishReason = '';
+  for await (const event of streamOpenAiCompatible(options)) {
+    if (event?.type === 'error') {
+      throw new AiProviderError('Provider AI tidak dapat melanjutkan respons streaming.', {
+        code: event.code || 'AI_STREAM_ERROR',
+        status: 502,
+        retryable: false,
+      });
+    }
+    if (event?.type === 'delta') {
+      text += String(event.text || '');
+      onDelta?.(String(event.text || ''), text);
+    }
+    if (event?.type === 'done') {
+      usage = event.usage || usage;
+      finishReason = event.finishReason || finishReason;
+    }
+  }
+  return { text, usage, finishReason };
+}
+
+function acquireProviderSlot(priority = 0) {
+  return new Promise((resolve, reject) => {
+    providerQueue.push({ lease: true, resolve, reject, priority, sequence: queueSequence += 1 });
+    providerQueue.sort((left, right) => (right.priority - left.priority) || (left.sequence - right.sequence));
+    pumpQueue();
+  });
+}
+
 async function requestOpenAiCompatible({ provider, model, messages, maxOutputTokens, responseJsonSchema, supportsStructuredOutput, reasoningEffort, timeoutMs, priority = 0 }) {
   const isCloudflare = provider === 'cloudflare';
   const baseUrl = isCloudflare ? `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/ai/v1` : config.naraRouterBaseUrl;
@@ -390,7 +443,129 @@ async function requestOpenAiCompatible({ provider, model, messages, maxOutputTok
   throw lastError;
 }
 
-export async function generateAiContent({ userId = null, contextType = '', contextId = '', purpose = 'chat', mode = 'basic', contents, systemInstruction = '', maxOutputTokens = 1200, responseMimeType = 'text/plain', responseJsonSchema, requiresVision = false, requestTimeoutMs = config.aiRequestTimeoutMs }) {
+function streamEndpoint(provider) {
+  return provider === 'cloudflare'
+    ? `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/ai/v1/chat/completions`
+    : `${config.naraRouterBaseUrl}/chat/completions`;
+}
+
+function streamToken(provider) {
+  return provider === 'cloudflare' ? config.cloudflareAiToken : config.naraRouterApiKey;
+}
+
+function streamDelta(payload) {
+  return String(payload?.choices?.[0]?.delta?.content ?? payload?.choices?.[0]?.message?.content ?? '');
+}
+
+function streamProviderError(payload, status) {
+  const providerCode = String(payload?.error?.code || payload?.error?.type || payload?.error?.status || `HTTP_${status}`).slice(0, 80);
+  return new AiProviderError('Provider AI tidak dapat melanjutkan respons streaming.', {
+    code: status ? `NARAROUTER_${providerCode.toUpperCase()}` : providerCode.toUpperCase(),
+    status: status === 429 ? 429 : status >= 500 ? 502 : status || 502,
+    retryable: status ? RETRYABLE_STATUS.has(status) : false,
+  });
+}
+
+function combinedAbortSignal(controller, signal) {
+  if (!signal) return controller.signal;
+  if (signal.aborted) controller.abort(signal.reason);
+  else signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  return controller.signal;
+}
+
+/**
+ * Relay one OpenAI-compatible provider stream. The returned iterator contains
+ * the raw generated text so structured chat responses can be parsed only once,
+ * after the final provider event arrives.
+ */
+export async function* streamOpenAiCompatible({
+  provider = 'nararouter',
+  model,
+  messages,
+  maxOutputTokens,
+  responseJsonSchema,
+  supportsStructuredOutput = false,
+  reasoningEffort,
+  timeoutMs = config.aiRequestTimeoutMs,
+  priority = 0,
+  signal,
+  fetchImpl = fetch,
+}) {
+  const body = { model, messages, max_tokens: maxOutputTokens, reasoning_effort: reasoningEffort, stream: true };
+  if (responseJsonSchema && supportsStructuredOutput) {
+    body.response_format = {
+      type: 'json_schema',
+      json_schema: { name: 'laprakin_response', strict: true, schema: responseJsonSchema },
+    };
+  }
+  let lastError;
+  for (let attempt = 0; attempt < config.aiMaxRetries; attempt += 1) {
+    let release;
+    let emitted = false;
+    try {
+      release = await acquireProviderSlot(priority);
+      const timeout = timeoutSignal(timeoutMs);
+      try {
+        const response = await fetchImpl(streamEndpoint(provider), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${streamToken(provider)}` },
+          body: JSON.stringify(body),
+          signal: combinedAbortSignal(timeout.controller, signal),
+        });
+        const contentType = response.headers.get('content-type') || '';
+        const payload = contentType.includes('text/event-stream')
+          ? null
+          : await response.json().catch(() => ({}));
+        if (!response.ok) throw streamProviderError(payload, response.status);
+        if (!contentType.includes('text/event-stream')) {
+          const text = streamDelta(payload);
+          if (!text) throw new AiProviderError('Provider AI tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502, retryable: true });
+          emitted = true;
+          yield { type: 'delta', text };
+          yield { type: 'done', message: text, usage: payload?.usage || {}, finishReason: String(payload?.choices?.[0]?.finish_reason || '') };
+          return;
+        }
+
+        let message = '';
+        let usage = {};
+        let finishReason = '';
+        for await (const event of responseEvents(response)) {
+          if (event?.type === 'error') throw streamProviderError(event, 502);
+          if (event?.usage) usage = event.usage;
+          if (event?.choices?.[0]?.finish_reason) finishReason = String(event.choices[0].finish_reason);
+          const text = streamDelta(event);
+          if (!text) continue;
+          emitted = true;
+          message += text;
+          yield { type: 'delta', text };
+        }
+        if (!message) throw new AiProviderError('Provider AI tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502, retryable: true });
+        const doneEvent = { type: 'done', message, usage };
+        if (finishReason) doneEvent.finishReason = finishReason;
+        yield doneEvent;
+        return;
+      } finally {
+        clearTimeout(timeout.timer);
+        release?.();
+      }
+    } catch (error) {
+      release?.();
+      lastError = error?.name === 'AbortError'
+        ? new AiProviderError('Provider AI melewati batas waktu.', { code: 'AI_TIMEOUT', status: 504, retryable: true })
+        : error instanceof AiProviderError
+          ? error
+          : new AiProviderError('Provider AI tidak dapat dihubungi.', { code: 'AI_NETWORK_ERROR', status: 502, retryable: true });
+      if (!lastError.retryable || emitted || attempt === config.aiMaxRetries - 1) {
+        yield { type: 'error', code: lastError.code };
+        return;
+      }
+      await sleep(350 * (2 ** attempt) + Math.floor(Math.random() * 180));
+    }
+  }
+  yield { type: 'error', code: lastError?.code || 'AI_PROVIDER_ERROR' };
+}
+
+export async function generateAiContent({ userId = null, contextType = '', contextId = '', purpose = 'chat', mode = 'basic', contents, systemInstruction = '', maxOutputTokens = 1200, responseMimeType = 'text/plain', responseJsonSchema, requiresVision = false, requestTimeoutMs = config.aiRequestTimeoutMs, onDelta = null, signal = null }) {
   if (!config.naraRouterApiKey) throw new HttpError(503, 'Provider AI belum dikonfigurasi.', 'AI_NOT_CONFIGURED');
   if (!modelRegistry.length) await initializeAiModelRegistry();
   const route = selectAiRoute({ purpose, mode, requiresVision, contents, requiresStructuredOutput: Boolean(responseJsonSchema) });
@@ -412,11 +587,15 @@ export async function generateAiContent({ userId = null, contextType = '', conte
         ? '\nReturn JSON only. Follow this schema exactly:\n' + JSON.stringify(responseJsonSchema || {})
         : '';
       try {
-        const payload = await requestOpenAiCompatible({ provider: 'nararouter', model, messages: toOpenAiMessages(compacted, `${systemInstruction}${schemaInstruction}`), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: capability?.supportsStructuredOutput, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs, priority: isDocumentPurpose(purpose) ? 10 : 0 });
-        const text = responseText(payload);
+        const providerOptions = { provider: 'nararouter', model, messages: toOpenAiMessages(compacted, `${systemInstruction}${schemaInstruction}`), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: capability?.supportsStructuredOutput, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs, priority: isDocumentPurpose(purpose) ? 10 : 0, signal };
+        const payload = onDelta
+          ? await collectProviderStream(providerOptions, onDelta)
+          : await requestOpenAiCompatible(providerOptions);
+        const text = payload.text ?? responseText(payload);
         const safety = SAFETY_FINISH_REASONS.has(finishReason(payload).toLowerCase());
         if (safety) throw new AiProviderError('Permintaan tidak dapat diproses karena kebijakan keamanan AI.', { code: 'AI_SAFETY_BLOCKED', status: 422 });
         if (!text) throw new AiProviderError('Provider AI tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502, retryable: true });
+        assertOutputAllowed(text);
         if (structured) {
           let parsed;
           const extractedText = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]?.trim()
@@ -433,18 +612,27 @@ export async function generateAiContent({ userId = null, contextType = '', conte
         recordCircuitFailure(model);
         fallbackCount += 1;
         fallbackReason = error?.code || 'provider_failure';
-        if (error?.code === 'AI_SAFETY_BLOCKED') throw error;
+        if (error?.code === 'AI_SAFETY_BLOCKED' || error?.code === 'CONTENT_POLICY_BLOCKED') throw error;
       }
     }
     if (!visual && config.cloudflareAiEnabled && config.cloudflareAccountId && config.cloudflareAiToken) {
-      const payload = await requestOpenAiCompatible({ provider: 'cloudflare', model: config.cloudflareAiModel, messages: toOpenAiMessages(contents, systemInstruction), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: false, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs });
-      const text = responseText(payload);
+      const providerOptions = { provider: 'cloudflare', model: config.cloudflareAiModel, messages: toOpenAiMessages(contents, systemInstruction), maxOutputTokens, responseJsonSchema, supportsStructuredOutput: false, reasoningEffort: route.reasoningEffort, timeoutMs: requestTimeoutMs, signal };
+      const payload = onDelta
+        ? await collectProviderStream(providerOptions, onDelta)
+        : await requestOpenAiCompatible(providerOptions);
+      const text = payload.text ?? responseText(payload);
       if (!text) throw new AiProviderError('Emergency provider tidak mengembalikan teks.', { code: 'AI_EMPTY_RESPONSE', status: 502 });
+      assertOutputAllowed(text);
       finishUsage(usageEventId, { status: 'success', usage: payload.usage, latencyMs: Date.now() - startedAt, provider: 'cloudflare', model: config.cloudflareAiModel, fallbackCount, fallbackReason: 'nararouter_exhausted' });
       return { text, provider: 'cloudflare', model: config.cloudflareAiModel, usage: payload.usage || {}, finishReason: finishReason(payload), latencyMs: Date.now() - startedAt, fallbackCount };
     }
     throw lastError || new AiProviderError(visual ? 'Kapasitas AI visual sedang tidak tersedia.' : 'Kapasitas AI sedang tidak tersedia.', { code: visual ? 'AI_VISION_UNAVAILABLE' : 'AI_CAPACITY_UNAVAILABLE', status: 503, retryable: true });
   } catch (error) {
+    if (error?.code === 'CONTENT_POLICY_BLOCKED' && error.policyCode) {
+      try {
+        audit(userId, 'content_policy.blocked', contextType || 'ai', contextId || null, { direction: 'output', code: error.policyCode, purpose });
+      } catch { /* safety logging must not replace the policy response */ }
+    }
     finishUsage(usageEventId, { status: 'error', latencyMs: Date.now() - startedAt, errorCode: error?.code || 'AI_PROVIDER_ERROR', fallbackCount, fallbackReason });
     throw error;
   }

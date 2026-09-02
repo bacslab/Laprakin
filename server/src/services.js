@@ -25,6 +25,8 @@ import {
 import { config } from './config.js';
 import { ArchiveSafetyError, openSafeZip } from './archive-safety.js';
 import { generateAiContent, isAiConfigured } from './ai.js';
+import { moderationMessage, moderateText, sanitizeUntrustedDocumentText, wrapUntrustedDocumentText } from './content-safety.js';
+import { readStructuredTextField } from './chat-stream.js';
 import { audit, db, notify, toUser } from './db.js';
 import { planBenefits } from './pricing-config.js';
 import {
@@ -646,7 +648,7 @@ export function invalidateAllSessions(userId) {
   audit(userId, 'auth.sessions_revoked', 'user', userId, {});
 }
 
-export function setSession(res, user) {
+export function setSession(res, user, { mfaVerifiedAt = null } = {}) {
   if (!user?.emailVerified) {
     throw new HttpError(403, 'Verifikasi email sebelum membuat sesi.', 'EMAIL_NOT_VERIFIED');
   }
@@ -658,7 +660,13 @@ export function setSession(res, user) {
     ? config.adminSessionHours * 60 * 60 * 1000
     : config.sessionDays * 24 * 60 * 60 * 1000;
   const token = jwt.sign(
-    { sub: user.id, role: user.role, csrf: csrfToken, sv: Number(row?.session_version || 1) },
+    {
+      sub: user.id,
+      role: user.role,
+      csrf: csrfToken,
+      sv: Number(row?.session_version || 1),
+      ...(mfaVerifiedAt ? { mfaVerifiedAt: Number(mfaVerifiedAt) } : {}),
+    },
     config.jwtSecret,
     { expiresIn },
   );
@@ -688,7 +696,7 @@ export function getSession(req) {
     const payload = jwt.verify(req.cookies?.[COOKIE_NAME] || '', config.jwtSecret);
     const row = db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(payload.sub);
     if (!row || !row.email_verified_at || Number(payload.sv || 1) !== Number(row.session_version || 1)) return null;
-    return { user: toUser(row), csrfToken: payload.csrf };
+    return { user: toUser(row), csrfToken: payload.csrf, mfaVerifiedAt: Number(payload.mfaVerifiedAt || 0) || null };
   } catch {
     return null;
   }
@@ -1319,12 +1327,7 @@ function recentChatContext(rows, characterLimit) {
   return selected.reverse();
 }
 
-async function chatAttachmentContext(sessionId, ownerUserId) {
-  const files = db.prepare(`
-    SELECT * FROM chat_attachments
-    WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL
-    ORDER BY created_at DESC LIMIT 12
-  `).all(sessionId, ownerUserId);
+async function buildChatAttachmentContext(files) {
   const textBlocks = [];
   const imageParts = [];
   let textCharacters = 0;
@@ -1341,15 +1344,119 @@ async function chatAttachmentContext(sessionId, ownerUserId) {
     }
     if (textCharacters >= config.aiAttachmentCharacters || textBlocks.length >= 6) continue;
     try {
-      const extracted = String(await extractText(file)).replace(/\u0000/g, '').trim();
+      const extracted = String(await extractText(file)).trim();
       if (!extracted) continue;
       const remaining = config.aiAttachmentCharacters - textCharacters;
-      const content = extracted.slice(0, remaining);
-      textBlocks.push(`--- MULAI LAMPIRAN TIDAK TEPERCAYA: ${String(file.original_name).slice(0, 120)} ---\n${content}\n--- AKHIR LAMPIRAN ---`);
+      const content = sanitizeUntrustedDocumentText(extracted, { maxLength: remaining });
+      if (!content) continue;
+      textBlocks.push(wrapUntrustedDocumentText(content, file.original_name));
       textCharacters += content.length;
     } catch { /* format yang tidak dapat diekstrak tetap tersedia sebagai metadata */ }
   }
   return { files, text: textBlocks.join('\n\n'), imageParts };
+}
+
+async function chatAttachmentContext(sessionId, ownerUserId) {
+  const files = db.prepare(`
+    SELECT * FROM chat_attachments
+    WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL
+    ORDER BY created_at DESC LIMIT 12
+  `).all(sessionId, ownerUserId);
+  return buildChatAttachmentContext(files);
+}
+
+function mergeMessageMeta(baseMeta = {}, patchMeta = {}) {
+  const base = baseMeta && typeof baseMeta === 'object' ? baseMeta : {};
+  const patch = patchMeta && typeof patchMeta === 'object' ? patchMeta : {};
+  return {
+    ...base,
+    ...patch,
+    ...(base.revision || patch.revision ? {
+      revision: {
+        ...(base.revision && typeof base.revision === 'object' ? base.revision : {}),
+        ...(patch.revision && typeof patch.revision === 'object' ? patch.revision : {}),
+      },
+    } : {}),
+  };
+}
+
+export function persistChatExchange({
+  sessionId,
+  ownerUserId,
+  userMessage,
+  assistantMessage,
+  sessionConfigurationJson = null,
+  sourceMessageId = '',
+  sourceMessageMeta = null,
+  deleteMessageIds = [],
+}) {
+  const userMessageId = userMessage?.id || nanoid();
+  const assistantMessageId = assistantMessage?.id || nanoid();
+  const userCreatedAt = userMessage?.createdAt || now();
+  const assistantCreatedAt = assistantMessage?.createdAt || userCreatedAt;
+  const userMetaJson = JSON.stringify(userMessage?.meta || {});
+  const assistantMetaJson = JSON.stringify(assistantMessage?.meta || {});
+  const trimmedDeleteIds = Array.isArray(deleteMessageIds)
+    ? [...new Set(deleteMessageIds.filter((value) => typeof value === 'string' && value))]
+    : [];
+
+  db.exec('BEGIN');
+  try {
+    if (sourceMessageId && sourceMessageMeta) {
+      const sourceRow = db.prepare(`
+        SELECT meta_json FROM chat_messages
+        WHERE id = ? AND session_id = ? AND owner_user_id = ?
+      `).get(sourceMessageId, sessionId, ownerUserId);
+      const mergedMeta = mergeMessageMeta(parseJson(sourceRow?.meta_json, {}), sourceMessageMeta);
+      db.prepare(`
+        UPDATE chat_messages
+        SET meta_json = ?
+        WHERE id = ? AND session_id = ? AND owner_user_id = ?
+      `).run(JSON.stringify(mergedMeta), sourceMessageId, sessionId, ownerUserId);
+    }
+
+    if (trimmedDeleteIds.length) {
+      const placeholders = trimmedDeleteIds.map(() => '?').join(',');
+      db.prepare(`
+        UPDATE chat_attachments
+        SET deleted_at = COALESCE(deleted_at, ?)
+        WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL
+          AND message_id IN (${placeholders})
+      `).run(userCreatedAt, sessionId, ownerUserId, ...trimmedDeleteIds);
+      db.prepare(`
+        DELETE FROM chat_messages
+        WHERE session_id = ? AND owner_user_id = ?
+          AND id IN (${placeholders})
+      `).run(sessionId, ownerUserId, ...trimmedDeleteIds);
+    }
+
+    db.prepare(`
+      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+      VALUES (?, ?, ?, 'user', ?, ?, ?)
+    `).run(userMessageId, sessionId, ownerUserId, userMessage.content, userMetaJson, userCreatedAt);
+    db.prepare(`
+      UPDATE chat_attachments
+      SET message_id = ?
+      WHERE session_id = ? AND owner_user_id = ? AND message_id IS NULL AND deleted_at IS NULL
+    `).run(userMessageId, sessionId, ownerUserId);
+    db.prepare(`
+      INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, meta_json, created_at)
+      VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+    `).run(assistantMessageId, sessionId, ownerUserId, assistantMessage.content, assistantMetaJson, assistantCreatedAt);
+    if (sessionConfigurationJson !== null) {
+      db.prepare(`
+        UPDATE chat_sessions SET configuration_json = ?, updated_at = ? WHERE id = ?
+      `).run(sessionConfigurationJson, assistantCreatedAt, sessionId);
+    } else {
+      db.prepare('UPDATE chat_sessions SET updated_at = ? WHERE id = ?').run(assistantCreatedAt, sessionId);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+
+  return { userMessageId, assistantMessageId };
 }
 
 function localChatWorkPlan({ session, attachments, content }) {
@@ -1501,12 +1608,17 @@ export function isCodeOnlyChatRequest(content = '') {
     .test(String(content || ''));
 }
 
-export async function answerWorkspaceChat({ session, user, content, aiMode = 'basic' }) {
-  const historyRows = db.prepare(`
-    SELECT role, content FROM chat_messages
-    WHERE session_id = ? AND owner_user_id = ?
-    ORDER BY created_at DESC LIMIT 18
-  `).all(session.id, user.id).reverse();
+export async function answerWorkspaceChat({ session, user, content, aiMode = 'basic', historyRowsOverride = null, attachmentRowsOverride = null, onDelta = null, signal = null }) {
+  const historyRows = Array.isArray(historyRowsOverride)
+    ? historyRowsOverride.map((message) => ({
+      role: message.role,
+      content: String(message.content || ''),
+    }))
+    : db.prepare(`
+      SELECT role, content FROM chat_messages
+      WHERE session_id = ? AND owner_user_id = ?
+      ORDER BY created_at DESC LIMIT 18
+    `).all(session.id, user.id).reverse();
   if (
     historyRows.at(-1)?.role === 'user'
     && historyRows.at(-1)?.content?.trim() === String(content || '').trim()
@@ -1514,7 +1626,9 @@ export async function answerWorkspaceChat({ session, user, content, aiMode = 'ba
     historyRows.pop();
   }
   const history = recentChatContext(historyRows, config.aiContextCharacters);
-  const attachments = await chatAttachmentContext(session.id, user.id);
+  const attachments = Array.isArray(attachmentRowsOverride)
+    ? await buildChatAttachmentContext(attachmentRowsOverride)
+    : await chatAttachmentContext(session.id, user.id);
   const knownWorkspaceCourses = db.prepare(`
     SELECT DISTINCT course_group
     FROM chat_sessions
@@ -1533,6 +1647,7 @@ export async function answerWorkspaceChat({ session, user, content, aiMode = 'ba
   });
   const localClarification = vaguePromptReply(content, workflow);
   if (localClarification && !isAiConfigured()) {
+    onDelta?.(localClarification);
     return { text: localClarification, model: 'laprakin-intake', usage: {}, workflow };
   }
   const chatConfig = parseJson(session.configuration_json, {});
@@ -1610,6 +1725,7 @@ Mode respons: ${modeInstruction}`;
     `Pertanyaan utama berikutnya: ${workflow.nextQuestion}`,
   ].join('\n');
   const userText = `${taskContext}\n\n${attachments.text ? `Konteks lampiran:\n${attachments.text}\n\n` : ''}Permintaan terbaru user:\n${String(content).slice(0, 1800)}`;
+  let displayedMessage = '';
   const result = await generateAiContent({
     userId: user.id,
     contextType: 'chat_session',
@@ -1636,6 +1752,22 @@ Mode respons: ${modeInstruction}`;
       },
       required: ['action', 'message', 'title', 'courseName', 'moduleTitle', 'projectName'],
     },
+    onDelta: onDelta
+      ? (_chunk, accumulated) => {
+        const nextMessage = readStructuredTextField(accumulated, 'message');
+        if (nextMessage.length <= displayedMessage.length) return;
+        const safety = moderateText(nextMessage, 'output');
+        if (safety.action !== 'allow') {
+          const error = new HttpError(422, moderationMessage(safety.code, 'output'), 'CONTENT_POLICY_BLOCKED');
+          error.policyCode = safety.code;
+          throw error;
+        }
+        const delta = nextMessage.slice(displayedMessage.length);
+        displayedMessage = nextMessage;
+        onDelta(delta);
+      }
+      : null,
+    signal,
   });
   const generationRequested = /\b(?:buat|buatkan|susun|kerjakan|hasilkan|generate)\b/i.test(String(content || ''));
   let parsed;
@@ -1676,6 +1808,7 @@ Mode respons: ${modeInstruction}`;
     .trim()
     .slice(0, 56);
   const text = guardKnownContextReply(String(parsed.message || workflow.nextQuestion).slice(0, 12000), workflow);
+  if (onDelta && text.length > displayedMessage.length) onDelta(text.slice(displayedMessage.length));
   return {
     text,
     action,
@@ -2476,11 +2609,7 @@ export function currentAcademicYear(reference = new Date()) {
 }
 
 export function promptSafeLabel(value = '', maxLength = 120) {
-  return String(value ?? '')
-    .replace(/\s+/g, ' ')
-    .replace(/[`${}]/g, '')
-    .trim()
-    .slice(0, maxLength);
+  return sanitizeUntrustedDocumentText(value, { maxLength });
 }
 
 export async function prepareEvidenceImageForAi(binary, mimeType = 'image/png') {
@@ -2746,13 +2875,13 @@ Permintaan revisi: ${revisionInstruction || '-'}
 Draft saat ini yang harus dipertahankan kecuali bagian terkait revisi:
 ${currentSections.length ? JSON.stringify(currentSections.map((section) => ({ type: section.section_type, title: section.title, content: section.content }))) : '- Belum ada draft'}
 Teks modul:
-${document.module_text.slice(0, 12000)}
+${wrapUntrustedDocumentText(String(document.module_text || '').slice(0, 12000), 'teks modul')}
 
 Pemetaan bukti visual yang sudah dibaca AI:
 ${mappings.filter((mapping) => mapping.status !== 'ignored').map((mapping) => `- ${mapping.caption}; ${mapping.description}; section ${mapping.section_type}; langkah ${mapping.step_title}`).join('\n') || '- Tidak ada bukti visual relevan'}
 
 Bukti teks atau log:
-${evidenceNotes || '- Tidak ada bukti teks atau log'}
+${evidenceNotes ? wrapUntrustedDocumentText(evidenceNotes, 'bukti teks atau log') : '- Tidak ada bukti teks atau log'}
 
 Parameter yang diberikan user (tulis hanya jika relevan dan jangan ubah nilainya):
 ${parameters.filter((parameter) => parameter.includeInDraft).map((parameter) => `- ${parameter.label}: ${parameter.value}${parameter.unit ? ` ${parameter.unit}` : ''}`).join('\n') || '- Tidak ada parameter tambahan'}
@@ -3069,6 +3198,7 @@ export async function generateDocument(documentId, userId, progress, options = {
       progress,
     });
   } catch (error) {
+    if (error?.code === 'CONTENT_POLICY_BLOCKED') throw error;
     console.warn('[generateDocument] Provider AI sementara belum dapat dikontak, menyusun laporan dari bahan terstruktur:', error?.message || error);
     sections = buildFallbackReportSections({ document, mappings, evidenceNotes, parameters, recipe, currentSections, templateStructure });
     const fallbackIssues = [...reportSectionIssues(sections), ...reportParameterIssues(sections, parameters)];
@@ -3076,6 +3206,12 @@ export async function generateDocument(documentId, userId, progress, options = {
       throw new HttpError(502, `Draft lokal belum memenuhi quality gate: ${fallbackIssues.join(' ')}`, 'LOCAL_FALLBACK_QUALITY_FAILED');
     }
     source = 'fallback_structured';
+  }
+
+  const outputPolicy = moderateText(sections.map((section) => `${section.title}\n${section.content}`).join('\n\n'), 'output');
+  if (outputPolicy.action !== 'allow') {
+    audit(userId, 'content_policy.blocked', 'document', document.id, { direction: 'output', code: outputPolicy.code });
+    throw new HttpError(422, moderationMessage('OUTPUT_POLICY_BLOCKED', 'output'), 'CONTENT_POLICY_BLOCKED');
   }
 
   progress(88, 'Menata struktur laporan');

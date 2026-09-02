@@ -1,0 +1,54 @@
+@layer sections {
+  .admin-page,
+  .admin-shell {
+    --admin-focus-ring: color-mix(in srgb, var(--accent, #c2ff33) 80%, white 20%);
+  }
+
+  .admin-page :where(button, a, input, textarea, select):focus-visible,
+  .admin-shell :where(button, a, input, textarea, select):focus-visible {
+    outline-color: var(--admin-focus-ring);
+  }
+
+  .admin-mfa-gate {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 32px 20px;
+    background: var(--workspace-bg, #f5f5f2);
+    color: var(--workspace-text, #1f1f1e);
+  }
+
+  .admin-mfa-card {
+    width: min(100%, 520px);
+    display: grid;
+    gap: 14px;
+    padding: 32px;
+    border: 1px solid var(--workspace-line, #d8d8d2);
+    border-radius: var(--radius-xl, 24px);
+    background: var(--workspace-panel, #fff);
+    box-shadow: var(--shadow-lg, 0 20px 60px rgba(31, 31, 30, .12));
+  }
+
+  .admin-mfa-card h1,
+  .admin-mfa-card p { margin: 0; }
+  .admin-mfa-card p { color: var(--workspace-muted, #666); line-height: 1.6; }
+  .admin-mfa-card code { letter-spacing: .12em; overflow-wrap: anywhere; }
+  .admin-mfa-secret,
+  .admin-mfa-form { display: grid; gap: 8px; }
+  .admin-mfa-secret { padding: 14px; border-radius: 12px; background: color-mix(in srgb, var(--accent, #c2ff33) 14%, transparent); }
+  .admin-mfa-secret small { color: var(--workspace-muted, #666); }
+
+  .admin-loading-state {
+    min-height: 100dvh;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 9px;
+    padding: 24px;
+    background: var(--admin-bg, var(--workspace-bg, #f5f5f2));
+    color: var(--admin-text, var(--workspace-text, #1f1f1e));
+    text-align: center;
+  }
+
+  .admin-loading-state span { max-width: 360px; color: var(--admin-muted, var(--workspace-muted, #666)); font-size: .66rem; line-height: 1.5; }
+}

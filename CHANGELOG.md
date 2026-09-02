@@ -1,3 +1,73 @@
+## 21.0.7 - 2026-09-02
+
+- Menyimpan enrollment TOTP admin secara terenkripsi, menolak replay code, dan menambahkan challenge step-up pada seluruh route admin dengan UI enrollment yang bisa dipulihkan secara terkontrol.
+- Menjadikan audit admin queryable dengan filter aman dan pencatatan mutation terstruktur yang konsisten tanpa raw IP, token, atau isi dokumen.
+- Menambahkan pemeriksaan password opsional berbasis range query k-anonim serta memigrasikan surface Auth ke translation key Indonesia/Inggris.
+- Memigrasikan seluruh copy publik Landing, termasuk navigasi, workflow, sumber, fitur, FAQ, CTA, footer, dan label aksesibilitas, ke translation key Indonesia/Inggris.
+- Memindahkan label komponen dan nilai status layanan yang dinamis ke translation key Indonesia/Inggris.
+- Memigrasikan copy publik Pricing, status pembayaran, dan fallback fitur plan ke translation key Indonesia/Inggris.
+- Memigrasikan halaman Billing beserta katalog plan, checkout, dan status pembayaran ke translation key Indonesia/Inggris.
+- Memindahkan aturan utama Auth yang viewport-locked ke stylesheet section terpisah dengan contract test, sambil mempertahankan responsive behavior.
+- Memindahkan override khusus Auth ke layer stylesheet terpisah dan menurunkan budget compatibility `!important` secara terukur.
+- Memindahkan aturan aktif public Pricing dan standalone Billing ke `client/src/styles/pricing.css` dengan breakpoint responsive dan contract test.
+- Memigrasikan tutorial Workspace, Composer, mode AI, shortcut prompt, dan label bahan ke translation key Indonesia/Inggris.
+- Memigrasikan label preview PDF/Word/file, sumber terlampir, dan aksi lampiran ke translation key Indonesia/Inggris.
+- Memigrasikan overlay Help, Feedback, dan Notifications beserta copy interaksi serta label aksesibilitasnya ke translation key Indonesia/Inggris.
+- Memigrasikan document preview, versi/revisi, dan workflow progress ke translation key Indonesia/Inggris.
+- Memigrasikan panel Settings untuk referral, billing, tema, dan warna aksen ke translation key Indonesia/Inggris.
+- Memigrasikan navigasi Settings serta preferensi umum, notifikasi, dan personalisasi ke translation key Indonesia/Inggris.
+- Memigrasikan kontrol data, penyimpanan, safety, keamanan/login, chat arsip, profil akademik, dan keyboard Settings ke translation key Indonesia/Inggris.
+- Memigrasikan navigasi shell Workspace, panel konfigurasi, notice alur chat, dan dialog project ke translation key Indonesia/Inggris.
+- Memigrasikan sidebar chat, library dokumen, Projects, dan intake identitas akademik ke translation key Indonesia/Inggris.
+- Memigrasikan shell Admin Console, monitoring, kredit, alert, audit, dan retensi ke translation key Indonesia/Inggris.
+- Memigrasikan panel Admin Pricing, akses user, dan appeal ke translation key Indonesia/Inggris.
+- Memigrasikan email broadcast, update produk, dan popup update ke translation key Indonesia/Inggris.
+- Memecah panel Admin integrasi, feedback, risk review, dan Landing CMS menjadi komponen terpisah dengan copy keyed serta status dinamis yang terlokalisasi.
+- Menyamakan import hook i18n ke context provider agar seluruh panel client ter-build melalui kontrak yang sama.
+- Memigrasikan aksi pesan, konteks chat, quiz, kartu dokumen, popup akun, logo institusi, dialog, dan greeting workspace ke translation key Indonesia/Inggris.
+- Memindahkan loading state Admin ke stylesheet section `styles/admin.css` dengan kontrak ownership tersendiri.
+
+## 21.0.6 - 2026-09-02
+
+- Mengekstrak formatter umum dan utilitas normalisasi akademik ke modul client yang dapat diuji secara langsung.
+- Mengekstrak `BrandMark`, `Button`, `IconButton`, dan `CustomSelect` dari monolith client tanpa mengubah props atau semantik DOM.
+- Menambahkan batas konteks state untuk chat, dokumen, dan UI, serta modul halaman auth, landing, workspace, dan admin sebagai boundary migrasi bertahap.
+- Menambahkan lazy loading berbasis route dengan fallback loading yang dapat diumumkan screen reader, plus chunk terpisah untuk halaman utama.
+- Menambahkan navigasi keyboard, focus trap, focus return, dan atribut ARIA pada dropdown serta dialog yang disentuh pada fase ini.
+- Menambahkan fondasi locale Indonesia/Inggris dengan fallback ke Bahasa Indonesia tanpa menghapus copy utama aplikasi.
+- Menambahkan parser SSE dan fallback JSON untuk transport chat, redaksi audit admin dengan hash IP, helper TOTP opsional, serta checker metadata release semver.
+- Menghubungkan relay chunk provider AI ke endpoint chat dengan heartbeat, pembatalan saat client terputus, retry sebelum delta pertama, pemeriksaan output bertahap, dan payload kanonis di event akhir.
+- Mengaktifkan `helmet` untuk CSP dan header hardening, serta `cors` dengan whitelist origin eksplisit untuk API.
+
+## 21.0.5 - 2026-09-02
+
+- Menambahkan fondasi design token untuk accent, tema charcoal, panel, teks, spacing, radius, shadow, font, dan breakpoint.
+- Menambahkan deklarasi cascade layer terurut serta stylesheet landing terisolasi tanpa mengubah markup halaman.
+
+## 21.0.4 - 2026-09-02
+
+- Menambahkan log JSON terstruktur dengan redaksi field rahasia, isi dokumen, dan durasi request.
+- Menambahkan adapter pelaporan exception ke Sentry yang hanya aktif saat `SENTRY_DSN` tersedia.
+- Menambahkan endpoint liveness publik `/api/status` tanpa mengubah kontrak `/api/health`, beserta panduan monitoring dan respons insiden.
+
+## 21.0.3 - 2026-09-02
+
+- Menambahkan batas safety aplikasi untuk mendeteksi permintaan pengungkapan kredensial, penyebaran malware, dan konten seksual terlarang berisiko tinggi.
+- Menormalkan serta membungkus teks lampiran sebagai sumber tidak tepercaya sebelum masuk ke prompt AI, termasuk batas panjang dan pembersihan karakter kontrol.
+- Memeriksa output AI sebelum disimpan ke chat atau draft dokumen, dengan respons aman dan audit code tanpa menyimpan isi sensitif.
+
+## 21.0.2 - 2026-09-02
+
+- Menambahkan kontrol `Ubah pesan` pada pesan user untuk mengirim revisi dari titik percakapan yang dipilih.
+- Menambahkan kontrol `Buat ulang jawaban` pada jawaban AI, dengan state busy, notice berbahasa Indonesia, dan fokus kembali ke composer saat mode edit aktif.
+- Menambahkan helper client dan kontrak test untuk request edit/regenerate tanpa mengubah endpoint chat lama.
+
+## 21.0.1 - Revisi chat server-side tahap 1
+
+- Menambahkan kontrak domain revisi pesan chat di server untuk mode `edit` dan `regenerate`, termasuk validasi sumber pesan user dan nomor revisi berurutan.
+- Menambahkan endpoint aditif `POST /api/chat/sessions/:id/messages/:messageId/revise` yang mengembalikan payload percakapan kanonis yang sama ditambah metadata revisi.
+- Saat revisi berhasil, server mempertahankan cabang chat sampai pesan sumber lalu mengganti pesan setelahnya secara aman tanpa mengubah kontrak endpoint pesan chat yang sudah ada.
+
 ## V37 - Laprak Template, Admin Ops, and Production Private Beta
 
 - Added the default DOCX template contract for laprak export: cover preservation, dynamic cover fields, no body identity section, and contextual explanation after every image.

@@ -49,6 +49,10 @@ if (runtimeEnvironment === 'production') {
 
 const nodeEnv = runtimeEnvironment;
 const publicMediaDir = path.resolve(process.env.LAPRAKIN_PUBLIC_MEDIA_DIR || path.resolve(directory, '../public-media'));
+const packageManifestPath = path.resolve(directory, '../../package.json');
+const packageVersion = fs.existsSync(packageManifestPath)
+  ? JSON.parse(fs.readFileSync(packageManifestPath, 'utf8')).version
+  : 'unknown';
 const manualEmailAuthOnly = process.env.MANUAL_EMAIL_AUTH_ONLY
   ? process.env.MANUAL_EMAIL_AUTH_ONLY !== 'false'
   : nodeEnv === 'production';
@@ -70,6 +74,9 @@ export const config = {
   port: positiveInt(process.env.PORT, 4000),
   nodeEnv,
   isProd: nodeEnv === 'production',
+  appVersion: process.env.APP_VERSION || packageVersion,
+  logLevel: process.env.LOG_LEVEL || (nodeEnv === 'production' ? 'info' : 'debug'),
+  sentryDsn: (process.env.SENTRY_DSN || '').trim(),
   // APP_URL/API_URL are canonical; FRONTEND_URL/BACKEND_URL are supported aliases for split deployments.
   appUrl: process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173',
   apiUrl: process.env.API_URL || process.env.BACKEND_URL || 'http://localhost:4000',
@@ -78,6 +85,9 @@ export const config = {
   tokenSecret: process.env.TOKEN_HMAC_SECRET || process.env.JWT_SECRET || 'dev-token-secret-change-me',
   // Admin promotion must always be an explicit deployment decision.
   adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
+  adminMfaRequired: process.env.ADMIN_MFA_REQUIRED === 'true',
+  adminMfaWindowMinutes: boundedInt(process.env.ADMIN_MFA_WINDOW_MINUTES, 30, 5, 120),
+  passwordBreachCheck: process.env.PASSWORD_BREACH_CHECK === 'true',
   naraRouterApiKey: process.env.NARAROUTER_API_KEY || '',
   naraRouterBaseUrl: (process.env.NARAROUTER_BASE_URL || 'https://router.bynara.id/v1').replace(/\/$/, ''),
   naraRouterMaxRpm: boundedInt(process.env.NARAROUTER_MAX_RPM, 8, 1, 10),
