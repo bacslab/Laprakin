@@ -540,6 +540,73 @@
       ]
     },
     "settings": {
+      "modal": {
+        "title": "Settings",
+        "navigation": "Settings navigation",
+        "privateWorkspace": "Private workspace",
+        "close": "Close settings",
+        "searchPlaceholder": "Search settings",
+        "searchLabel": "Search settings",
+        "clearSearch": "Clear search"
+      },
+      "tabs": {
+        "general": { "label": "General", "title": "Workspace appearance", "description": "Set the theme, density, language, and accent color." },
+        "notifications": { "label": "Notifications", "title": "Useful notifications", "description": "Choose the updates that are worth showing." },
+        "personalization": { "label": "Personalization", "title": "How Laprakin writes", "description": "Use these preferences as the starting point for new chats." },
+        "billing": { "label": "Billing", "title": "Plans and transactions", "description": "View plan, credit, and payment history status." },
+        "referral": { "label": "Referral", "title": "Invite friends to Laprakin", "description": "Share your code and track each invitation's bonus status." },
+        "data": { "label": "Data controls", "title": "Keep your data in control", "description": "Control external processing and download a data summary." },
+        "storage": { "label": "Storage", "title": "Storage usage", "description": "Monitor files stored in the workspace." },
+        "archived": { "label": "Archived chats", "title": "Archived chats", "description": "View and restore conversations you have archived." },
+        "safety": { "label": "Safety", "title": "Clear usage boundaries", "description": "Laprakin helps you write; it does not fabricate academic results." },
+        "security": { "label": "Security & login", "title": "Account access", "description": "Manage your password and device sessions." },
+        "academic": { "label": "Academic profile", "title": "Department and study program", "description": "Used as context without locking the assignment structure." },
+        "keyboard": { "label": "Keyboard", "title": "Interaction and motion", "description": "Adjust how messages are sent and how much animation you see." }
+      },
+      "general": {
+        "appearance": "Appearance",
+        "changesImmediate": "Changes apply immediately.",
+        "theme": "Theme",
+        "contrast": "Contrast",
+        "default": "Default",
+        "high": "High",
+        "language": "Language",
+        "indonesian": "Indonesian",
+        "english": "English",
+        "compact": "Compact workspace",
+        "compactDescription": "Tighten the sidebar, toolbar, and conversation area."
+      },
+      "notifications": {
+        "documents": "Document processing",
+        "documentsDescription": "Notify me when analysis, drafts, or exports finish.",
+        "deadlines": "Assignment deadlines",
+        "deadlinesDescription": "A light reminder for documents with a deadline.",
+        "productUpdates": "Product updates",
+        "productUpdatesDescription": "Only important beta feature changes."
+      },
+      "personalization": {
+        "nickname": "Nickname",
+        "nicknameDescription": "Used only to greet you in chat. Leave blank to use your first name.",
+        "greeting": "Greeting",
+        "nicknameLabel": "Nickname",
+        "save": "Save",
+        "tone": "Writing style",
+        "formal": "Formal",
+        "semiFormal": "Semi-formal",
+        "perspective": "Point of view",
+        "i": "I",
+        "we": "We",
+        "impersonal": "Impersonal",
+        "structure": "Starting structure",
+        "stepBased": "Step-based",
+        "testBased": "Test-based",
+        "projectBased": "Project-based",
+        "extraInstructions": "Additional instructions",
+        "extraInstructionsDescription": "Always sent as AI guidance for chats and report generation.",
+        "extraInstructionsPlaceholder": "Example: use concise technical language.",
+        "nicknameSaved": "Nickname saved.",
+        "nicknameReset": "Greeting now uses your first name."
+      },
       "referral": {
         "codeLabel": "Your referral code",
         "loading": "…",

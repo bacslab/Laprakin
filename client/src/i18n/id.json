@@ -540,6 +540,73 @@
       ]
     },
     "settings": {
+      "modal": {
+        "title": "Settings",
+        "navigation": "Navigasi settings",
+        "privateWorkspace": "Workspace pribadi",
+        "close": "Tutup settings",
+        "searchPlaceholder": "Cari pengaturan",
+        "searchLabel": "Cari pengaturan",
+        "clearSearch": "Hapus pencarian"
+      },
+      "tabs": {
+        "general": { "label": "Umum", "title": "Tampilan workspace", "description": "Atur tema, kepadatan, bahasa, dan warna aksen." },
+        "notifications": { "label": "Notifikasi", "title": "Notifikasi yang berguna", "description": "Pilih kabar yang benar-benar perlu muncul." },
+        "personalization": { "label": "Personalisasi", "title": "Cara Laprakin menulis", "description": "Jadikan preferensi ini sebagai titik awal untuk chat baru." },
+        "billing": { "label": "Billing", "title": "Plan dan transaksi", "description": "Lihat status plan, credit, dan histori pembayaran." },
+        "referral": { "label": "Referral", "title": "Ajak teman pakai Laprakin", "description": "Bagikan kodemu dan pantau status bonus tiap undangan." },
+        "data": { "label": "Kontrol data", "title": "Data tetap dalam kendalimu", "description": "Atur pemrosesan eksternal dan unduh ringkasan data." },
+        "storage": { "label": "Penyimpanan", "title": "Penggunaan penyimpanan", "description": "Pantau file yang tersimpan pada workspace." },
+        "archived": { "label": "Chat diarsipkan", "title": "Chat diarsipkan", "description": "Lihat dan pulihkan percakapan yang pernah kamu arsipkan." },
+        "safety": { "label": "Safety", "title": "Batas penggunaan yang jelas", "description": "Laprakin membantu menyusun, bukan memalsukan hasil akademik." },
+        "security": { "label": "Keamanan & login", "title": "Akses akun", "description": "Kelola kata sandi dan sesi perangkat." },
+        "academic": { "label": "Profil akademik", "title": "Jurusan dan program studi", "description": "Dipakai sebagai konteks awal tanpa mengunci struktur tugas." },
+        "keyboard": { "label": "Keyboard", "title": "Interaksi dan gerakan", "description": "Sesuaikan cara mengirim pesan dan intensitas animasi." }
+      },
+      "general": {
+        "appearance": "Appearance",
+        "changesImmediate": "Perubahan diterapkan langsung.",
+        "theme": "Tema",
+        "contrast": "Kontras",
+        "default": "Default",
+        "high": "Tinggi",
+        "language": "Bahasa",
+        "indonesian": "Bahasa Indonesia",
+        "english": "English",
+        "compact": "Workspace ringkas",
+        "compactDescription": "Rapatkan sidebar, toolbar, dan area percakapan."
+      },
+      "notifications": {
+        "documents": "Proses dokumen",
+        "documentsDescription": "Beritahu saat analisis, draft, atau export selesai.",
+        "deadlines": "Deadline tugas",
+        "deadlinesDescription": "Pengingat ringan untuk dokumen yang memiliki tenggat.",
+        "productUpdates": "Update produk",
+        "productUpdatesDescription": "Hanya perubahan fitur beta yang penting."
+      },
+      "personalization": {
+        "nickname": "Nama panggilan",
+        "nicknameDescription": "Dipakai hanya untuk menyapamu di halaman chat. Kosongkan untuk memakai nama depan.",
+        "greeting": "Sapaan",
+        "nicknameLabel": "Nama panggilan",
+        "save": "Simpan",
+        "tone": "Gaya bahasa",
+        "formal": "Formal",
+        "semiFormal": "Semi-formal",
+        "perspective": "Sudut pandang",
+        "i": "Saya",
+        "we": "Kita",
+        "impersonal": "Impersonal",
+        "structure": "Struktur awal",
+        "stepBased": "Berbasis langkah",
+        "testBased": "Berbasis pengujian",
+        "projectBased": "Berbasis proyek",
+        "extraInstructions": "Instruksi tambahan",
+        "extraInstructionsDescription": "Selalu dikirim sebagai acuan AI untuk chat dan generate laprak.",
+        "extraInstructionsPlaceholder": "Contoh: gunakan bahasa teknis yang ringkas.",
+        "nicknameSaved": "Nama panggilan disimpan.",
+        "nicknameReset": "Sapaan kembali memakai nama depan."
+      },
       "referral": {
         "codeLabel": "Kode referralmu",
         "loading": "…",
