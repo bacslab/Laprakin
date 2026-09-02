@@ -46,15 +46,15 @@ passing tests.
 - Clean-data E2E: passed for auth, profile, evidence, timeline, quality gate,
   template DOCX, restore, and verified password changes.
 - Workflow API and admin operations checks: passed.
-- Full build: passed. The build emitted separate lazy route chunks, including
-  `LegacyWorkspace` (108.07 kB), `LegacyAdminWorkspace` (48.26 kB), and
-  `ChatSurface` (29.34 kB), while also warning about the large shared/vendor
-  chunk.
+- Full client build: passed. The build emitted separate lazy route chunks,
+  including `LegacyWorkspace` (115.19 kB), `LegacyAdminWorkspace` (48.73 kB),
+  and `ChatSurface` (31.64 kB), while also warning about the large
+  shared/vendor chunk.
 - Lint and typecheck: passed under the repository's existing configured
   targets; JSX accessibility lint reports 0 warnings.
-- Fresh desktop browser checks at 1280×720: landing, auth, workspace tutorial,
-  and admin monitoring rendered without blank/error state. Mobile/tablet
-  viewport evidence was unavailable from the active browser surface.
+- Automated browser visual checks were unavailable from the active browser
+  surface. Mobile/tablet viewport evidence therefore remains open; build,
+  lint, and contract evidence remain green.
 
 ## Decision
 
