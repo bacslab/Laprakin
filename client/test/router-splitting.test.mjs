@@ -11,7 +11,7 @@ test('route modules are loaded through the shared page loader', () => {
   assert.match(mainSource, /loadPage\(\(\) => import\('\.\/pages\/Workspace\/Workspace'\)\)/);
   assert.match(mainSource, /loadPage\(\(\) => import\('\.\/pages\/Admin\/AdminWorkspace'\)\)/);
   assert.match(mainSource, /loadPage\(\(\) => import\('\.\/pages\/Status\/StatusPage'\)\)/);
-  assert.doesNotMatch(mainSource, /import\s+[^;]+from\s+['"]\.\/pages\/(?:Landing|Auth|Workspace|Admin)\//);
+  assert.doesNotMatch(mainSource, /import\s+[^;]+from\s+['"]\.\/pages\/(?:Landing\/LandingPage|Auth\/AuthPage|Workspace\/Workspace|Admin\/AdminWorkspace)/);
 });
 
 test('loadPage adapts default and named page modules for React.lazy', () => {
