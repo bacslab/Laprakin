@@ -9,7 +9,7 @@ import Composer from './Composer';
 import { ThinkingRail, WorkPlanRail, WorkflowPanel } from './WorkspaceWorkflow';
 import { AssistantMessageActions, ChatBriefPanel, DocumentCard, DocumentQuiz, InlineContext, MessageContent, UserMessageActions } from './ChatComponents';
 
-export default function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, aiConsentData, onEnableExternalAi, onUpgrade, enterToSend = true, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz, editingMessage, onEditMessage, onCancelEdit, onRevise }) {
+export default function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, aiConsentData, onEnableExternalAi, onUpgrade, enterToSend = true, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz, editingMessage, onEditMessage, onCancelEdit, onRevise, onMessageReaction }) {
   const { t } = useI18n();
   const blankChat = !active || (!messages.length && !attachments.length && !active.document_id);
   const [previewFile, setPreviewFile] = useState(null);
@@ -82,6 +82,7 @@ export default function ChatSurface({ active, messages, attachments, documentSta
             const target = getRegenerationTarget(visibleMessages, message.id);
             onRevise?.({ messageId: target.id, mode: 'regenerate' });
           } : undefined}
+          onReaction={onMessageReaction}
         />}
         {message.meta?.kind === 'document_ready' ? <DocumentCard documentState={documentState} activeJob={jobForMessage(message)} version={message.meta.documentVersion} onOpen={onOpenDocument} /> : null}
       </div>)}

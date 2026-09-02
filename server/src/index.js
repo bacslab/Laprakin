@@ -33,6 +33,7 @@ import { createLogger, reportException, statusSnapshot } from './observability.j
 import { createSseChannel } from './chat-stream.js';
 import { CHAT_MESSAGE_OPERATION, runCanonicalChatMutation } from './chat-message-mutation.js';
 import { getMutationSnapshot } from './mutation-requests.js';
+import { getMessageReactionAnalytics, removeMessageReaction, setMessageReaction } from './message-reactions.js';
 import { listAdminAudit, recordAdminAudit } from './admin-audit.js';
 import { createTotpSecret, getAdminMfaStatus, verifyTotpCode, adminMfaRequired } from './mfa.js';
 import { checkPasswordBreach } from './password-breach.js';
@@ -114,6 +115,8 @@ import {
   extractText,
   syncConfiguredAdminAccount,
 } from './services.js';
+
+const WORKSPACE_CHAT_PROMPT_REVISION = 'workspace-chat-v1';
 
 const FRIENDLY_AI_RETRY_MESSAGE = 'Laprakin masih menyiapkan hasilmu. Bahan tetap tersimpan aman dan proses akan dilanjutkan otomatis.';
 const FRIENDLY_AI_NOT_READY_MESSAGE = 'Laprakin sedang menyiapkan layanan. Coba kembali sebentar lagi.';
@@ -377,6 +380,10 @@ const chatMessageSchema = z.object({
   content: z.string().trim().min(1).max(1800),
   aiMode: z.enum(['basic', 'thinking', 'xtrathink']).optional().default('basic'),
   allowExternalAi: z.boolean().optional().default(false),
+});
+const messageReactionSchema = z.object({
+  reaction: z.enum(['like', 'dislike']),
+  reasonCode: z.enum(['', 'inaccurate', 'unclear', 'unhelpful', 'unsafe', 'other']).optional().default(''),
 });
 const externalAiConsentSchema = z.object({
   manifestVersion: z.string().trim().min(1).max(80),
@@ -2671,10 +2678,14 @@ function listChatAttachments(sessionId, ownerUserId) {
 
 function listChatMessages(sessionId, ownerUserId) {
   return db.prepare(`
-    SELECT id, role, content, meta_json, created_at
-    FROM chat_messages
-    WHERE session_id = ? AND owner_user_id = ?
-    ORDER BY created_at ASC
+    SELECT message.id, message.role, message.content, message.meta_json, message.created_at,
+      COALESCE(reaction.reaction, '') AS reaction,
+      COALESCE(reaction.reason_code, '') AS reaction_reason
+    FROM chat_messages message
+    LEFT JOIN message_reactions reaction
+      ON reaction.owner_user_id = message.owner_user_id AND reaction.message_id = message.id
+    WHERE message.session_id = ? AND message.owner_user_id = ?
+    ORDER BY message.created_at ASC
   `).all(sessionId, ownerUserId).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) }));
 }
 
@@ -3574,6 +3585,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       messages: [...priorUserMessages, { role: 'user', content: input.content }],
       configuration: parseJson(session.configuration_json, {}),
     });
+    const configurationRevision = sha256(JSON.stringify(inferredContext.configuration));
     if (previousState === 'CLARIFICATION_REQUIRED') {
       const answer = input.content.replace(/\s+/g, ' ').trim().slice(0, 150);
       const parts = answer.split(/\s*(?:,|;|\|| - )\s*/).filter(isPlausibleAcademicContext);
@@ -3655,6 +3667,8 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
           aiMode: input.aiMode,
           provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
           model: assistant.model,
+          configurationRevision,
+          promptTemplateRevision: WORKSPACE_CHAT_PROMPT_REVISION,
           workflow: assistant.workflow || null,
           workPlan: isClarification ? null : parseJson(refreshed.work_plan_json, {}),
           thinkingStartedAt: timestamp,
@@ -3676,6 +3690,8 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
       resourceId: refreshed.id,
       providerId: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
       modelId: assistant.model || '',
+      configurationRevision,
+      promptTemplateRevision: WORKSPACE_CHAT_PROMPT_REVISION,
     };
   }
   const priorUserMessages = db.prepare(`
@@ -3692,6 +3708,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     configuration_json: JSON.stringify(inferredContext.configuration),
     configuration: inferredContext.configuration,
   };
+  const configurationRevision = sha256(effectiveSession.configuration_json);
   const links = Array.from(input.content.matchAll(/https?:\/\/[^\s)]+/g)).map((match) => match[0]).slice(0, 8);
   let assistant;
   try {
@@ -3719,6 +3736,8 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
         aiMode: input.aiMode,
         provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
         model: assistant.model,
+        configurationRevision,
+        promptTemplateRevision: WORKSPACE_CHAT_PROMPT_REVISION,
         workflow: assistant.workflow || null,
       },
       createdAt: timestamp,
@@ -3733,7 +3752,7 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     db.prepare(`UPDATE chat_sessions SET title = ?, course_group = CASE WHEN course_group = '' OR course_group = 'Belum dikelompokkan' THEN ? ELSE course_group END WHERE id = ?`).run(autoTitle, cfg.courseName || 'Belum dikelompokkan', session.id);
   }
   audit(req.user.id, 'ai.chat_completed', 'chat_session', session.id, { mode: input.aiMode, model: assistant.model, provider: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local') });
-  const messages = db.prepare('SELECT id, role, content, meta_json, created_at FROM chat_messages WHERE session_id = ? AND owner_user_id = ? ORDER BY created_at ASC').all(session.id, req.user.id).map((message) => ({ ...message, meta: parseJson(message.meta_json, {}) }));
+  const messages = listChatMessages(session.id, req.user.id);
   const refreshedSession = exposeChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(session.id));
   return {
     statusCode: 200,
@@ -3741,6 +3760,8 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     resourceId: session.id,
     providerId: assistant.provider || (isAiConfigured() ? 'nararouter' : 'local'),
     modelId: assistant.model || '',
+    configurationRevision,
+    promptTemplateRevision: WORKSPACE_CHAT_PROMPT_REVISION,
   };
     },
   });
@@ -3754,6 +3775,27 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, requireCsrf, aiChatLimi
     .find((message) => message.role === 'assistant')?.content || '';
   if (!streamedText && assistantText) sseChannel.writeDelta(assistantText);
   return sseChannel.finish(mutationResult.response);
+}));
+
+app.put('/api/chat/messages/:messageId/reaction', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
+  const input = messageReactionSchema.parse(req.body || {});
+  const reaction = setMessageReaction({
+    ownerUserId: req.user.id,
+    messageId: req.params.messageId,
+    reaction: input.reaction,
+    reasonCode: input.reasonCode,
+  });
+  audit(req.user.id, 'chat.message_reaction_set', 'chat_message', req.params.messageId, {
+    reaction: reaction.reaction,
+    reasonCode: reaction.reasonCode,
+  });
+  res.json({ reaction });
+}));
+
+app.delete('/api/chat/messages/:messageId/reaction', requireAuth, requireCsrf, asyncHandler(async (req, res) => {
+  removeMessageReaction({ ownerUserId: req.user.id, messageId: req.params.messageId });
+  audit(req.user.id, 'chat.message_reaction_removed', 'chat_message', req.params.messageId, {});
+  res.json({ reaction: null });
 }));
 
 app.get('/api/mutations/:requestId', requireAuth, asyncHandler(async (req, res) => {
@@ -5810,6 +5852,12 @@ app.get('/api/admin/ai/usage', requireAuth, requireAdmin, (req, res) => {
     createdAt: row.created_at,
   }));
   res.json({ days, since, userId: userFilter || null, totals, breakdown, daily, byUser, recent });
+});
+
+app.get('/api/admin/ai/reactions', requireAuth, requireAdmin, (req, res) => {
+  const query = z.object({ days: z.coerce.number().int().min(1).max(90).catch(30) }).parse(req.query);
+  const since = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000).toISOString();
+  res.json({ days: query.days, since, ...getMessageReactionAnalytics({ since }) });
 });
 
 app.post('/api/admin/integrations/check', requireAuth, requireCsrf, requireAdmin, integrationCheckLimiter, asyncHandler(async (req, res) => {

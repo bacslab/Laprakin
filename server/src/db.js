@@ -1130,5 +1130,30 @@ CREATE TABLE IF NOT EXISTS external_ai_consents (
 CREATE INDEX IF NOT EXISTS idx_external_ai_consents_user
   ON external_ai_consents(user_id, granted_at DESC);
 `);
+db.exec(`
+CREATE TABLE IF NOT EXISTS message_reactions (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  reaction TEXT NOT NULL CHECK(reaction IN ('like', 'dislike')),
+  reason_code TEXT NOT NULL DEFAULT '',
+  request_id TEXT NOT NULL DEFAULT '',
+  provider_id TEXT NOT NULL DEFAULT '',
+  model_id TEXT NOT NULL DEFAULT '',
+  configuration_revision TEXT NOT NULL DEFAULT '',
+  prompt_template_revision TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY(message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+  UNIQUE(owner_user_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_message_reactions_owner_updated
+  ON message_reactions(owner_user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_message_reactions_analytics
+  ON message_reactions(reaction, provider_id, model_id, updated_at DESC);
+`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_usage_context ON ai_usage_events(context_type, context_id, created_at);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_user_devices_profile ON user_devices(profile_hash, user_id);`);

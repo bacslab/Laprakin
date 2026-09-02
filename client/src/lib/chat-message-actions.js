@@ -4,6 +4,30 @@ function cleanId(value, label) {
   return id;
 }
 
+function cleanReaction(value, { optional = false } = {}) {
+  const reaction = String(value || '').trim();
+  if (optional && !reaction) return '';
+  if (!['like', 'dislike'].includes(reaction)) throw new TypeError('Reaksi pesan tidak valid.');
+  return reaction;
+}
+
+export function buildMessageReactionRequest({ messageId, currentReaction = '', nextReaction }) {
+  const message = cleanId(messageId, 'ID pesan');
+  const current = cleanReaction(currentReaction, { optional: true });
+  const next = cleanReaction(nextReaction);
+  const path = '/chat/messages/' + encodeURIComponent(message) + '/reaction';
+  if (current === next) return { path, method: 'DELETE' };
+  return { path, method: 'PUT', body: { reaction: next } };
+}
+
+export function applyMessageReaction(messages, messageId, reaction) {
+  const message = cleanId(messageId, 'ID pesan');
+  const next = cleanReaction(reaction, { optional: true });
+  const target = Array.isArray(messages) ? messages.find((item) => item?.id === message) : null;
+  if (!target || target.role !== 'assistant') throw new TypeError('Reaksi hanya tersedia untuk pesan assistant.');
+  return messages.map((item) => item.id === message ? { ...item, reaction: next } : item);
+}
+
 export function buildRevisionRequest({ sessionId, messageId, mode, content = '' }) {
   const session = cleanId(sessionId, 'ID sesi');
   const message = cleanId(messageId, 'ID pesan');

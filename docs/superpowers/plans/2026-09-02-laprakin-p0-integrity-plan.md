@@ -402,11 +402,11 @@ git commit -m "fix: honor composer send preference"
 - Produces: `setMessageReaction(input)`, `removeMessageReaction(input)`, `getMessageReactions(input)`, `PUT /api/chat/messages/:messageId/reaction`, and `DELETE /api/chat/messages/:messageId/reaction`.
 - Reaction value is `like` or `dislike`; reason is an optional enumerated code.
 
-- [ ] **Step 1: Write failing persistence and privacy tests**
+- [x] **Step 1: Write failing persistence and privacy tests**
 
 Assert create, reload, switch, remove, and reverse behavior. Assert another user receives 404. Assert the stored row contains message/request/provider/model-config/prompt-template revisions. Assert normal admin analytics return counts without message content.
 
-- [ ] **Step 2: Run focused reaction tests red**
+- [x] **Step 2: Run focused reaction tests red**
 
 Run:
 
@@ -416,19 +416,19 @@ node --test server/test/message-reactions-api.test.mjs client/test/chat-message-
 
 Expected: no server reaction endpoint and client-local behavior fail.
 
-- [ ] **Step 3: Implement server persistence**
+- [x] **Step 3: Implement server persistence**
 
 Use a unique `(owner_user_id, message_id)` row. Copy immutable request/provider/model/template metadata from the canonical assistant message rather than trusting browser input.
 
-- [ ] **Step 4: Wire optimistic UI with rollback**
+- [x] **Step 4: Wire optimistic UI with rollback**
 
 Update the reaction immediately, call the API, and restore the prior value on failure. Announce saved state only after the server response. Do not send raw conversation content with the reaction request.
 
-- [ ] **Step 5: Verify reload and reversal**
+- [x] **Step 5: Verify reload and reversal**
 
 Run focused tests, then use the browser workflow to react, reload, verify persistence, reverse, reload, and verify removal/replacement.
 
-- [ ] **Step 6: Commit reaction persistence**
+- [x] **Step 6: Commit reaction persistence**
 
 ```text
 git add server/src/message-reactions.js server/src/db.js server/src/index.js server/test/message-reactions-api.test.mjs client/src/lib/chat-message-actions.js client/src/pages/Workspace/ChatComponents.jsx client/src/pages/Workspace/useLegacyWorkspaceController.js client/test/chat-message-actions.test.mjs

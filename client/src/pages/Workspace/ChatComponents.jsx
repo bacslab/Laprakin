@@ -33,10 +33,9 @@ export function MessageContent({ content }) {
   })}</div>;
 }
 
-export function AssistantMessageActions({ message, onRegenerate, busy = false }) {
+export function AssistantMessageActions({ message, onRegenerate, onReaction, busy = false }) {
   const { t, language } = useI18n();
   const { setNotice } = useApp();
-  const [reaction, setReaction] = useState('');
   const [copied, setCopied] = useState(false);
   const text = String(message.content || '');
   const timestamp = new Date(message.created_at || message.createdAt || Date.now()).toLocaleTimeString(language === 'en' ? 'en-US' : 'id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -48,14 +47,11 @@ export function AssistantMessageActions({ message, onRegenerate, busy = false })
       window.setTimeout(() => setCopied(false), 1400);
     } catch { setNotice(t('workspace.messageActions.copyFailed')); }
   };
-  const rate = (value) => {
-    setReaction((current) => current === value ? '' : value);
-    setNotice(value === 'up' ? t('workspace.messageActions.positiveSaved') : t('workspace.messageActions.improvementSaved'));
-  };
+  const rate = (value) => onReaction?.(message.id, value);
   return <footer className="message-actions" aria-label={t('workspace.messageActions.label')}>
     <button type="button" onClick={copy} aria-label={t('workspace.messageActions.copy')} title={t('workspace.messageActions.copy')}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
-    <button type="button" className={reaction === 'up' ? 'selected' : ''} onClick={() => rate('up')} aria-label={t('workspace.messageActions.helpful')} title={t('workspace.messageActions.helpfulTitle')}><ThumbsUp size={14} /></button>
-    <button type="button" className={reaction === 'down' ? 'selected' : ''} onClick={() => rate('down')} aria-label={t('workspace.messageActions.needsImprovement')} title={t('workspace.messageActions.needsImprovementTitle')}><ThumbsDown size={14} /></button>
+    <button type="button" className={message.reaction === 'like' ? 'selected' : ''} onClick={() => rate('like')} aria-label={t('workspace.messageActions.helpful')} title={t('workspace.messageActions.helpfulTitle')}><ThumbsUp size={14} /></button>
+    <button type="button" className={message.reaction === 'dislike' ? 'selected' : ''} onClick={() => rate('dislike')} aria-label={t('workspace.messageActions.needsImprovement')} title={t('workspace.messageActions.needsImprovementTitle')}><ThumbsDown size={14} /></button>
     {onRegenerate && <button type="button" onClick={onRegenerate} disabled={busy} aria-label={t('workspace.messageActions.regenerate')} title={t('workspace.messageActions.regenerate')}><RefreshCw size={14} /></button>}
     <time dateTime={message.created_at || message.createdAt}>{timestamp}</time>
   </footer>;

@@ -117,6 +117,24 @@ with sync_playwright() as playwright:
     page.locator(".message.user").wait_for()
     assert "Gunakan bahan ini" in page.locator(".message.user").inner_text()
     assert page.locator(".first-use-guidance").count() == 0
+    helpful = page.get_by_role("button", name="Jawaban membantu", exact=True).first
+    needs_improvement = page.get_by_role("button", name="Jawaban perlu diperbaiki", exact=True).first
+    helpful.click()
+    assert "selected" in (helpful.get_attribute("class") or "")
+    page.reload(wait_until="networkidle")
+    helpful = page.get_by_role("button", name="Jawaban membantu", exact=True).first
+    needs_improvement = page.get_by_role("button", name="Jawaban perlu diperbaiki", exact=True).first
+    assert "selected" in (helpful.get_attribute("class") or "")
+    needs_improvement.click()
+    page.reload(wait_until="networkidle")
+    needs_improvement = page.get_by_role("button", name="Jawaban perlu diperbaiki", exact=True).first
+    assert "selected" in (needs_improvement.get_attribute("class") or "")
+    needs_improvement.click()
+    page.reload(wait_until="networkidle")
+    helpful = page.get_by_role("button", name="Jawaban membantu", exact=True).first
+    needs_improvement = page.get_by_role("button", name="Jawaban perlu diperbaiki", exact=True).first
+    assert "selected" not in (helpful.get_attribute("class") or "")
+    assert "selected" not in (needs_improvement.get_attribute("class") or "")
     page.locator(".clarification-inline").wait_for(timeout=30000)
     assert page.get_by_role("button", name="Kirim pesan").is_visible()
     assert page.locator(".pending-file-chip").count() == 0

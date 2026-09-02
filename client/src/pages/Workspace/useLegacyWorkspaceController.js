@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from '../../router';
 import { api, apiStream, clearCsrfToken, download } from '../../api';
-import { buildRevisionRequest, getEditableMessage } from '../../lib/chat-message-actions';
+import { applyMessageReaction, buildMessageReactionRequest, buildRevisionRequest, getEditableMessage } from '../../lib/chat-message-actions';
 import { courseTokens, normalizedCourseKey } from '../../lib/academic';
 import { inferPendingAttachmentKind } from '../../lib/attachments';
 import { clearDraftRequest, loadDraftRequest, rememberDraftRequest } from '../../lib/request-lifecycle';
@@ -22,6 +22,7 @@ export function useLegacyWorkspaceController() {
   const [input, setInput] = useState(''); const [pendingLandingFiles, setPendingLandingFiles] = useState([]); const [busy, setBusy] = useState(false); const [actionBusy, setActionBusy] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [draggingSession, setDraggingSession] = useState(null); const [renamingId, setRenamingId] = useState(null); const [editingMessageId, setEditingMessageId] = useState(null); const [leftCollapsed, setLeftCollapsed] = useState(() => window.innerWidth < 860 || localStorage.getItem('laprakin-left-collapsed') === 'true'); const [rightOpen, setRightOpen] = useState(false); const [documentOpen, setDocumentOpen] = useState(false); const [quizMode, setQuizMode] = useState(false); const [modal, setModal] = useState(null); const [config, setConfig] = useState(defaultChatConfig); const [contextOpen, setContextOpen] = useState(false); const [attachmentKind, setAttachmentKind] = useState(''); const [documents, setDocuments] = useState([]); const [projectPins, setProjectPins] = useState([]); const [billingPlan, setBillingPlan] = useState(null); const [aiMode, setAiMode] = useState('basic'); const [aiModeAccess, setAiModeAccess] = useState({ basic: { available: true }, thinking: { available: false }, xtrathink: { available: false } }); const [aiConsentData, setAiConsentData] = useState(null); const [recentSearchOpen, setRecentSearchOpen] = useState(false); const [recentSearchQuery, setRecentSearchQuery] = useState(''); const [identityIntake, setIdentityIntake] = useState(null); const [pendingConfigRequest, setPendingConfigRequest] = useState(null); const [tutorialOpen, setTutorialOpen] = useState(false); const [tutorialFirstUse, setTutorialFirstUse] = useState(false);
   const actionInFlightRef = useRef(false);
   const sendInFlightRef = useRef(false);
+  const reactionInFlightRef = useRef(new Set());
   const tutorialAutoOpenedRef = useRef(false);
   const recentSearchInputRef = useRef(null);
   const [productUpdate, setProductUpdate] = useState(null);
@@ -410,6 +411,43 @@ export function useLegacyWorkspaceController() {
       return null;
     } finally {
       setBusy(false);
+    }
+  };
+  const reactToMessage = async (messageId, nextReaction) => {
+    if (reactionInFlightRef.current.has(messageId)) return null;
+    const target = messages.find((message) => message.id === messageId && message.role === 'assistant');
+    if (!target) return null;
+    let request;
+    try {
+      request = buildMessageReactionRequest({
+        messageId,
+        currentReaction: target.reaction || '',
+        nextReaction,
+      });
+    } catch (error) {
+      setNotice(error.message);
+      return null;
+    }
+    const previousReaction = target.reaction || '';
+    const optimisticReaction = request.method === 'DELETE' ? '' : request.body.reaction;
+    reactionInFlightRef.current.add(messageId);
+    setMessages((items) => applyMessageReaction(items, messageId, optimisticReaction));
+    try {
+      const data = await api(request.path, { method: request.method, ...(request.body ? { body: request.body } : {}) });
+      const savedReaction = data.reaction?.reaction || '';
+      setMessages((items) => applyMessageReaction(items, messageId, savedReaction));
+      setNotice(savedReaction === 'like'
+        ? t('workspace.messageActions.positiveSaved')
+        : savedReaction === 'dislike'
+          ? t('workspace.messageActions.improvementSaved')
+          : t('workspace.messageActions.reactionRemoved'));
+      return data;
+    } catch (error) {
+      setMessages((items) => applyMessageReaction(items, messageId, previousReaction));
+      setNotice(error.message);
+      return null;
+    } finally {
+      reactionInFlightRef.current.delete(messageId);
     }
   };
   const completeIdentityIntake = async (identity) => {
@@ -854,7 +892,7 @@ export function useLegacyWorkspaceController() {
     closeProductUpdate, sidebarGroupProps, pinnedProjects, pinnedSessions, recentGroups,
     startNewChat, send, upload, uploadRef, removeAttachment, updateAttachmentCategory, createDocument,
     performChatAction, pasteImagesIntoChat, addPendingFiles, startDocumentQuiz, submitDocumentQuiz,
-    reviseChatMessage, documentAction, downloadExport, restoreDocumentVersion, pendingConfigRequest, saveConfig,
+    reviseChatMessage, reactToMessage, documentAction, downloadExport, restoreDocumentVersion, pendingConfigRequest, saveConfig,
     completeIdentityIntake, closeTutorial, logout,
   };
 }
