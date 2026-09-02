@@ -8,8 +8,10 @@ import { formatCurrency } from '../../lib/formatters';
 import { redirectToMidtransCheckout, validatedMidtransCheckoutUrl } from '../../lib/payment-redirect';
 import { useResolvedTheme } from '../../lib/theme';
 import { useApp } from '../../state/ui-context';
+import { useI18n } from '../../i18n/context';
 
 export default function BillingPage() {
+  const { t } = useI18n();
   const { user, setNotice, refreshSession, prefs } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
@@ -77,20 +79,21 @@ export default function BillingPage() {
     return () => { cancelled = true; };
   }, [cartKey]);
 
-  const plan = data?.currentPlan || { key: 'free', label: 'Gratis', status: 'active', credits: 0, endsAt: null, description: 'Paket awal untuk mencoba Laprakin.' };
+  const localizedFallbackFeatures = (key, fallback) => fallback.map((_, index) => t(`${key}.${index}`));
+  const plan = data?.currentPlan || { key: 'free', label: t('billing.defaultPlan.label'), status: t('billing.defaultPlan.status'), credits: 0, endsAt: null, description: t('billing.defaultPlan.description') };
   const catalogue = {
-    free: { key: 'free', label: 'Gratis', price: 0, description: 'Mulai dan pahami alur kerja Laprakin.', features: pricingFeatures(pricing.free, pricingFallback.free.features) },
-    monthly: { key: 'monthly', label: 'Pro', price: pricing.monthly?.price || 29900, description: 'Untuk kebutuhan praktikum yang rutin.', features: pricingFeatures(pricing.monthly, pricingFallback.monthly.features) },
-    pro: { key: 'pro', label: 'Max', price: pricing.pro?.price || 45900, description: 'Untuk semester padat dan revisi intensif.', features: pricingFeatures(pricing.pro, pricingFallback.pro.features) },
+    free: { key: 'free', label: t('billing.catalogue.free.label'), price: 0, description: t('billing.catalogue.free.description'), features: pricingFeatures(pricing.free, localizedFallbackFeatures('pricing.features.free', pricingFallback.free.features)) },
+    monthly: { key: 'monthly', label: t('billing.catalogue.monthly.label'), price: pricing.monthly?.price || 29900, description: t('billing.catalogue.monthly.description'), features: pricingFeatures(pricing.monthly, localizedFallbackFeatures('pricing.features.pro', pricingFallback.monthly.features)) },
+    pro: { key: 'pro', label: t('billing.catalogue.pro.label'), price: pricing.pro?.price || 45900, description: t('billing.catalogue.pro.description'), features: pricingFeatures(pricing.pro, localizedFallbackFeatures('pricing.features.max', pricingFallback.pro.features)) },
   };
   const paymentStatusCopy = {
-    created: 'Menyiapkan checkout QRIS.',
-    pending: 'Menunggu pembayaran. Scan QRIS yang muncul di checkout Midtrans.',
-    paid: 'Pembayaran berhasil. Credit atau plan telah diaktifkan oleh server.',
-    failed: 'Pembayaran ditolak. Pilih checkout QRIS baru bila ingin mencoba lagi.',
-    expired: 'Kode QRIS sudah kedaluwarsa. Buat checkout QRIS baru.',
-    canceled: 'Checkout dibatalkan. Belum ada credit atau plan yang ditambahkan.',
-    refunded: 'Refund tercatat. Status entitlement ditinjau sesuai kebijakan refund.',
+    created: t('billing.status.created'),
+    pending: t('billing.status.pending'),
+    paid: t('billing.status.paid'),
+    failed: t('billing.status.failed'),
+    expired: t('billing.status.expired'),
+    canceled: t('billing.status.canceled'),
+    refunded: t('billing.status.refunded'),
   };
 
   const updateOrder = async (order, successNotice = '') => {
@@ -104,7 +107,7 @@ export default function BillingPage() {
     if (order?.status === 'paid') {
       await refreshSession();
       await load();
-      setNotice(successNotice || 'Pembayaran QRIS berhasil diverifikasi. Plan atau credit sudah aktif.');
+      setNotice(successNotice || t('billing.notices.qrisVerified'));
       navigate('/app', { replace: true });
     }
   };
@@ -115,7 +118,7 @@ export default function BillingPage() {
       const response = verifyWithGateway
         ? await api(`/payments/orders/${orderId}/refresh`, { method: 'POST', body: {} })
         : await api(`/payments/orders/${orderId}`, { includeCsrf: false });
-      await updateOrder(response.order, verifyWithGateway && response.order?.status === 'paid' ? 'Pembayaran QRIS berhasil diverifikasi.' : 'Status pembayaran diperbarui.');
+      await updateOrder(response.order, verifyWithGateway && response.order?.status === 'paid' ? t('billing.notices.paymentVerified') : t('billing.notices.paymentUpdated'));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -130,26 +133,26 @@ export default function BillingPage() {
   }, [activeOrder?.id, activeOrder?.status]);
 
   const checkout = async () => {
-    if (!cartItems.length) { setError('Tambahkan plan atau credit ke keranjang terlebih dahulu.'); return; }
-    if (!user?.emailVerified) { setError('Verifikasi email sebelum melakukan pembayaran.'); return; }
+    if (!cartItems.length) { setError(t('billing.errors.addProduct')); return; }
+    if (!user?.emailVerified) { setError(t('billing.errors.verifyEmail')); return; }
     setBusy(true);
     setError('');
     setCheckoutRecoveryUrl('');
     try {
       const payload = await api('/payments/checkout', { method: 'POST', body: { items: cartItems } });
       if (payload.mode === 'manual') {
-        await updateOrder(payload.order, 'Checkout QRIS lokal diproses untuk pengujian.');
+        await updateOrder(payload.order, t('billing.notices.localCheckout'));
         return;
       }
       await updateOrder(payload.order);
       window.sessionStorage.setItem('laprakin:active-payment-order', payload.orderId);
       const checkoutUrl = validatedMidtransCheckoutUrl(payload.checkoutUrl);
       if (!checkoutUrl) {
-        throw new Error('URL checkout QRIS dari gateway tidak valid.');
+        throw new Error(t('billing.errors.invalidCheckoutUrl'));
       }
       setCheckoutRecoveryUrl(checkoutUrl);
       if (!redirectToMidtransCheckout(checkoutUrl)) {
-        throw new Error('Navigasi otomatis diblokir browser. Buka checkout QRIS lewat tombol di bawah.');
+        throw new Error(t('billing.errors.blockedNavigation'));
       }
     } catch (err) {
       setError(err.message);
@@ -160,9 +163,9 @@ export default function BillingPage() {
 
   const selectSubscription = (key) => { setSubscriptionChoice(key === 'free' ? 'none' : key); setError(''); };
   return <div className={`billing-portal pricing-only ${billingTheme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
-    <header className="pricing-only-nav"><button className="billing-back" onClick={() => navigate('/app')} aria-label="Kembali ke workspace"><ArrowLeft size={18} /></button></header>
+    <header className="pricing-only-nav"><button className="billing-back" onClick={() => navigate('/app')} aria-label={t('billing.back')}><ArrowLeft size={18} /></button></header>
     <main className="pricing-only-main">
-      <section className="pricing-only-copy"><h1>Pilih plan yang pas untukmu.</h1><p>Naikkan kapasitas Laprakin saat kamu membutuhkannya.</p></section>
+      <section className="pricing-only-copy"><h1>{t('billing.title')}</h1><p>{t('billing.description')}</p></section>
       <section className="pricing-only-grid">
         {['free', 'monthly', 'pro'].map((key) => {
           const item = catalogue[key];
@@ -170,19 +173,19 @@ export default function BillingPage() {
           const isSelected = subscriptionChoice === key;
           const paid = key !== 'free';
           return <article key={key} className={`pricing-only-card ${current ? 'current' : ''} ${isSelected ? 'selected' : ''}`} onClick={() => paid && selectSubscription(key)}>
-            <div className="pricing-only-card-top"><span className="pricing-only-marker" aria-hidden="true" /><small>{current ? 'Plan aktif' : key === 'free' ? 'Mulai gratis' : 'Individual'}</small></div>
+            <div className="pricing-only-card-top"><span className="pricing-only-marker" aria-hidden="true" /><small>{current ? t('billing.activePlan') : key === 'free' ? t('billing.freeStart') : t('billing.individual')}</small></div>
             <h2>{item.label}</h2><p>{item.description}</p>
-            <div className="pricing-only-price"><b>{key === 'free' ? 'Rp0' : formatCurrency(item.price)}</b>{key !== 'free' && <span>/ 30 hari</span>}</div>
+            <div className="pricing-only-price"><b>{key === 'free' ? 'Rp0' : formatCurrency(item.price)}</b>{key !== 'free' && <span>{t('billing.monthlySuffix')}</span>}</div>
             <button type="button" className={current || !paid ? 'muted' : ''} onClick={(event) => { event.stopPropagation(); if (paid) selectSubscription(key); }}>
-              {current ? `${item.label} aktif` : !paid ? 'Plan dasar' : isSelected ? 'Dipilih' : `Pilih ${item.label}`}
+              {current ? t('billing.planActive', { label: item.label }) : !paid ? t('billing.basePlan') : isSelected ? t('billing.selected') : t('billing.choose', { label: item.label })}
             </button>
             <ul>{item.features.map((feature) => <li key={feature}><Check size={14}/>{feature}</li>)}</ul>
           </article>;
         })}
       </section>
-      {subscriptionChoice !== 'none' && <section className="pricing-only-checkout"><div><small>Checkout QRIS</small><b>{quoteBusy ? 'Menghitung…' : quote?.displayTotal || 'Rp0'}</b><span>{quote?.items?.[0]?.label || 'Plan pilihanmu'} · berlaku 30 hari</span></div><Button onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>{busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? 'Bayar dengan QRIS' : 'Gateway belum aktif'}</Button></section>}
-      {activeOrder && <div className={`pricing-only-status ${activeOrder.status || 'pending'}`}><div><b>{activeOrder.statusLabel || paymentStatusCopy[activeOrder.status] || 'Status pembayaran'}</b><p>{paymentStatusCopy[activeOrder.status] || 'Status pembayaran sedang diproses.'}</p></div>{activeOrder.canRefresh !== false && ['created', 'pending'].includes(activeOrder.status) ? <Button variant="secondary" onClick={() => getOrder(activeOrder.id, true)} disabled={busy}><RefreshCw size={14}/> Refresh status</Button> : <CheckCircle2 size={20}/>}</div>}
-      {error && <div className="billing-inline-error"><CircleAlert size={16}/><span>{error}</span>{checkoutRecoveryUrl && <a href={checkoutRecoveryUrl}>Buka checkout QRIS</a>}</div>}
+      {subscriptionChoice !== 'none' && <section className="pricing-only-checkout"><div><small>{t('billing.checkoutEyebrow')}</small><b>{quoteBusy ? t('billing.calculating') : quote?.displayTotal || 'Rp0'}</b><span>{quote?.items?.[0]?.label || t('billing.selectedPlanFallback')} · {t('billing.validity')}</span></div><Button onClick={checkout} disabled={busy || quoteBusy || !gateway?.enabled}>{busy ? <LoaderCircle className="spin" size={15}/> : <CreditCard size={15}/>} {gateway?.enabled ? t('pricing.payWithQris') : t('pricing.gatewayInactive')}</Button></section>}
+      {activeOrder && <div className={`pricing-only-status ${activeOrder.status || 'pending'}`}><div><b>{paymentStatusCopy[activeOrder.status] || activeOrder.statusLabel || t('pricing.paymentStatus')}</b><p>{paymentStatusCopy[activeOrder.status] || t('billing.status.processing')}</p></div>{activeOrder.canRefresh !== false && ['created', 'pending'].includes(activeOrder.status) ? <Button variant="secondary" onClick={() => getOrder(activeOrder.id, true)} disabled={busy}><RefreshCw size={14}/> {t('billing.refreshStatus')}</Button> : <CheckCircle2 size={20}/>}</div>}
+      {error && <div className="billing-inline-error"><CircleAlert size={16}/><span>{error}</span>{checkoutRecoveryUrl && <a href={checkoutRecoveryUrl}>{t('pricing.openCheckout')}</a>}</div>}
     </main>
   </div>;
 }

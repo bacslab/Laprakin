@@ -204,6 +204,65 @@
       "max": ["20 credits / 30 days", "XtraThink mode unlocked", "5 GB storage"]
     }
   },
+  "billing": {
+    "back": "Back to workspace",
+    "title": "Choose the plan that fits.",
+    "description": "Increase Laprakin capacity when you need it.",
+    "activePlan": "Active plan",
+    "freeStart": "Start free",
+    "individual": "Individual",
+    "basePlan": "Base plan",
+    "selected": "Selected",
+    "choose": "Choose {{label}}",
+    "monthlySuffix": "/ 30 days",
+    "checkoutEyebrow": "QRIS checkout",
+    "selectedPlanFallback": "Your selected plan",
+    "validity": "valid for 30 days",
+    "calculating": "Calculating…",
+    "refreshStatus": "Refresh status",
+    "planActive": "{{label}} active",
+    "defaultPlan": {
+      "label": "Free",
+      "status": "active",
+      "description": "A starter plan for trying Laprakin."
+    },
+    "catalogue": {
+      "free": {
+        "label": "Free",
+        "description": "Start and learn the Laprakin workflow."
+      },
+      "monthly": {
+        "label": "Pro",
+        "description": "For regular practice work."
+      },
+      "pro": {
+        "label": "Max",
+        "description": "For a packed semester and intensive revisions."
+      }
+    },
+    "errors": {
+      "addProduct": "Add a plan or credit to your cart first.",
+      "verifyEmail": "Verify your email before paying.",
+      "invalidCheckoutUrl": "The QRIS checkout URL from the gateway is invalid.",
+      "blockedNavigation": "Automatic navigation was blocked by the browser. Open QRIS checkout with the button below."
+    },
+    "notices": {
+      "qrisVerified": "QRIS payment verified. Your plan or credits are active.",
+      "paymentVerified": "QRIS payment verified.",
+      "paymentUpdated": "Payment status updated.",
+      "localCheckout": "Local QRIS checkout is being processed for testing."
+    },
+    "status": {
+      "created": "Preparing QRIS checkout.",
+      "pending": "Waiting for payment. Scan the QRIS shown in Midtrans checkout.",
+      "paid": "Payment succeeded. Credits or your plan were activated by the server.",
+      "failed": "Payment was declined. Choose a new QRIS checkout to try again.",
+      "expired": "The QRIS code expired. Create a new QRIS checkout.",
+      "canceled": "Checkout canceled. No credits or plan were added.",
+      "refunded": "A refund was recorded. Entitlement status is reviewed under the refund policy.",
+      "processing": "Payment status is being processed."
+    }
+  },
   "auth": {
     "login": "Log in",
     "register": "Create account",

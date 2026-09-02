@@ -204,6 +204,65 @@
       "max": ["20 credit / 30 hari", "Mode XtraThink terbuka", "5 GB penyimpanan"]
     }
   },
+  "billing": {
+    "back": "Kembali ke workspace",
+    "title": "Pilih plan yang pas untukmu.",
+    "description": "Naikkan kapasitas Laprakin saat kamu membutuhkannya.",
+    "activePlan": "Plan aktif",
+    "freeStart": "Mulai gratis",
+    "individual": "Individual",
+    "basePlan": "Plan dasar",
+    "selected": "Dipilih",
+    "choose": "Pilih {{label}}",
+    "monthlySuffix": "/ 30 hari",
+    "checkoutEyebrow": "Checkout QRIS",
+    "selectedPlanFallback": "Plan pilihanmu",
+    "validity": "berlaku 30 hari",
+    "calculating": "Menghitung…",
+    "refreshStatus": "Refresh status",
+    "planActive": "{{label}} aktif",
+    "defaultPlan": {
+      "label": "Gratis",
+      "status": "active",
+      "description": "Paket awal untuk mencoba Laprakin."
+    },
+    "catalogue": {
+      "free": {
+        "label": "Gratis",
+        "description": "Mulai dan pahami alur kerja Laprakin."
+      },
+      "monthly": {
+        "label": "Pro",
+        "description": "Untuk kebutuhan praktikum yang rutin."
+      },
+      "pro": {
+        "label": "Max",
+        "description": "Untuk semester padat dan revisi intensif."
+      }
+    },
+    "errors": {
+      "addProduct": "Tambahkan plan atau credit ke keranjang terlebih dahulu.",
+      "verifyEmail": "Verifikasi email sebelum melakukan pembayaran.",
+      "invalidCheckoutUrl": "URL checkout QRIS dari gateway tidak valid.",
+      "blockedNavigation": "Navigasi otomatis diblokir browser. Buka checkout QRIS lewat tombol di bawah."
+    },
+    "notices": {
+      "qrisVerified": "Pembayaran QRIS berhasil diverifikasi. Plan atau credit sudah aktif.",
+      "paymentVerified": "Pembayaran QRIS berhasil diverifikasi.",
+      "paymentUpdated": "Status pembayaran diperbarui.",
+      "localCheckout": "Checkout QRIS lokal diproses untuk pengujian."
+    },
+    "status": {
+      "created": "Menyiapkan checkout QRIS.",
+      "pending": "Menunggu pembayaran. Scan QRIS yang muncul di checkout Midtrans.",
+      "paid": "Pembayaran berhasil. Credit atau plan telah diaktifkan oleh server.",
+      "failed": "Pembayaran ditolak. Pilih checkout QRIS baru bila ingin mencoba lagi.",
+      "expired": "Kode QRIS sudah kedaluwarsa. Buat checkout QRIS baru.",
+      "canceled": "Checkout dibatalkan. Belum ada credit atau plan yang ditambahkan.",
+      "refunded": "Refund tercatat. Status entitlement ditinjau sesuai kebijakan refund.",
+      "processing": "Status pembayaran sedang diproses."
+    }
+  },
   "auth": {
     "login": "Masuk",
     "register": "Buat akun",

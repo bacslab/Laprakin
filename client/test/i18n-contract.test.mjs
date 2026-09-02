@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [id, en, source, landingSource, statusSource, pricingSource] = await Promise.all([
+const [id, en, source, landingSource, statusSource, pricingSource, billingSource] = await Promise.all([
   readFile(new URL('../src/i18n/id.json', import.meta.url), 'utf8').then(JSON.parse),
   readFile(new URL('../src/i18n/en.json', import.meta.url), 'utf8').then(JSON.parse),
   readFile(new URL('../src/i18n/index.js', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/Landing/LandingView.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/Status/StatusPage.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/Pricing/PublicPricingPage.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/pages/Billing/BillingPage.jsx', import.meta.url), 'utf8'),
 ]);
 const runtimeSource = await readFile(new URL('../src/i18n/I18nRuntime.jsx', import.meta.url), 'utf8');
 
@@ -51,6 +52,14 @@ test('public pricing flow consumes keyed locale copy', () => {
   assert.match(pricingSource, /t\('pricing\.status\.created'\)/);
   assert.match(pricingSource, /localizedFallbackFeatures\('pricing\.features\.free'/);
   assert.doesNotMatch(pricingSource, /Pilih plan yang pas buat kamu|Bayar dengan QRIS|Ringkasan pesanan/);
+});
+
+test('billing flow consumes keyed locale copy', () => {
+  assert.match(billingSource, /useI18n/);
+  assert.match(billingSource, /t\('billing\.title'\)/);
+  assert.match(billingSource, /t\('billing\.status\.processing'\)/);
+  assert.match(billingSource, /localizedFallbackFeatures\('pricing\.features\.free'/);
+  assert.doesNotMatch(billingSource, /Pilih plan yang pas untukmu|Naikkan kapasitas Laprakin|Checkout QRIS lokal diproses/);
 });
 
 test('legacy DOM translation stays behind the i18n runtime boundary', async () => {
