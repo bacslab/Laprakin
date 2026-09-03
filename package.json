@@ -31,6 +31,7 @@
     "test:admin-ops": "node scripts/admin-ops-check.mjs",
     "test:admin-ai-ui": "node scripts/admin-ai-ui-check.mjs",
     "test:i18n-ui": "node scripts/i18n-ui-check.mjs",
+    "test:settings-ui": "node scripts/settings-ui-check.mjs",
     "test:ai-live": "node scripts/ai-live-check.mjs",
     "bench:ai": "node scripts/bench-nararouter.mjs",
     "prepare:production-env": "node scripts/prepare-production-env.mjs",

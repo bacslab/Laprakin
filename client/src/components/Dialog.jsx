@@ -29,6 +29,15 @@ export function Modal({ title, onClose, children, className = '' }) {
   const modalRef = useRef(null);
   useFocusReturn(true);
   useFocusTrap(modalRef, true);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const modal = modalRef.current;
+      const firstVisibleControl = [...(modal?.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href]') || [])]
+        .find((element) => element.offsetParent !== null);
+      (firstVisibleControl || modal)?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   useEffect(() => { const closeOnEscape = (event) => { if (event.key === 'Escape') onClose(); }; window.addEventListener('keydown', closeOnEscape); return () => window.removeEventListener('keydown', closeOnEscape); }, [onClose]);
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={modalRef} className={`modal ${className}`} role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title"><header><b id="workspace-modal-title">{title}</b><IconButton label={t('common.modalClose')} onClick={onClose}><X size={16}/></IconButton></header>{children}</section></div>;
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={modalRef} className={`modal ${className}`} role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title" tabIndex={-1}><header><b id="workspace-modal-title">{title}</b><IconButton label={t('common.modalClose')} onClick={onClose}><X size={16}/></IconButton></header>{children}</section></div>;
 }

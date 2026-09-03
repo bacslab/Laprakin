@@ -16,14 +16,14 @@
 
 ## Task 2 — Add rendered Settings matrix
 
-- [ ] Reproduce the missing `npm run test:settings-ui` command.
-- [ ] Add an isolated Playwright harness with temporary API data and a verified development user.
-- [ ] Verify system-dark, forced-light, forced-dark, and a live system-light change using computed backgrounds, text contrast, and workspace/body state.
-- [ ] Verify high-contrast tokens change and persist after reload.
-- [ ] Verify user and system reduced-motion policy, Settings focus return/Escape, desktop and 390px overflow, and unexpected browser errors.
-- [ ] Capture `output/playwright/settings/settings-light.png`, `settings-dark.png`, and `settings-mobile-high-contrast.png`.
-- [ ] Run browser, complete client, lint, typecheck, and build gates.
-- [ ] Commit the browser evidence.
+- [x] Reproduce the missing `npm run test:settings-ui` command.
+- [x] Add an isolated Playwright harness with temporary API data and a verified development user.
+- [x] Verify system-dark, forced-light, forced-dark, and a live system-light change using computed backgrounds, text contrast, and workspace/body state.
+- [x] Verify high-contrast tokens change and persist after reload.
+- [x] Verify user and system reduced-motion policy, Settings focus return/Escape, desktop and 390px overflow, and unexpected browser errors.
+- [x] Capture `output/playwright/settings/settings-light.png`, `settings-dark.png`, and `settings-mobile-high-contrast.png`.
+- [x] Run browser, complete client, lint, typecheck, and build gates.
+- [x] Commit the browser evidence.
 
 ## Task 3 — Close AUDIT-008 honestly
 
