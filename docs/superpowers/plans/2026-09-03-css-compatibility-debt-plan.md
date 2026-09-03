@@ -16,10 +16,10 @@
 
 ## Task 2 — Delete retired unscoped public-surface selectors
 
-- [ ] Inventory old Landing/Auth/Pricing class names against current JSX and dynamic class construction.
-- [ ] Remove only classes with zero source/runtime ownership, splitting mixed selectors safely.
-- [ ] Lower the budget again and verify Landing, Auth, Pricing, Settings, and Admin browser surfaces.
-- [ ] Commit the deletion checkpoint and exact counts.
+- [x] Inventory old Landing/Auth/Pricing class names against current JSX and dynamic class construction.
+- [x] Remove only classes with zero source/runtime ownership, splitting mixed selectors safely.
+- [x] Lower the budget again and verify Landing, Auth, Pricing, Settings, and Admin browser surfaces.
+- [x] Commit the deletion checkpoint and exact counts.
 
 ## Task 3 — Migrate live Admin compatibility rules
 

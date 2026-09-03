@@ -10,6 +10,7 @@
 - Mengunci Landing dengan baseline pixel desktop/390px, token lime/mint khusus Landing, dan CTA Plus Jakarta Sans Variable 700; tidak ada pixel berubah di luar kotak CTA maupun akibat preferensi tema/aksen Workspace.
 - Memutakhirkan Playwright ke rilis yang menutup advisory verifikasi sertifikat unduhan browser; audit dependency penuh kembali 0 vulnerability.
 - Menghapus 640 rule dari root Landing lama yang sudah tidak dirender, menurunkan compatibility `!important` dari 4.727 ke 3.060 dan CSS production dari 646,81 kB ke 553,59 kB tanpa mengubah satu pixel Landing aktif.
+- Menghapus 679 rule publik pre-Figma yang sudah tidak dimiliki runtime, menurunkan compatibility `!important` lagi dari 3.060 ke 2.192 dan CSS production ke 479,67 kB (74,65 kB gzip), dengan bukti browser Landing, Auth, Pricing, Settings, serta Admin tetap lulus.
 - Menghapus runtime penerjemah yang berjalan dengan full-DOM walker/observer; locale kini dirender langsung dari key React dengan fallback Indonesia, interpolasi, pluralization, dan bukti browser ID/EN yang bertahan setelah reload.
 - Membuat Settings mengikuti system/light/dark, high contrast, dan reduced motion dari pengguna maupun sistem; modal kini memindahkan serta mengembalikan fokus dengan benar dan memiliki matriks browser desktop/390px.
 - Membuat API E2E lokal deterministik dengan provider synthetic metadata-only serta migration smoke yang menolak overwrite.

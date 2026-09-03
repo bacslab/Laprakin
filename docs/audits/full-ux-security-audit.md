@@ -81,14 +81,14 @@ This is a living evidence register. Findings are closed only by source inspectio
 
 - Severity: P1 maintainability/visual reliability
 - User impact: unrelated selectors can override feature components and make theme/responsive fixes unpredictable.
-- Evidence: the audited compatibility sheet contained 4,727 `!important` declarations in 10,813 lines. Deletion checkpoint 1 reduced it to 3,060 declarations and 8,797 lines.
-- Reproduction: the original CSS budget permitted 4,730, so it detected growth rather than remediation. A new source contract also proved the active client never renders the retired `.landing-page` root even though 749 selector branches remained for it.
+- Evidence: the audited compatibility sheet contained 4,727 `!important` declarations in 10,813 lines. Deletion checkpoint 1 reduced it to 3,060 declarations and 8,797 lines; checkpoint 2 reduced it again to 2,192 declarations and 7,526 lines.
+- Reproduction: the original CSS budget permitted 4,730, so it detected growth rather than remediation. Source contracts proved that the active client renders neither the retired `.landing-page` root nor the curated pre-Figma public class families even though 1,539 obsolete selector branches remained across those families.
 - Root cause: repeated compatibility overrides accumulated after partial feature extraction.
-- Changed files so far: `client/src/styles.css`, `client/test/css-budget.test.mjs`, `client/test/legacy-css-contract.test.mjs`, and the staged deletion plan.
-- Fix in progress: checkpoint 1 removed 640 dead `.landing-page` rules/749 selector branches while preserving six non-Landing branches from mixed selector lists. The enforced budget is now 3,060. Feature-owned Admin and Workspace migrations remain.
-- Tests: 3/3 focused CSS contracts and 80/80 complete client tests passed; lint, typecheck, production build, and the Landing freeze browser gate passed.
-- Actual verification result: partial. The Landing post-CTA SHA-256 values remained exactly `eacb9d1ff881a30af9f09135895bf7e87f0bc341ca72583bee9efb46cfb17d3e` desktop and `3d4f3f7e987d9cafdf217d21e445e1eaa65f15703f6b8debbc7b4c93f655f05d` mobile. Zero pixels changed outside CTA masks or under alternate Workspace preferences. Production CSS fell from 646.81 kB (102.19 kB gzip) to 553.59 kB (88.37 kB gzip).
-- Residual risk: 3,060 compatibility `!important` declarations and several live historical Workspace/Admin generations remain, so AUDIT-007 stays open.
+- Changed files so far: `client/src/styles.css`, `client/test/css-budget.test.mjs`, `client/test/legacy-css-contract.test.mjs`, `scripts/public-pages-ui-check.mjs`, `package.json`, and the staged deletion plan.
+- Fix in progress: checkpoint 1 removed 640 dead `.landing-page` rules/749 selector branches. Checkpoint 2 removed another 679 dead pre-Figma public rules/790 selector branches across retired Landing, Auth, and Pricing families while retaining live branches from mixed selector lists. The enforced budget is now 2,192. Feature-owned Admin and Workspace migrations remain.
+- Tests: 4/4 focused CSS contracts and 81/81 complete client tests passed; lint, typecheck, production build, Landing freeze, public Pricing/Auth, i18n Auth/Workspace/Settings, Settings, legacy Admin, and Admin AI browser gates passed.
+- Actual verification result: partial. The Landing post-CTA SHA-256 values remained exactly `eacb9d1ff881a30af9f09135895bf7e87f0bc341ca72583bee9efb46cfb17d3e` desktop and `3d4f3f7e987d9cafdf217d21e445e1eaa65f15703f6b8debbc7b4c93f655f05d` mobile. Zero pixels changed outside CTA masks or under alternate Workspace preferences. Pricing rendered all four live cards at desktop and 390px, handed unauthenticated checkout to Auth, used no retired public classes, and had no horizontal overflow. Production CSS fell from 646.81 kB (102.19 kB gzip) at audit to 553.59 kB (88.37 kB gzip) after checkpoint 1 and 479.67 kB (74.65 kB gzip) after checkpoint 2.
+- Residual risk: 2,192 compatibility `!important` declarations and several live historical Workspace/Admin generations remain, so AUDIT-007 stays open.
 
 ## AUDIT-008 — Settings theme and motion behavior
 
@@ -159,13 +159,13 @@ The following remain open for dedicated phases: CSS compatibility debt, wider Se
 
 ## Current Verdict
 
-`NO-GO` for the full production-grade mission. The AI control-plane slice, Landing freeze gate, AUDIT-006, AUDIT-008, and AUDIT-009 are verified, but AUDIT-007 and the remaining security/release surfaces above are not closed. Current fresh evidence includes 181/181 server tests, 80/80 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI, legacy Admin isolation, i18n, Settings, and Landing browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
+`NO-GO` for the full production-grade mission. The AI control-plane slice, Landing freeze gate, AUDIT-006, AUDIT-008, and AUDIT-009 are verified, but AUDIT-007 and the remaining security/release surfaces above are not closed. Current fresh evidence includes 181/181 server tests, 81/81 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI, legacy Admin isolation, i18n, Settings, public Pricing/Auth, and Landing browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
 
 ## Verification snapshot — 2026-09-03
 
 - Audited base: `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de`; legacy Admin implementation checkpoint before its closure documentation: `c0a8670`.
 - Server: 181 passed, 0 failed, 0 skipped.
-- Client: 80 passed, 0 failed, 0 skipped.
+- Client: 81 passed, 0 failed, 0 skipped.
 - I18n: 18 focused contracts passed; DOM translation source scan clean; real-browser Auth, Workspace, Settings, and Notifications passed in ID/EN at desktop and 390px with persistence after reload.
 - Settings browser: system/light/dark, live OS theme changes, high contrast, system/user reduced motion, persistence, focus entry/return, Escape, and 390px reflow passed with no unexpected browser errors.
 - Focused AI/control plane: 59 passed, 0 failed, 0 skipped.
@@ -173,11 +173,12 @@ The following remain open for dedicated phases: CSS compatibility debt, wider Se
 - API E2E: auth, profile, evidence, timeline, quality gate, template DOCX, restore, and verified password-change flow passed against a local synthetic provider; two metadata-only provider requests were observed.
 - Admin AI browser: deep links, password-only credential handling, minimum 12px computed typography, standard font weights, ID/EN, retry, keyboard, dark theme, reduced motion, desktop, and 390px passed.
 - Legacy Admin browser: 14 independent deep links, resource-request isolation, URL filter/reload state, selected-user deep link, seeded next/previous pagination, data/render failure recovery, desktop, and 390px passed.
+- Public pages browser: four live Pricing cards, unauthenticated checkout-to-Auth handoff, no retired public classes, desktop and 390px reflow, and zero horizontal overflow passed.
 - Landing freeze browser: hero/final CTA variable font and weight passed at 1440×1000 and 390×844; zero pixels changed outside CTA rectangles; dark/blue Workspace preferences changed zero Landing pixels.
-- Production build: 1,717 modules transformed; 0 build failures; main CSS 553.59 kB/88.37 kB gzip after the first compatibility deletion checkpoint; separate legacy Admin route chunks and a 6.99kB shell; one advisory for the existing 654.85kB vendor chunk.
+- Production build: 1,717 modules transformed; 0 build failures; main CSS 479.67 kB/74.65 kB gzip after the second compatibility deletion checkpoint; separate legacy Admin route chunks and a 6.99kB shell; one advisory for the existing 654.85kB vendor chunk.
 - Production configuration: 15 mandatory checks passed.
 - Dependency audit: 0 vulnerabilities after upgrading Playwright to 1.55.1, the first release outside the detected browser-download certificate advisory range.
 - Gitleaks 8.30.1: 229 commits and approximately 8.63MB scanned; 0 leaks. The downloaded Windows archive matched SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e` before execution.
 - Landing-owned source diff: only the approved token isolation and CTA glyph family/weight bridge; page markup, base Figma stylesheet, copy, assets, dimensions, color values, shadows, responsive rules, and motion remain unchanged.
 - Non-failing runtime advisory: Node reports that built-in SQLite remains experimental. This is a platform warning, not a skipped or failed test.
-- Rendered evidence: `output/playwright/landing-freeze/landing-desktop-after.png`, `landing-mobile-after.png`, their pixel diffs and preference variants; `output/playwright/admin-ai/providers-desktop.png`, `models-actions-desktop.png`, `health-operations-desktop.png`, `changes-mobile-dark.png`; `output/playwright/admin-legacy/cms-desktop.png`, `audit-mobile.png`; `output/playwright/i18n/workspace-en.png`, `settings-id.png`; and `output/playwright/settings/settings-light.png`, `settings-dark.png`, `settings-mobile-high-contrast.png`.
+- Rendered evidence: `output/playwright/landing-freeze/landing-desktop-after.png`, `landing-mobile-after.png`, their pixel diffs and preference variants; `output/playwright/public-pages/pricing-desktop.png`, `pricing-mobile.png`; `output/playwright/admin-ai/providers-desktop.png`, `models-actions-desktop.png`, `health-operations-desktop.png`, `changes-mobile-dark.png`; `output/playwright/admin-legacy/cms-desktop.png`, `audit-mobile.png`; `output/playwright/i18n/workspace-en.png`, `settings-id.png`; and `output/playwright/settings/settings-light.png`, `settings-dark.png`, `settings-mobile-high-contrast.png`.
