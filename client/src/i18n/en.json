@@ -1195,6 +1195,8 @@
       "logout": "Log out",
       "loadingTitle": "Loading Admin Console…",
       "loadingDescription": "If data has not arrived, use reload after a moment.",
+      "loadFailed": "This section could not be loaded",
+      "lastUpdated": "Last updated: {{date}}",
       "retry": "Try reloading",
       "privacyTitle": "Privacy-first monitoring",
       "privacyDescription": "Operational metadata only. Chat, document, file, student ID, IP, fingerprint, prompt, and AI output contents are not shown.",

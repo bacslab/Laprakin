@@ -8,11 +8,11 @@
 
 ## Task 1 — Remove global failure coupling
 
-- [ ] Add a failing contract proving the legacy console does not request seven unrelated resources in one `Promise.all` and does not require overview/CMS data before rendering its shell.
-- [ ] Import the missing loading icon and add an accessible active-route loading/error/retry state.
-- [ ] Load only data required by the current route; reload only that route after mutations and relevant Admin events.
-- [ ] Prove direct navigation to overview, users, feedback, CMS, audit, and alerts does not request unrelated initial endpoints.
-- [ ] Run client, lint, typecheck, build, and browser gates; commit.
+- [x] Add a failing contract proving the legacy console does not request seven unrelated resources in one `Promise.all` and does not require overview/CMS data before rendering its shell.
+- [x] Import the missing loading icon and add an accessible active-route loading/error/retry state.
+- [x] Load only data required by the current route; reload only that route after mutations and relevant Admin events.
+- [x] Prove direct navigation to overview, users, feedback, CMS, audit, and alerts does not request unrelated initial endpoints.
+- [x] Run client, lint, typecheck, build, and browser gates; commit.
 
 ## Task 2 — Extract lazy route modules
 

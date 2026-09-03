@@ -52,6 +52,27 @@
 
   .admin-loading-state span { max-width: 360px; color: var(--admin-muted, var(--workspace-muted, #666)); font-size: .66rem; line-height: 1.5; }
 
+  .admin-main > .admin-loading-state { min-height: calc(100dvh - 86px); }
+
+  .admin-route-alert {
+    width: min(1180px, calc(100% - 48px));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 18px auto 0;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, #b42318 35%, var(--admin-line, #ddd));
+    border-radius: 12px;
+    background: color-mix(in srgb, #b42318 8%, var(--admin-panel, #fff));
+    color: var(--admin-text, #1f1f1e);
+  }
+
+  @media (max-width: 620px) {
+    .admin-main > .admin-loading-state { min-height: calc(100dvh - 126px); }
+    .admin-route-alert { width: calc(100% - 28px); align-items: flex-start; flex-direction: column; }
+  }
+
   .admin-ai-shell {
     --font-ui: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui, sans-serif;
     --font-mono: 'DM Mono', monospace;
