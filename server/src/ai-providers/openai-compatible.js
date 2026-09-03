@@ -5,6 +5,7 @@ const RETRYABLE_CODES = new Set([
   'AI_EGRESS_TIMEOUT', 'AI_EGRESS_CONNECT_TIMEOUT', 'AI_EGRESS_NETWORK_FAILED',
   'AI_EGRESS_RATE_LIMITED', 'AI_EGRESS_UPSTREAM_UNAVAILABLE',
 ]);
+const SYNTHETIC_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 export class AiProviderAdapterError extends Error {
   constructor(message, { code = 'AI_PROVIDER_ERROR', status = 502, retryable = false } = {}) {
@@ -150,11 +151,35 @@ export function createOpenAiCompatibleAdapter({
         return await bodyJson(response);
       } catch (error) { throw normalizeError(error); }
     },
-    async runCanary({ model, signal, timeoutMs = requestTimeoutMs } = {}) {
+    async runCanary({ model, testCase = {}, signal, timeoutMs = requestTimeoutMs } = {}) {
+      const requiresVision = testCase.requiresVision === true;
+      const requiresStructuredOutput = testCase.requiresStructuredOutput === true;
+      const responseJsonSchema = requiresStructuredOutput
+        ? { type: 'object', properties: { ok: { type: 'boolean', const: true } }, required: ['ok'], additionalProperties: false }
+        : null;
+      const instruction = requiresStructuredOutput
+        ? 'LAPRAKIN_SYNTHETIC_CANARY: Reply with OK. Return only {"ok":true}.'
+        : 'LAPRAKIN_SYNTHETIC_CANARY: Reply with OK.';
       const payload = await adapter.complete({
-        model, signal, timeoutMs, messages: [{ role: 'user', content: 'Reply with OK.' }], maxOutputTokens: 8,
+        model,
+        signal,
+        timeoutMs,
+        messages: [{
+          role: 'user',
+          content: requiresVision
+            ? [{ type: 'text', text: instruction }, { type: 'image_url', image_url: { url: SYNTHETIC_PIXEL } }]
+            : instruction,
+        }],
+        maxOutputTokens: 16,
+        responseJsonSchema,
+        supportsStructuredOutput: requiresStructuredOutput,
       });
-      return { ok: Boolean(deltaText(payload).trim()), providerId, modelId: model, usage: payload?.usage || {} };
+      const text = deltaText(payload).trim();
+      let ok = Boolean(text);
+      if (ok && requiresStructuredOutput) {
+        try { ok = JSON.parse(text)?.ok === true; } catch { ok = false; }
+      }
+      return { ok, providerId, modelId: model, usage: payload?.usage || {} };
     },
     async *stream(input = {}) {
       try {

@@ -96,6 +96,19 @@ export function ensureAiConfigurationSchema(store) {
       FOREIGN KEY(last_known_good_revision_id) REFERENCES ai_configuration_revisions(id)
     );
 
+    CREATE TABLE IF NOT EXISTS ai_operational_controls (
+      singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+      maintenance_enabled INTEGER NOT NULL DEFAULT 0,
+      maintenance_message TEXT NOT NULL DEFAULT '',
+      updated_by_user_id TEXT,
+      reason TEXT NOT NULL DEFAULT '',
+      updated_at TEXT
+    );
+
+    INSERT OR IGNORE INTO ai_operational_controls (
+      singleton_id, maintenance_enabled, maintenance_message, updated_by_user_id, reason, updated_at
+    ) VALUES (1, 0, '', NULL, '', NULL);
+
     CREATE TRIGGER IF NOT EXISTS immutable_ai_provider_revision_update
     BEFORE UPDATE ON ai_provider_revisions BEGIN
       SELECT RAISE(ABORT, 'ai provider revision is immutable');
@@ -121,4 +134,32 @@ export function ensureAiConfigurationSchema(store) {
       SELECT RAISE(ABORT, 'ai route assignment is immutable');
     END;
   `);
+}
+
+export function readAiMaintenanceState(store) {
+  try {
+    const row = store.prepare('SELECT maintenance_enabled, maintenance_message, updated_at FROM ai_operational_controls WHERE singleton_id = 1').get();
+    return {
+      enabled: Boolean(row?.maintenance_enabled),
+      message: String(row?.maintenance_message || ''),
+      updatedAt: row?.updated_at || null,
+    };
+  } catch {
+    return { enabled: false, message: '', updatedAt: null };
+  }
+}
+
+export function writeAiMaintenanceState(store, { enabled, message = '', actorUserId = null, reason = '', updatedAt }) {
+  store.prepare(`
+    INSERT INTO ai_operational_controls (
+      singleton_id, maintenance_enabled, maintenance_message, updated_by_user_id, reason, updated_at
+    ) VALUES (1, ?, ?, ?, ?, ?)
+    ON CONFLICT(singleton_id) DO UPDATE SET
+      maintenance_enabled = excluded.maintenance_enabled,
+      maintenance_message = excluded.maintenance_message,
+      updated_by_user_id = excluded.updated_by_user_id,
+      reason = excluded.reason,
+      updated_at = excluded.updated_at
+  `).run(Number(Boolean(enabled)), enabled ? String(message || '').trim().slice(0, 500) : '', actorUserId || null, String(reason || '').trim().slice(0, 500), updatedAt);
+  return readAiMaintenanceState(store);
 }

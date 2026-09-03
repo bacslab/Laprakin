@@ -81,7 +81,9 @@ test('admin AI APIs enforce capabilities, MFA, revision lifecycle, confirmations
       return;
     }
     if (request.url === '/v1/chat/completions') {
-      response.end(JSON.stringify({ choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 } }));
+      const requestBody = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      const content = requestBody.response_format ? '{"ok":true}' : 'OK';
+      response.end(JSON.stringify({ choices: [{ message: { content }, finish_reason: 'stop' }], usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 } }));
       return;
     }
     response.statusCode = 404;
@@ -225,11 +227,44 @@ test('admin AI APIs enforce capabilities, MFA, revision lifecycle, confirmations
       body: JSON.stringify({
         revisionId: currentRevisionId,
         reason: 'Add a manual fallback model',
-        model: { providerId: 'managed', modelId: 'manual-model', capabilities: {} },
+        model: { providerId: 'managed', modelId: 'manual-model', capabilities: { vision: true, structuredOutput: true } },
       }),
     });
     assert.equal(manual.revision.models.find((model) => model.modelId === 'manual-model').capabilityEvidence.vision, 'unverified');
     currentRevisionId = manual.revision.id;
+
+    const capabilityTested = await owner.request('/admin/ai/models/managed/manual-model/test', {
+      method: 'POST', expectedStatus: 201,
+      body: JSON.stringify({
+        revisionId: currentRevisionId,
+        reason: 'Verify critical capabilities with a synthetic canary',
+        confirmation: 'TEST MODEL managed:manual-model',
+      }),
+    });
+    const testedManualModel = capabilityTested.revision.models.find((model) => model.modelId === 'manual-model');
+    assert.equal(testedManualModel.capabilityEvidence.vision, 'canary');
+    assert.equal(testedManualModel.capabilityEvidence.structuredOutput, 'canary');
+    currentRevisionId = capabilityTested.revision.id;
+    const targetedCall = providerCalls.map((call) => ({ ...call, parsed: JSON.parse(call.body || '{}') }))
+      .find((call) => call.parsed.model === 'manual-model');
+    assert.match(targetedCall.body, /image_url/);
+    assert.equal(targetedCall.parsed.response_format.type, 'json_schema');
+
+    const disabledModel = await owner.request('/admin/ai/models/managed/manual-model', {
+      method: 'PUT', expectedStatus: 201,
+      body: JSON.stringify({
+        revisionId: currentRevisionId,
+        reason: 'Disable an unused manual model',
+        confirmation: 'DISABLE MODEL managed:manual-model',
+        model: { enabled: false, state: 'disabled' },
+      }),
+    });
+    const disabledManualModel = disabledModel.revision.models.find((model) => model.modelId === 'manual-model');
+    assert.equal(disabledManualModel.enabled, false);
+    assert.equal(disabledManualModel.state, 'disabled');
+    assert.equal(disabledModel.revision.parentRevisionId, currentRevisionId);
+    currentRevisionId = disabledModel.revision.id;
+
     const modelPage = await owner.request(`/admin/ai/models?revisionId=${encodeURIComponent(currentRevisionId)}&limit=1`);
     assert.equal(modelPage.models.length, 1);
     assert.equal(modelPage.nextCursor, '1');
@@ -274,12 +309,94 @@ test('admin AI APIs enforce capabilities, MFA, revision lifecycle, confirmations
     assert.equal(activated.revision.state, 'active');
     assert.equal(JSON.stringify(activated).includes(credential), false);
 
+    database = new DatabaseSync(path.join(sandbox, 'data', 'laprakin.sqlite'));
+    const observedAt = new Date().toISOString();
+    const insertUsage = database.prepare(`
+      INSERT INTO ai_usage_events (
+        id, purpose, mode, provider, model, status, input_tokens, output_tokens, total_tokens,
+        latency_ms, first_token_latency_ms, error_code, fallback_count, created_at,
+        configuration_revision, route_id, queue_depth, circuit_state
+      ) VALUES (?, 'chat', 'basic', 'managed', 'test-model', ?, 2, 1, 3, ?, ?, ?, ?, ?, ?, 'chat.basic', ?, ?)
+    `);
+    insertUsage.run(randomUUID(), 'success', 100, 20, '', 0, observedAt, currentRevisionId, 1, 'closed');
+    insertUsage.run(randomUUID(), 'success', 200, 40, '', 1, observedAt, currentRevisionId, 2, 'closed');
+    insertUsage.run(randomUUID(), 'error', 400, 0, 'AI_EGRESS_RATE_LIMITED', 0, observedAt, currentRevisionId, 3, 'half_open');
+    insertUsage.run(randomUUID(), 'error', 800, 0, 'AI_EGRESS_TIMEOUT', 1, observedAt, currentRevisionId, 5, 'open');
+
     const activeProviders = await owner.request('/admin/ai/providers');
     assert.equal(activeProviders.providers[0].credential.configured, true);
     assert.equal(Object.hasOwn(activeProviders.providers[0], 'secretReference'), false);
+    assert.equal(activeProviders.providers[0].modelCount, 2);
+    assert.deepEqual(activeProviders.providers[0].routesUsing, ['chat.basic']);
+    assert.ok(activeProviders.providers[0].lastTestedAt);
+    assert.equal(activeProviders.providers[0].lastSuccessfulCall, observedAt);
+    assert.equal(activeProviders.providers[0].lastFailure.code, 'AI_EGRESS_TIMEOUT');
     const health = await owner.request('/admin/ai/health?days=7');
     assert.equal(health.runtime.revisionId, currentRevisionId);
     assert.equal(Object.hasOwn(health, 'prompt'), false);
+    assert.equal(health.summary.calls, 4);
+    assert.equal(health.summary.successRate, 0.5);
+    assert.equal(health.summary.fallbackRate, 0.5);
+    assert.equal(health.summary.latencyP50Ms, 200);
+    assert.equal(health.summary.latencyP95Ms, 800);
+    assert.equal(health.summary.firstTokenP50Ms, 20);
+    assert.equal(health.summary.firstTokenP95Ms, 40);
+    assert.equal(health.summary.rateLimitErrors, 1);
+    assert.equal(health.summary.authErrors, 0);
+    assert.equal(health.summary.timeoutErrors, 1);
+    assert.equal(health.summary.maximumQueueDepth, 5);
+    assert.equal(health.routeHealth.find((route) => route.routeId === 'chat.basic').circuitState, 'open');
+    assert.equal(health.modelAvailability.find((model) => model.modelId === 'test-model').available, true);
+    assert.equal(health.latestConfigurationChange.id, currentRevisionId);
+
+    const wrongCircuitConfirmation = await owner.request('/admin/ai/health/circuit/open', {
+      method: 'POST', expectedStatus: 400,
+      body: JSON.stringify({
+        revisionId: currentRevisionId, providerId: 'managed', modelId: 'test-model',
+        reason: 'Open the route circuit during an incident', confirmation: 'OPEN',
+      }),
+    });
+    assert.equal(wrongCircuitConfirmation.error.code, 'AI_CONFIGURATION_CONFIRMATION_REQUIRED');
+    const openedCircuit = await owner.request('/admin/ai/health/circuit/open', {
+      method: 'POST',
+      body: JSON.stringify({
+        revisionId: currentRevisionId, providerId: 'managed', modelId: 'test-model',
+        reason: 'Open the route circuit during an incident', confirmation: 'OPEN CIRCUIT managed:test-model',
+      }),
+    });
+    assert.equal(openedCircuit.circuit.state, 'open');
+    const healthWithOpenCircuit = await owner.request('/admin/ai/health?days=7');
+    assert.equal(healthWithOpenCircuit.circuits.find((item) => item.modelId === 'test-model').state, 'open');
+    const callsBeforeCircuitClear = providerCalls.length;
+    const clearedCircuit = await owner.request('/admin/ai/health/circuit/clear', {
+      method: 'POST',
+      body: JSON.stringify({
+        revisionId: currentRevisionId, providerId: 'managed', modelId: 'test-model',
+        reason: 'Clear the circuit after a synthetic provider test', confirmation: 'CLEAR CIRCUIT managed:test-model',
+      }),
+    });
+    assert.equal(clearedCircuit.circuit.state, 'closed');
+    assert.ok(providerCalls.length > callsBeforeCircuitClear);
+    assert.match(providerCalls.at(-1).body, /LAPRAKIN_SYNTHETIC_CANARY/);
+
+    const maintenance = await owner.request('/admin/ai/health/maintenance', {
+      method: 'POST',
+      body: JSON.stringify({
+        enabled: true, message: 'AI sedang dalam pemeliharaan terjadwal.',
+        reason: 'Pause AI during a provider maintenance window', confirmation: 'ENABLE AI MAINTENANCE',
+      }),
+    });
+    assert.equal(maintenance.maintenance.enabled, true);
+    const healthDuringMaintenance = await owner.request('/admin/ai/health?days=7');
+    assert.equal(healthDuringMaintenance.maintenance.message, 'AI sedang dalam pemeliharaan terjadwal.');
+    const clearedMaintenance = await owner.request('/admin/ai/health/maintenance', {
+      method: 'POST',
+      body: JSON.stringify({
+        enabled: false, message: '', reason: 'Resume AI after provider maintenance', confirmation: 'CLEAR AI MAINTENANCE',
+      }),
+    });
+    assert.equal(clearedMaintenance.maintenance.enabled, false);
+
     const history = await owner.request('/admin/ai/changes?limit=1');
     assert.equal(history.changes.length, 1);
     assert.ok(history.nextCursor, JSON.stringify(history));
@@ -320,7 +437,6 @@ test('admin AI APIs enforce capabilities, MFA, revision lifecycle, confirmations
     assert.equal(providerCalls.some((call) => call.body.includes(credential)), false);
     assert.equal(providerCalls.filter((call) => call.url === '/v1/chat/completions').every((call) => call.body.includes('Reply with OK.')), true);
 
-    database = new DatabaseSync(path.join(sandbox, 'data', 'laprakin.sqlite'));
     const secretRow = database.prepare("SELECT ciphertext, deleted_at FROM ai_provider_secrets WHERE provider_id = 'managed' ORDER BY secret_version DESC LIMIT 1").get();
     assert.equal(secretRow.ciphertext, '');
     assert.ok(secretRow.deleted_at);
@@ -331,6 +447,17 @@ test('admin AI APIs enforce capabilities, MFA, revision lifecycle, confirmations
     database.prepare("UPDATE users SET role = 'support_admin' WHERE id = ?").run(supportRegistration.user.id);
     const denied = await support.request('/admin/ai/providers', { expectedStatus: 403 });
     assert.equal(denied.error.code, 'ADMIN_CAPABILITY_REQUIRED');
+    const maintenanceDenied = await support.request('/admin/ai/health/maintenance', {
+      method: 'POST', expectedStatus: 403,
+      body: JSON.stringify({
+        enabled: true, message: 'Blocked change', reason: 'Attempt unauthorized maintenance change', confirmation: 'ENABLE AI MAINTENANCE',
+      }),
+    });
+    assert.equal(maintenanceDenied.error.code, 'ADMIN_CAPABILITY_REQUIRED');
+    const operationalAudits = database.prepare("SELECT action FROM audit_logs WHERE action LIKE 'admin.ai_%' ORDER BY created_at").all().map((row) => row.action);
+    assert.ok(operationalAudits.includes('admin.ai_circuit_opened'));
+    assert.ok(operationalAudits.includes('admin.ai_circuit_cleared'));
+    assert.ok(operationalAudits.includes('admin.ai_maintenance_changed'));
   } finally {
     database?.close();
     await stop(child);

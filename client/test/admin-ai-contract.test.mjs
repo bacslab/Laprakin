@@ -65,6 +65,32 @@ test('admin AI client preserves filter and cursor state at the network boundary'
   assert.equal(calls[2][0], '/admin/ai/changes?state=tested&cursor=19');
 });
 
+test('admin AI client forwards model and operational mutations to exact server routes', async () => {
+  const calls = [];
+  const client = adminAi.createAdminAiClient(async (...args) => {
+    calls.push(args);
+    return { ok: true };
+  });
+  const modelBody = { revisionId: 'revision-1', reason: 'Disable unused model', confirmation: 'DISABLE MODEL managed:model-1', model: { enabled: false, state: 'disabled' } };
+  const testBody = { revisionId: 'revision-1', reason: 'Test model capabilities', confirmation: 'TEST MODEL managed:model-1' };
+  const circuitBody = { revisionId: 'revision-1', providerId: 'managed', modelId: 'model-1', reason: 'Operate circuit safely', confirmation: 'OPEN CIRCUIT managed:model-1' };
+  const maintenanceBody = { enabled: true, message: 'AI maintenance window', reason: 'Pause provider traffic safely', confirmation: 'ENABLE AI MAINTENANCE' };
+
+  await client.updateModel('managed', 'model-1', modelBody);
+  await client.testModel('managed', 'model-1', testBody);
+  await client.openCircuit(circuitBody);
+  await client.clearCircuit({ ...circuitBody, confirmation: 'CLEAR CIRCUIT managed:model-1' });
+  await client.updateMaintenance(maintenanceBody);
+
+  assert.deepEqual(calls, [
+    ['/admin/ai/models/managed/model-1', { method: 'PUT', body: modelBody }],
+    ['/admin/ai/models/managed/model-1/test', { method: 'POST', body: testBody }],
+    ['/admin/ai/health/circuit/open', { method: 'POST', body: circuitBody }],
+    ['/admin/ai/health/circuit/clear', { method: 'POST', body: { ...circuitBody, confirmation: 'CLEAR CIRCUIT managed:model-1' } }],
+    ['/admin/ai/health/maintenance', { method: 'POST', body: maintenanceBody }],
+  ]);
+});
+
 test('capabilities drive mutation affordances rather than role labels', () => {
   assert.equal(typeof adminAi.adminAiAffordances, 'function');
   assert.deepEqual(adminAi.adminAiAffordances(['ai.providers.view', 'ai.credentials.rotate']), {

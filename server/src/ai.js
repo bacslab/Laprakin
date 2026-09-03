@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { config } from './config.js';
+import { readAiMaintenanceState } from './ai-configuration-schema.js';
 import { requireExternalAiConsent } from './external-ai-consent.js';
 import { audit, db } from './db.js';
 import { moderationMessage, moderateText } from './content-safety.js';
@@ -323,13 +324,13 @@ function reserveUsage({ userId, purpose, mode, provider, model, configurationRev
   }
 }
 
-function finishUsage(id, { status, usage, latencyMs, errorCode = '', provider = 'nararouter', model = '', fallbackCount = 0, fallbackReason = '', queueDepth = 0, circuitStatus = 'closed' }) {
+function finishUsage(id, { status, usage, latencyMs, firstTokenLatencyMs = 0, errorCode = '', provider = 'nararouter', model = '', fallbackCount = 0, fallbackReason = '', queueDepth = 0, circuitStatus = 'closed' }) {
   const promptTokens = Number(usage?.prompt_tokens ?? usage?.promptTokenCount ?? 0);
   const outputTokens = Number(usage?.completion_tokens ?? usage?.candidatesTokenCount ?? 0);
   const reasoningTokens = Number(usage?.completion_tokens_details?.reasoning_tokens ?? usage?.reasoning_tokens ?? 0);
   const totalTokens = Number(usage?.total_tokens ?? usage?.totalTokenCount ?? promptTokens + outputTokens);
-  db.prepare(`UPDATE ai_usage_events SET provider = ?, model = ?, status = ?, input_tokens = ?, output_tokens = ?, reasoning_tokens = ?, total_tokens = ?, latency_ms = ?, error_code = ?, fallback_count = ?, fallback_reason = ?, queue_depth = ?, circuit_state = ? WHERE id = ?`)
-    .run(provider, String(model || '').slice(0, 100), status, promptTokens, outputTokens, reasoningTokens, totalTokens, Math.max(0, Math.round(latencyMs || 0)), String(errorCode || '').slice(0, 80), fallbackCount, String(fallbackReason || '').slice(0, 160), Math.max(0, Number(queueDepth || 0)), ['closed', 'open', 'half_open'].includes(circuitStatus) ? circuitStatus : 'closed', id);
+  db.prepare(`UPDATE ai_usage_events SET provider = ?, model = ?, status = ?, input_tokens = ?, output_tokens = ?, reasoning_tokens = ?, total_tokens = ?, latency_ms = ?, first_token_latency_ms = ?, error_code = ?, fallback_count = ?, fallback_reason = ?, queue_depth = ?, circuit_state = ? WHERE id = ?`)
+    .run(provider, String(model || '').slice(0, 100), status, promptTokens, outputTokens, reasoningTokens, totalTokens, Math.max(0, Math.round(latencyMs || 0)), Math.max(0, Math.round(firstTokenLatencyMs || 0)), String(errorCode || '').slice(0, 80), fallbackCount, String(fallbackReason || '').slice(0, 160), Math.max(0, Number(queueDepth || 0)), ['closed', 'open', 'half_open'].includes(circuitStatus) ? circuitStatus : 'closed', id);
 }
 
 function sleep(milliseconds) { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }
@@ -512,6 +513,33 @@ function circuitStatus(model) {
   return state.failures >= config.aiCircuitFailureThreshold ? 'half_open' : 'closed';
 }
 
+export function getAiCircuitSnapshot() {
+  return [...circuitState.entries()].map(([key, state]) => {
+    const [providerId, modelId] = key.split('\u0000');
+    return {
+      providerId,
+      modelId,
+      state: circuitStatus(key),
+      failures: Math.max(0, Number(state.failures || 0)),
+      openUntil: state.openUntil ? new Date(state.openUntil).toISOString() : null,
+    };
+  }).sort((left, right) => `${left.providerId}:${left.modelId}`.localeCompare(`${right.providerId}:${right.modelId}`));
+}
+
+export function openAiCircuit({ providerId, modelId, cooldownMs = config.aiCircuitCooldownMs }) {
+  const key = `${String(providerId || '').slice(0, 64)}\u0000${String(modelId || '').slice(0, 180)}`;
+  circuitState.set(key, {
+    failures: Math.max(1, Number(config.aiCircuitFailureThreshold || 1)),
+    openUntil: Date.now() + Math.max(1_000, Math.min(3_600_000, Number(cooldownMs || config.aiCircuitCooldownMs))),
+  });
+  return getAiCircuitSnapshot().find((item) => item.providerId === providerId && item.modelId === modelId);
+}
+
+export function clearAiCircuit({ providerId, modelId }) {
+  circuitState.delete(`${String(providerId || '').slice(0, 64)}\u0000${String(modelId || '').slice(0, 180)}`);
+  return { providerId, modelId, state: 'closed', failures: 0, openUntil: null };
+}
+
 async function requestOpenAiCompatible({ provider, model, messages, maxOutputTokens, responseJsonSchema, supportsStructuredOutput, reasoningEffort, timeoutMs, priority = 0, signal, providerAdapters = runtimeProviderAdapters }) {
   let lastError;
   for (let attempt = 0; attempt < config.aiMaxRetries; attempt += 1) {
@@ -587,6 +615,10 @@ export async function generateAiContent({ userId = null, contextType = '', conte
   if (!snapshot.available) {
     throw new HttpError(503, 'Konfigurasi AI aktif tidak tersedia.', snapshot.degradedReason || 'AI_RUNTIME_UNAVAILABLE');
   }
+  const maintenance = readAiMaintenanceState(db);
+  if (maintenance.enabled) {
+    throw new HttpError(503, maintenance.message || 'AI sedang dalam pemeliharaan terjadwal.', 'AI_MAINTENANCE');
+  }
   if (userId) requireExternalAiConsent({ userId, manifest: snapshot.processorManifest });
   const visualRequest = isVisionRequest({ purpose, mode, requiresVision, contents });
   const activeRoute = ['active', 'revision'].includes(snapshot.source)
@@ -628,6 +660,7 @@ export async function generateAiContent({ userId = null, contextType = '', conte
   let lastError;
   let lastProvider = primary.providerId;
   let lastModel = primary.modelId;
+  let firstTokenLatencyMs = 0;
   const structured = Boolean(responseJsonSchema) || responseMimeType === 'application/json';
   try {
     for (const candidate of candidates) {
@@ -646,7 +679,10 @@ export async function generateAiContent({ userId = null, contextType = '', conte
       try {
         const providerOptions = { provider: providerId, model: modelId, messages: toOpenAiMessages(compacted, `${systemInstruction}${schemaInstruction}`), maxOutputTokens: effectiveOutputTokens, responseJsonSchema, supportsStructuredOutput: capability?.supportsStructuredOutput, reasoningEffort: routeReasoningEffort, timeoutMs: routeTimeoutMs, priority: isDocumentPurpose(purpose) ? 10 : 0, signal, providerAdapters: runtimeAdapters };
         const payload = onDelta
-          ? await collectProviderStream(providerOptions, onDelta)
+          ? await collectProviderStream(providerOptions, (delta, text) => {
+            if (!firstTokenLatencyMs && delta) firstTokenLatencyMs = Math.max(1, Date.now() - startedAt);
+            onDelta(delta, text);
+          })
           : await requestOpenAiCompatible(providerOptions);
         const text = payload.text ?? responseText(payload);
         const safety = SAFETY_FINISH_REASONS.has(finishReason(payload).toLowerCase());
@@ -662,7 +698,7 @@ export async function generateAiContent({ userId = null, contextType = '', conte
           if (!parsed || !schemaValid(parsed, responseJsonSchema)) throw new AiProviderError('Provider AI mengembalikan JSON yang tidak valid.', { code: 'AI_SCHEMA_INVALID', status: 502, retryable: true });
         }
         recordCircuitSuccess(circuitKey);
-        finishUsage(usageEventId, { status: 'success', usage: payload.usage, latencyMs: Date.now() - startedAt, provider: providerId, model: modelId, fallbackCount, fallbackReason, queueDepth: providerQueue.length, circuitStatus: circuitStatus(circuitKey) });
+        finishUsage(usageEventId, { status: 'success', usage: payload.usage, latencyMs: Date.now() - startedAt, firstTokenLatencyMs, provider: providerId, model: modelId, fallbackCount, fallbackReason, queueDepth: providerQueue.length, circuitStatus: circuitStatus(circuitKey) });
         return {
           text, provider: providerId, model: modelId, usage: payload.usage || {}, finishReason: finishReason(payload),
           latencyMs: Date.now() - startedAt, fallbackCount, configurationRevision: snapshot.revisionId,
@@ -687,7 +723,7 @@ export async function generateAiContent({ userId = null, contextType = '', conte
       } catch { /* safety logging must not replace the policy response */ }
     }
     const finalCircuitKey = `${lastProvider}\u0000${lastModel}`;
-    finishUsage(usageEventId, { status: 'error', latencyMs: Date.now() - startedAt, errorCode: error?.code || 'AI_PROVIDER_ERROR', provider: lastProvider, model: lastModel, fallbackCount, fallbackReason, queueDepth: providerQueue.length, circuitStatus: circuitStatus(finalCircuitKey) });
+    finishUsage(usageEventId, { status: 'error', latencyMs: Date.now() - startedAt, firstTokenLatencyMs, errorCode: error?.code || 'AI_PROVIDER_ERROR', provider: lastProvider, model: lastModel, fallbackCount, fallbackReason, queueDepth: providerQueue.length, circuitStatus: circuitStatus(finalCircuitKey) });
     throw error;
   }
 }

@@ -1063,6 +1063,7 @@ ensureColumn('ai_usage_events', 'configuration_revision', "TEXT NOT NULL DEFAULT
 ensureColumn('ai_usage_events', 'route_id', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('ai_usage_events', 'queue_depth', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('ai_usage_events', 'circuit_state', "TEXT NOT NULL DEFAULT 'closed'");
+ensureColumn('ai_usage_events', 'first_token_latency_ms', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('user_devices', 'profile_hash', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('pricing_overrides', 'credits', 'INTEGER');
 ensureColumn('pricing_overrides', 'duration_days', 'INTEGER');

@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { createAiConfigurationRepository } from './ai-configuration-repository.js';
+import { readAiMaintenanceState, writeAiMaintenanceState } from './ai-configuration-schema.js';
 import { createAiConfigurationService } from './ai-configuration-service.js';
 import { AiEgressPolicyError, validateProviderUrl } from './ai-egress-policy.js';
 import { createOpenAiCompatibleAdapter } from './ai-providers/openai-compatible.js';
 import { createAiSecretStore } from './ai-secret-store.js';
-import { captureAiRuntimeConfiguration, getAiReadiness } from './ai.js';
+import { captureAiRuntimeConfiguration, clearAiCircuit, getAiCircuitSnapshot, getAiReadiness, openAiCircuit } from './ai.js';
 import { capabilitiesForUser } from './admin-capabilities.js';
 import { HttpError } from './utils.js';
 
@@ -58,6 +59,7 @@ const modelInput = z.object({
   costMetadata: costMetadata.default({}),
 }).strict();
 const manualModelInput = modelInput.omit({ capabilityEvidence: true });
+const manualModelPatch = manualModelInput.omit({ providerId: true, modelId: true }).partial();
 
 const fallbackInput = z.object({ providerId, modelId: z.string().trim().min(1).max(180) }).strict();
 const routeInput = z.object({
@@ -197,6 +199,54 @@ function paginate(items, cursorValue, limitValue) {
   return { items: page, nextCursor: offset + limit < items.length ? String(offset + limit) : null };
 }
 
+function nearestRank(values, percentile) {
+  if (!values.length) return null;
+  const sorted = [...values].map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  return sorted[Math.max(0, Math.ceil(percentile * sorted.length) - 1)];
+}
+
+function usageSummary(rows, days = 7) {
+  const calls = rows.length;
+  const successes = rows.filter((row) => row.status === 'success').length;
+  const errors = rows.filter((row) => row.status === 'error');
+  const errorCodes = errors.map((row) => String(row.error_code || '').toUpperCase());
+  const latest = rows.at(-1) || null;
+  const ratio = (value) => calls ? Number((value / calls).toFixed(4)) : 0;
+  return {
+    calls,
+    requestRatePerMinute: Number((calls / (Math.max(1, days) * 1_440)).toFixed(6)),
+    successRate: ratio(successes),
+    fallbackRate: ratio(rows.filter((row) => Number(row.fallback_count || 0) > 0).length),
+    latencyP50Ms: nearestRank(rows.map((row) => row.latency_ms), 0.5),
+    latencyP95Ms: nearestRank(rows.map((row) => row.latency_ms), 0.95),
+    firstTokenP50Ms: nearestRank(rows.map((row) => row.first_token_latency_ms).filter((value) => Number(value) > 0), 0.5),
+    firstTokenP95Ms: nearestRank(rows.map((row) => row.first_token_latency_ms).filter((value) => Number(value) > 0), 0.95),
+    rateLimitErrors: errorCodes.filter((code) => /RATE.?LIMIT|429/.test(code)).length,
+    authErrors: errorCodes.filter((code) => /AUTH|UNAUTHORIZED|\b401\b|\b403\b/.test(code)).length,
+    timeoutErrors: errorCodes.filter((code) => /TIMEOUT/.test(code)).length,
+    maximumQueueDepth: Math.max(0, ...rows.map((row) => Number(row.queue_depth || 0))),
+    circuitState: String(latest?.circuit_state || 'closed'),
+  };
+}
+
+function operationalProvider(provider, { revision = null, models = [], routes = [], store }) {
+  const routesUsing = routes.filter((route) => route.primaryProviderId === provider.providerId
+    || (route.fallbacks || []).some((fallback) => fallback.providerId === provider.providerId))
+    .map((route) => route.routeId).filter(Boolean).sort();
+  const lastSuccess = store.prepare("SELECT created_at FROM ai_usage_events WHERE provider = ? AND status = 'success' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(provider.providerId);
+  const lastFailure = store.prepare("SELECT created_at, error_code FROM ai_usage_events WHERE provider = ? AND status = 'error' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(provider.providerId);
+  return {
+    ...provider,
+    modelCount: models.filter((model) => model.providerId === provider.providerId).length,
+    routesUsing,
+    lastTestedAt: revision?.testEvidence?.results?.providers?.some((result) => result.providerId === provider.providerId && result.ok === true)
+      ? revision.testedAt : null,
+    lastSuccessfulCall: lastSuccess?.created_at || null,
+    lastFailure: lastFailure ? { at: lastFailure.created_at, code: String(lastFailure.error_code || '') } : null,
+  };
+}
+
 function exactConfirmation(actual, expected) {
   if (String(actual || '').trim() !== expected) {
     throw new HttpError(400, `Ketik “${expected}” untuk mengonfirmasi tindakan ini.`, 'AI_CONFIGURATION_CONFIRMATION_REQUIRED');
@@ -268,9 +318,16 @@ export function registerAdminAiRoutes(app, {
     const query = z.object({ revisionId: z.string().trim().max(160).catch(''), state: z.string().trim().max(40).catch(''), q: z.string().trim().max(120).catch(''), cursor: z.string().trim().max(20).catch(''), limit: z.coerce.number().int().min(1).max(100).catch(25) }).parse(req.query);
     const selected = sourceRevision(repository, query.revisionId);
     const snapshot = selected ? null : captureAiRuntimeConfiguration();
+    const runtime = selected ? null : publicRuntimeSnapshot(snapshot, config);
     let providers = selected
       ? selected.providers.map((provider) => safeProvider(provider))
-      : publicRuntimeSnapshot(snapshot, config).providers;
+      : runtime.providers;
+    providers = providers.map((provider) => operationalProvider(provider, {
+      revision: selected,
+      models: selected?.models || runtime.models,
+      routes: selected?.routes || runtime.routes,
+      store,
+    }));
     if (query.state) providers = providers.filter((provider) => provider.state === query.state);
     if (query.q) providers = providers.filter((provider) => `${provider.providerId} ${provider.displayName}`.toLowerCase().includes(query.q.toLowerCase()));
     const page = paginate(providers, query.cursor, query.limit);
@@ -286,7 +343,13 @@ export function registerAdminAiRoutes(app, {
     const environmentCredentialConfigured = snapshot?.source === 'environment' && (found.providerId === 'nararouter'
       ? Boolean(config.naraRouterApiKey)
       : found.providerId === 'cloudflare' && Boolean(config.cloudflareAiToken));
-    res.json({ revisionId: selected?.id || snapshot.revisionId, provider: safeProvider(found, { environmentCredentialConfigured }) });
+    const provider = operationalProvider(safeProvider(found, { environmentCredentialConfigured }), {
+      revision: selected,
+      models: selected?.models || snapshot.models,
+      routes: selected?.routes || snapshot.routes,
+      store,
+    });
+    res.json({ revisionId: selected?.id || snapshot.revisionId, provider });
   });
 
   app.post('/api/admin/ai/providers', ...secureMutation('ai.providers.manage'), (req, res) => {
@@ -372,6 +435,48 @@ export function registerAdminAiRoutes(app, {
     res.status(201).json({ revision: safeRevision(draft) });
   });
 
+  app.put('/api/admin/ai/models/:providerId/:modelId', ...secureMutation('ai.models.manage'), (req, res) => {
+    const input = z.object({ revisionId, reason, confirmation: z.string().max(160).optional(), model: manualModelPatch }).strict().parse(req.body || {});
+    const source = sourceRevision(repository, input.revisionId);
+    const existing = source.models.find((model) => model.providerId === req.params.providerId && model.modelId === req.params.modelId);
+    if (!existing) throw new HttpError(404, 'Model AI tidak ditemukan.', 'AI_CONFIGURATION_MODEL_NOT_FOUND');
+    const disabling = input.model.enabled === false || input.model.state === 'disabled';
+    if (disabling) exactConfirmation(input.confirmation, `DISABLE MODEL ${req.params.providerId}:${req.params.modelId}`);
+    const updated = {
+      ...existing,
+      ...input.model,
+      ...(disabling ? { enabled: false, state: 'disabled', health: 'disabled' } : {}),
+    };
+    const draft = service.createModelDraft({
+      auth: auth(req), reason: input.reason, parentRevisionId: source.id,
+      providers: source.providers,
+      models: source.models.map((model) => model.providerId === existing.providerId && model.modelId === existing.modelId ? updated : model),
+      routes: source.routes,
+    });
+    audit(req.user.id, 'admin.ai_model_changed', 'ai_configuration_revision', draft.id, {
+      parentRevisionId: source.id,
+      providerId: existing.providerId,
+      modelId: existing.modelId,
+      enabled: updated.enabled !== false,
+      state: updated.state,
+      reason: input.reason,
+    });
+    res.status(201).json({ revision: safeRevision(draft) });
+  });
+
+  app.post('/api/admin/ai/models/:providerId/:modelId/test', ...secureMutation('ai.models.manage'), asyncHandler(async (req, res) => {
+    const input = z.object({ revisionId, reason, confirmation: z.string().max(200) }).strict().parse(req.body || {});
+    exactConfirmation(input.confirmation, `TEST MODEL ${req.params.providerId}:${req.params.modelId}`);
+    const testedDraft = await service.testModelCapabilities({
+      revisionId: input.revisionId,
+      providerId: req.params.providerId,
+      modelId: req.params.modelId,
+      reason: input.reason,
+      auth: auth(req),
+    });
+    res.status(201).json({ revision: safeRevision(testedDraft) });
+  }));
+
   app.post('/api/admin/ai/models/discover', ...secureMutation('ai.models.manage'), asyncHandler(async (req, res) => {
     const input = z.object({ revisionId, providerId, reason }).strict().parse(req.body || {});
     const draft = await service.discoverDraftModels({ revisionId: input.revisionId, providerId: input.providerId, reason: input.reason, auth: auth(req) });
@@ -396,6 +501,14 @@ export function registerAdminAiRoutes(app, {
     const days = z.coerce.number().int().min(1).max(90).catch(7).parse(req.query.days);
     const since = new Date(Date.now() - days * 86_400_000).toISOString();
     const snapshot = captureAiRuntimeConfiguration();
+    const usageRows = store.prepare(`
+      SELECT * FROM (
+        SELECT rowid, provider, model, configuration_revision, route_id, mode, status, circuit_state,
+          latency_ms, first_token_latency_ms, error_code, fallback_count, queue_depth, created_at
+        FROM ai_usage_events WHERE created_at >= ?
+        ORDER BY created_at DESC, rowid DESC LIMIT 10000
+      ) ORDER BY created_at, rowid
+    `).all(since);
     const telemetry = store.prepare(`
       SELECT provider, model, configuration_revision, route_id, mode, status, circuit_state,
         COUNT(*) AS calls, COALESCE(ROUND(AVG(latency_ms)), 0) AS average_latency_ms,
@@ -405,7 +518,41 @@ export function registerAdminAiRoutes(app, {
       GROUP BY provider, model, configuration_revision, route_id, mode, status, circuit_state
       ORDER BY calls DESC LIMIT 200
     `).all(since);
-    res.json({ days, since, runtime: publicRuntimeSnapshot(snapshot, config), readiness: getAiReadiness(snapshot), telemetry });
+    const routeGroups = new Map();
+    for (const row of usageRows) {
+      const routeId = String(row.route_id || 'unknown');
+      if (!routeGroups.has(routeId)) routeGroups.set(routeId, []);
+      routeGroups.get(routeId).push(row);
+    }
+    const routeHealth = [...routeGroups.entries()].map(([routeId, rows]) => ({ routeId, ...usageSummary(rows, days) }));
+    const modelAvailability = snapshot.models.map((model) => ({
+      providerId: model.providerId,
+      modelId: model.modelId,
+      available: model.enabled !== false && !['unavailable', 'disabled', 'archived'].includes(String(model.state || '').toLowerCase())
+        && String(model.health || '').toLowerCase() !== 'unavailable',
+      health: String(model.health || 'unknown'),
+      lastAvailableAt: model.lastAvailableAt || null,
+    }));
+    const latestRevision = repository.listRevisions({ limit: 1 }).revisions[0] || null;
+    res.json({
+      days,
+      since,
+      runtime: publicRuntimeSnapshot(snapshot, config),
+      readiness: getAiReadiness(snapshot),
+      summary: usageSummary(usageRows, days),
+      routeHealth,
+      modelAvailability,
+      circuits: getAiCircuitSnapshot(),
+      maintenance: readAiMaintenanceState(store),
+      latestConfigurationChange: latestRevision ? {
+        id: latestRevision.id,
+        revisionNumber: latestRevision.revisionNumber,
+        state: latestRevision.state,
+        reason: latestRevision.reason,
+        createdAt: latestRevision.createdAt,
+      } : null,
+      telemetry,
+    });
   });
 
   app.post('/api/admin/ai/health/test', ...secureMutation('ai.providers.manage'), asyncHandler(async (req, res) => {
@@ -419,6 +566,42 @@ export function registerAdminAiRoutes(app, {
     const results = await service.runDraftCanaries({ revisionId: input.revisionId, auth: auth(req) });
     res.json({ revisionId: input.revisionId, syntheticOnly: true, results });
   }));
+
+  app.post('/api/admin/ai/health/circuit/open', ...secureMutation('ai.routing.manage'), (req, res) => {
+    const input = z.object({ revisionId, providerId, modelId: z.string().trim().min(1).max(180), reason, confirmation: z.string().max(240) }).strict().parse(req.body || {});
+    exactConfirmation(input.confirmation, `OPEN CIRCUIT ${input.providerId}:${input.modelId}`);
+    const source = sourceRevision(repository, input.revisionId);
+    const provider = source.providers.find((item) => item.providerId === input.providerId && item.enabled !== false);
+    const model = source.models.find((item) => item.providerId === input.providerId && item.modelId === input.modelId && item.enabled !== false);
+    if (!provider || !model) throw new HttpError(404, 'Target circuit AI tidak ditemukan atau nonaktif.', 'AI_CONFIGURATION_CIRCUIT_TARGET_NOT_FOUND');
+    const circuit = openAiCircuit({ providerId: input.providerId, modelId: input.modelId, cooldownMs: provider.circuitCooldownMs });
+    audit(req.user.id, 'admin.ai_circuit_opened', 'ai_configuration_revision', source.id, { providerId: input.providerId, modelId: input.modelId, reason: input.reason });
+    res.json({ circuit });
+  });
+
+  app.post('/api/admin/ai/health/circuit/clear', ...secureMutation('ai.routing.manage'), asyncHandler(async (req, res) => {
+    const input = z.object({ revisionId, providerId, modelId: z.string().trim().min(1).max(180), reason, confirmation: z.string().max(240) }).strict().parse(req.body || {});
+    exactConfirmation(input.confirmation, `CLEAR CIRCUIT ${input.providerId}:${input.modelId}`);
+    await service.testOperationalTarget({ revisionId: input.revisionId, providerId: input.providerId, modelId: input.modelId, auth: auth(req) });
+    const circuit = clearAiCircuit({ providerId: input.providerId, modelId: input.modelId });
+    audit(req.user.id, 'admin.ai_circuit_cleared', 'ai_configuration_revision', input.revisionId, { providerId: input.providerId, modelId: input.modelId, reason: input.reason, syntheticOnly: true });
+    res.json({ circuit });
+  }));
+
+  app.post('/api/admin/ai/health/maintenance', ...secureMutation('ai.routing.manage'), (req, res) => {
+    const input = z.object({ enabled: z.boolean(), message: z.string().trim().max(500).default(''), reason, confirmation: z.string().max(120) }).strict().parse(req.body || {});
+    if (input.enabled && input.message.length < 8) throw new HttpError(400, 'Pesan pemeliharaan wajib menjelaskan status layanan.', 'AI_MAINTENANCE_MESSAGE_REQUIRED');
+    exactConfirmation(input.confirmation, input.enabled ? 'ENABLE AI MAINTENANCE' : 'CLEAR AI MAINTENANCE');
+    const maintenance = writeAiMaintenanceState(store, {
+      enabled: input.enabled,
+      message: input.message,
+      actorUserId: req.user.id,
+      reason: input.reason,
+      updatedAt: new Date().toISOString(),
+    });
+    audit(req.user.id, 'admin.ai_maintenance_changed', 'ai_operational_controls', '1', { enabled: input.enabled, reason: input.reason, messageLength: input.message.length });
+    res.json({ maintenance });
+  });
 
   app.get('/api/admin/ai/changes', requireAuth, requireCapability('ai.providers.view'), (req, res) => {
     const query = z.object({ state: z.enum(['draft', 'tested', 'active', 'superseded']).catch(''), cursor: z.coerce.number().int().positive().catch(Number.MAX_SAFE_INTEGER), limit: z.coerce.number().int().min(1).max(100).catch(25) }).parse(req.query);

@@ -57,16 +57,18 @@ export function ResourceMeta({ resource }) {
 }
 
 export function StatusPill({ value = 'unknown' }) {
+  const t = useAdminAiCopy();
   const normalized = String(value || 'unknown').toLowerCase();
-  return <span className={`admin-ai-status is-${normalized.replace(/[^a-z0-9-]/g, '-')}`}>{value || 'unknown'}</span>;
+  return <span className={`admin-ai-status is-${normalized.replace(/[^a-z0-9-]/g, '-')}`}>{t(`common.status.${normalized}`)}</span>;
 }
 
 export function EmptyState({ title, description }) {
   return <div className="admin-ai-empty"><CheckCircle2 size={20} /><b>{title}</b><span>{description}</span></div>;
 }
 
-export function PageIntro({ eyebrow = 'AI control plane', title, description, actions, resource }) {
-  return <header className="admin-ai-page-intro"><div><p>{eyebrow}</p><h1>{title}</h1><span>{description}</span></div><div className="admin-ai-page-actions">{resource && <ResourceMeta resource={resource} />}{actions}</div></header>;
+export function PageIntro({ eyebrow, title, description, actions, resource }) {
+  const t = useAdminAiCopy();
+  return <header className="admin-ai-page-intro"><div><p>{eyebrow || t('common.controlPlane')}</p><h1>{title}</h1><span>{description}</span></div><div className="admin-ai-page-actions">{resource && <ResourceMeta resource={resource} />}{actions}</div></header>;
 }
 
 export function ConfirmationDialog({ open, title, description, expected, confirmLabel, busy, extra = null, onCancel, onConfirm }) {
@@ -77,13 +79,59 @@ export function ConfirmationDialog({ open, title, description, expected, confirm
   const [confirmation, setConfirmation] = useState('');
   const [error, setError] = useState('');
   const inputRef = useRef(null);
+  const dialogRef = useRef(null);
+  const backdropRef = useRef(null);
+  const openerRef = useRef(null);
+  const busyRef = useRef(busy);
+  const cancelRef = useRef(onCancel);
+  busyRef.current = busy;
+  cancelRef.current = onCancel;
   useEffect(() => {
     if (!open) return;
+    openerRef.current = document.activeElement;
     setReason('');
     setConfirmation('');
     setError('');
+    const inerted = [];
+    let branch = backdropRef.current;
+    const shell = branch?.closest('.admin-ai-shell');
+    while (branch?.parentElement && branch !== shell) {
+      for (const sibling of branch.parentElement.children) {
+        if (sibling === branch || sibling.hasAttribute('inert')) continue;
+        const previousAriaHidden = sibling.getAttribute('aria-hidden');
+        sibling.setAttribute('inert', '');
+        sibling.setAttribute('aria-hidden', 'true');
+        inerted.push({ element: sibling, previousAriaHidden });
+      }
+      branch = branch.parentElement;
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && !busyRef.current) {
+        event.preventDefault();
+        cancelRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(dialogRef.current?.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex="-1"])') || [])]
+        .filter((element) => !element.hidden && element.getClientRects().length > 0);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', handleKeyDown);
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', handleKeyDown);
+      inerted.forEach(({ element, previousAriaHidden }) => {
+        element.removeAttribute('inert');
+        if (previousAriaHidden === null) element.removeAttribute('aria-hidden');
+        else element.setAttribute('aria-hidden', previousAriaHidden);
+      });
+      requestAnimationFrame(() => openerRef.current?.isConnected && openerRef.current.focus());
+    };
   }, [open]);
   if (!open) return null;
   const submit = async (event) => {
@@ -93,8 +141,8 @@ export function ConfirmationDialog({ open, title, description, expected, confirm
     try { await onConfirm({ reason: reason.trim(), confirmation: confirmation.trim() }); }
     catch (nextError) { setError(nextError.message || t('common.actionFailed')); }
   };
-  return <div className="admin-ai-dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !busy && onCancel()}>
-    <section className="admin-ai-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>
+  return <div ref={backdropRef} className="admin-ai-dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !busy && onCancel()}>
+    <section ref={dialogRef} className="admin-ai-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>
       <button className="admin-ai-dialog-close" type="button" onClick={onCancel} disabled={busy} aria-label={t('common.closeDialog')}><X size={17} /></button>
       <div><p>{t('common.confirmation')}</p><h2 id={titleId}>{title}</h2><span id={descriptionId}>{description}</span></div>
       <form onSubmit={submit}>

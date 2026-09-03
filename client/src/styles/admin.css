@@ -249,6 +249,9 @@
   .admin-ai-table td small { margin-top: 3px; color: var(--aai-muted); font-size: .52rem; }
   .admin-ai-capabilities { display: flex; flex-wrap: wrap; gap: 4px; }
   .admin-ai-capabilities span { display: inline-flex; align-items: center; gap: 3px; border-radius: 5px; padding: 3px 5px; background: var(--aai-subtle); font-size: .5rem; }
+  .admin-ai-form-hint { margin: -3px 0 0; color: var(--aai-muted); font-size: .56rem; line-height: 1.5; }
+  .admin-ai-row-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+  .admin-ai-row-actions button { min-height: 28px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--aai-line); border-radius: 7px; padding: 0 8px; background: var(--aai-card); color: var(--aai-text); font-size: .53rem; font-weight: 700; white-space: nowrap; }
   .admin-ai-discovery { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, .7fr) auto; align-items: end; gap: 10px; border: 1px solid var(--aai-line); border-radius: 10px; padding: 11px; background: var(--aai-panel); }
   .admin-ai-discovery > div { display: grid; gap: 3px; }
   .admin-ai-discovery b { font-size: .65rem; }
@@ -274,6 +277,11 @@
   .admin-ai-action-panel > div:first-child > span { color: var(--aai-muted); font-size: .56rem; }
   .admin-ai-action-buttons { display: flex; gap: 7px; }
   .admin-ai-action-panel > :is(.admin-ai-inline-error,.admin-ai-success) { grid-column: 1 / -1; }
+  .admin-ai-control-panel { grid-template-columns: minmax(0, 1fr) minmax(280px, .9fr) auto; }
+  .admin-ai-control-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .admin-ai-circuit-list { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+  .admin-ai-circuit-list > span { display: inline-flex; align-items: center; gap: 7px; border-radius: 8px; padding: 6px 8px; background: var(--aai-subtle); }
+  .admin-ai-circuit-list small { color: var(--aai-muted); font-size: .56rem; }
 
   .admin-ai-pointers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .admin-ai-pointers > div { min-width: 0; display: grid; gap: 4px; border: 1px solid var(--aai-line); border-radius: 9px; padding: 10px 12px; background: var(--aai-panel); }
@@ -322,7 +330,8 @@
     .admin-ai-health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .admin-ai-change-layout { grid-template-columns: 1fr; }
     .admin-ai-change-detail { position: static; }
-    .admin-ai-action-panel { grid-template-columns: 1fr 1fr; }
+    .admin-ai-action-panel,
+    .admin-ai-control-panel { grid-template-columns: 1fr 1fr; }
     .admin-ai-action-panel > div:first-child { grid-column: 1 / -1; }
   }
 
@@ -357,6 +366,7 @@
     .admin-ai-action-buttons button { min-height: 40px; }
     .admin-ai-form-actions,
     .admin-ai-action-buttons { display: grid; grid-template-columns: repeat(2, 1fr); }
+    .admin-ai-control-fields { grid-template-columns: 1fr; }
     .admin-ai-card { grid-template-columns: 32px minmax(0, 1fr); }
     .admin-ai-card-aside { grid-column: 2; justify-items: start; }
     .admin-ai-health-grid,

@@ -11,8 +11,10 @@ process.env.LAPRAKIN_PUBLIC_MEDIA_DIR = path.join(sandbox, 'public-media');
 process.env.NARAROUTER_API_KEY = 'bootstrap-present-for-test';
 
 const { db } = await import('../src/db.js');
+const { ensureAiConfigurationSchema } = await import('../src/ai-configuration-schema.js');
 const { config } = await import('../src/config.js');
 const { generateAiContent } = await import('../src/ai.js');
+ensureAiConfigurationSchema(db);
 config.aiMaxRetries = 1;
 config.naraRouterMaxRpm = 600;
 
@@ -64,8 +66,53 @@ test('usage telemetry stores complete operational metadata without prompt or out
   assert.equal(row.mode, 'thinking');
   assert.equal(row.total_tokens, 18);
   assert.equal(typeof row.queue_depth, 'number');
+  assert.equal(typeof row.first_token_latency_ms, 'number');
   assert.match(row.circuit_state, /^(?:closed|open|half_open)$/);
   assert.doesNotMatch(JSON.stringify(row), /PRIVATE_USER_PROMPT|PRIVATE_MODEL_OUTPUT/);
+});
+
+test('stream telemetry records first-token latency without storing streamed content', async () => {
+  const providerAdapters = { get: () => ({
+    async *stream() {
+      await new Promise((resolve) => setTimeout(resolve, 8));
+      yield { type: 'delta', text: 'PRIVATE_STREAMED_OUTPUT' };
+      yield { type: 'done', message: 'PRIVATE_STREAMED_OUTPUT', usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
+    },
+  }) };
+  await generateAiContent({
+    purpose: 'chat',
+    mode: 'thinking',
+    contents: [{ role: 'user', parts: [{ text: 'PRIVATE_STREAMED_PROMPT' }] }],
+    runtimeSnapshot,
+    providerAdapters,
+    onDelta: () => {},
+  });
+  const row = db.prepare('SELECT * FROM ai_usage_events ORDER BY rowid DESC LIMIT 1').get();
+  assert.ok(row.first_token_latency_ms >= 1, JSON.stringify(row));
+  assert.doesNotMatch(JSON.stringify(row), /PRIVATE_STREAMED_PROMPT|PRIVATE_STREAMED_OUTPUT/);
+});
+
+test('maintenance state blocks provider transmission and clearing it restores routing', async () => {
+  db.prepare(`
+    UPDATE ai_operational_controls
+    SET maintenance_enabled = 1, maintenance_message = ?, updated_at = ?
+    WHERE singleton_id = 1
+  `).run('AI sedang dalam pemeliharaan terjadwal.', new Date().toISOString());
+  let calls = 0;
+  const providerAdapters = { get: () => ({
+    async complete() {
+      calls += 1;
+      return { choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }], usage: {} };
+    },
+  }) };
+  await assert.rejects(
+    () => generateAiContent({ purpose: 'chat', mode: 'thinking', contents: [{ role: 'user', parts: [{ text: 'PRIVATE_MAINTENANCE_PROMPT' }] }], runtimeSnapshot, providerAdapters }),
+    (error) => error.code === 'AI_MAINTENANCE' && error.message === 'AI sedang dalam pemeliharaan terjadwal.',
+  );
+  assert.equal(calls, 0);
+  db.prepare('UPDATE ai_operational_controls SET maintenance_enabled = 0, maintenance_message = ? WHERE singleton_id = 1').run('');
+  await generateAiContent({ purpose: 'chat', mode: 'thinking', contents: [{ role: 'user', parts: [{ text: 'PRIVATE_RESUMED_PROMPT' }] }], runtimeSnapshot, providerAdapters });
+  assert.equal(calls, 1);
 });
 
 test('an undisclosed fallback is never called and produces an explicit consent-aware degraded error', async () => {

@@ -190,12 +190,42 @@ try {
   assert.equal(await credential.getAttribute('type'), 'password');
   assert.equal(await credential.getAttribute('autocomplete'), 'new-password');
   assert.equal(await page.getByRole('button', { name: /reveal|show/i }).count(), 0);
+  for (const label of ['Model terkait', 'Route terkait', 'Terakhir diuji', 'Panggilan sukses terakhir']) {
+    assert.equal(await page.getByText(label, { exact: true }).isVisible(), true, `Missing provider summary: ${label}`);
+  }
+
+  await page.goto(`${webBase}/admin/ai/models?revisionId=${encodeURIComponent(providerPayload.revision.id)}`, { waitUntil: 'networkidle' });
+  await page.getByRole('heading', { name: 'Registry model', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByLabel('Provider ID', { exact: true }).fill('ui-check');
+  await page.getByLabel('Model ID', { exact: true }).fill('ui-model');
+  await page.getByLabel('Alasan perubahan', { exact: true }).fill('Browser model lifecycle verification');
+  const modelResponsePromise = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/admin/ai/models');
+  await page.getByRole('button', { name: 'Simpan draft' }).click();
+  const modelResponse = await modelResponsePromise;
+  const modelPayload = await modelResponse.json();
+  assert.equal(modelResponse.status(), 201, `${JSON.stringify(modelPayload)}\n${serverLogs}`);
+  await page.getByText('ui-model', { exact: true }).waitFor();
+  const capabilityButton = page.getByRole('button', { name: 'Uji capability' });
+  await capabilityButton.focus();
+  await capabilityButton.click();
+  await page.getByRole('dialog').waitFor();
+  assert.equal(await page.locator('.admin-ai-sidebar').getAttribute('inert'), '');
+  const closeDialogButton = page.getByRole('button', { name: 'Tutup dialog' });
+  await closeDialogButton.focus();
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await page.getByRole('dialog').getByRole('button', { name: 'Batal' }).evaluate((node) => node === document.activeElement), true);
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({ state: 'detached' });
+  assert.equal(await capabilityButton.evaluate((node) => node === document.activeElement), true);
+  assert.equal(await page.getByRole('button', { name: 'Nonaktifkan model' }).isVisible(), true);
+  await page.screenshot({ path: path.join(screenshotDir, 'models-actions-desktop.png'), fullPage: true });
 
   const routes = [
-    ['/admin/ai/models', 'Model registry'],
+    ['/admin/ai/models', 'Registry model'],
     ['/admin/ai/routing', 'Routing'],
     ['/admin/ai/health', 'Health & canary'],
-    ['/admin/ai/changes', 'Change history'],
+    ['/admin/ai/changes', 'Riwayat perubahan'],
   ];
   for (const [route, title] of routes) {
     await page.goto(`${webBase}${route}`, { waitUntil: 'networkidle' });
@@ -212,6 +242,17 @@ try {
       throw new Error(`Admin AI deep-link diagnostic: ${JSON.stringify(diagnostic)}`, { cause: error });
     }
   }
+
+  await page.goto(`${webBase}/admin/ai/health`, { waitUntil: 'networkidle' });
+  for (const label of ['Latency p50 / p95', 'First-token p50 / p95', 'Success / fallback', 'Error operasional']) {
+    assert.equal(await page.getByText(label, { exact: true }).isVisible(), true, `Missing health metric: ${label}`);
+  }
+  assert.equal(await page.getByRole('button', { name: 'Buka circuit' }).isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'Aktifkan maintenance' }).isVisible(), true);
+  await page.locator('.admin-ai-main').evaluate((node) => node.scrollTo(0, node.scrollHeight));
+  await page.screenshot({ path: path.join(screenshotDir, 'health-operations-desktop.png'), fullPage: true });
+  await page.goto(`${webBase}/admin/ai/changes`, { waitUntil: 'networkidle' });
+  await page.getByRole('heading', { name: 'Riwayat perubahan', exact: true }).waitFor();
 
   await page.getByRole('button', { name: 'Ubah tema admin' }).click();
   await page.locator('.admin-ai-shell.theme-dark').waitFor();
@@ -245,7 +286,7 @@ try {
   await page.getByRole('alert').waitFor();
   await page.getByRole('button', { name: 'Try again' }).click();
   await page.getByRole('heading', { name: 'Health & canary', exact: true }).waitFor();
-  await page.locator('.admin-ai-health-grid').waitFor();
+  await page.locator('.admin-ai-health-grid').first().waitFor();
 
   const navLink = page.getByRole('link', { name: 'Providers', exact: true });
   await navLink.focus();

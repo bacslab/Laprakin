@@ -218,6 +218,70 @@ export function createAiConfigurationService({
     }
   }
 
+  async function testModelCapabilities({ revisionId, providerId, modelId, reason, auth }) {
+    const actorUserId = authorize(auth, 'ai.models.manage', { requireMfa: true });
+    const draft = requireRevision(repository, revisionId, 'draft');
+    const provider = draft.providers.find((item) => item.providerId === providerId && item.enabled !== false);
+    const model = draft.models.find((item) => item.providerId === providerId && item.modelId === modelId);
+    if (!provider) throw new AiConfigurationServiceError('Provider was not found or is disabled.', 'AI_CONFIGURATION_PROVIDER_NOT_FOUND', 404);
+    if (!model) throw new AiConfigurationServiceError('Model was not found in the revision.', 'AI_CONFIGURATION_MODEL_NOT_FOUND', 404);
+    let result;
+    try {
+      result = safeResult(await (await adapterFor(provider, draft)).runCanary({
+        model: model.modelId,
+        testCase: syntheticCanaryCase({
+          routeId: 'model-capability',
+          requiresVision: model.capabilities?.vision === true,
+          requiresStructuredOutput: model.capabilities?.structuredOutput === true,
+        }),
+      }));
+    } catch {
+      throw new AiConfigurationServiceError('Model capability test failed.', 'AI_CONFIGURATION_MODEL_TEST_FAILED', 502);
+    }
+    if (!result.ok) throw new AiConfigurationServiceError('Model capability test failed.', 'AI_CONFIGURATION_MODEL_TEST_FAILED', 502);
+    const capabilityEvidence = { ...(model.capabilityEvidence || {}) };
+    for (const capability of ['vision', 'structuredOutput']) {
+      if (model.capabilities?.[capability] === true) capabilityEvidence[capability] = 'canary';
+    }
+    const models = draft.models.map((item) => item.providerId === providerId && item.modelId === modelId
+      ? { ...item, capabilityEvidence, health: 'available', lastAvailableAt: now() }
+      : item);
+    const testedDraft = repository.createDraft(cloneInput(draft, { models, actorUserId, reason, production: false }));
+    record(actorUserId, 'admin.ai_model_capabilities_tested', testedDraft.id, {
+      parentRevisionId: draft.id,
+      providerId,
+      modelId,
+      capabilities: Object.keys(capabilityEvidence).filter((key) => capabilityEvidence[key] === 'canary'),
+      syntheticOnly: true,
+    });
+    return testedDraft;
+  }
+
+  async function testOperationalTarget({ revisionId, providerId, modelId, auth }) {
+    const actorUserId = authorize(auth, 'ai.health.view', { requireMfa: true });
+    const revision = requireRevision(repository, revisionId);
+    const provider = revision.providers.find((item) => item.providerId === providerId && item.enabled !== false);
+    const model = revision.models.find((item) => item.providerId === providerId && item.modelId === modelId && item.enabled !== false);
+    if (!provider) throw new AiConfigurationServiceError('Provider was not found or is disabled.', 'AI_CONFIGURATION_PROVIDER_NOT_FOUND', 404);
+    if (!model) throw new AiConfigurationServiceError('Model was not found or is disabled.', 'AI_CONFIGURATION_MODEL_NOT_FOUND', 404);
+    let result;
+    try {
+      result = safeResult(await (await adapterFor(provider, revision)).runCanary({
+        model: model.modelId,
+        testCase: syntheticCanaryCase({
+          routeId: 'circuit-clear',
+          requiresVision: model.capabilities?.vision === true,
+          requiresStructuredOutput: model.capabilities?.structuredOutput === true,
+        }),
+      }));
+    } catch {
+      throw new AiConfigurationServiceError('Circuit clear test failed.', 'AI_CONFIGURATION_CIRCUIT_TEST_FAILED', 502);
+    }
+    if (!result.ok) throw new AiConfigurationServiceError('Circuit clear test failed.', 'AI_CONFIGURATION_CIRCUIT_TEST_FAILED', 502);
+    record(actorUserId, 'admin.ai_circuit_clear_test_passed', revision.id, { providerId, modelId, syntheticOnly: true });
+    return result;
+  }
+
   async function testDraft({ revisionId, auth }) {
     const actorUserId = authorize(auth, 'ai.providers.manage', { requireMfa: true });
     const draft = requireRevision(repository, revisionId, 'draft');
@@ -348,6 +412,8 @@ export function createAiConfigurationService({
     deleteCredential,
     discoverDraftModels,
     runDraftCanaries,
+    testModelCapabilities,
+    testOperationalTarget,
     testDraft,
     previewActivation,
     activateRevision,
