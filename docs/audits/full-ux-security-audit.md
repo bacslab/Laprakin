@@ -68,14 +68,14 @@ This is a living evidence register. Findings are closed only by source inspectio
 
 - Severity: P1 performance/quality
 - User impact: streaming and frequent UI updates can retrigger full DOM scans and visible text mutation.
-- Evidence: `I18nRuntime.jsx` uses `createTreeWalker`, `querySelectorAll`, and a subtree `MutationObserver` including character data.
-- Reproduction: performance and missing-key/interpolation/pluralization tests are pending the localization phase.
+- Evidence: the audited runtime used `createTreeWalker`, `querySelectorAll`, and a subtree `MutationObserver` including character data; the legacy translator contained 397 lines of post-render translation mappings and DOM mutation logic.
+- Reproduction: the new no-DOM-mutation contract failed while `I18nRuntime.jsx` imported `translateUiText` and `legacy.js` existed. `npm run test:i18n-ui` initially failed because no browser harness existed, and the pluralization behavior test failed before the dictionary resolver was implemented.
 - Root cause: incomplete migration from translated rendered text to component keys.
-- Changed files: not implemented.
-- Fix: remove legacy DOM translation only after keyed surface completion.
-- Tests: open.
-- Actual verification result: open.
-- Residual risk: runtime cost remains during P0 work but may not be removed out of order.
+- Changed files: `client/src/i18n/I18nRuntime.jsx`, deleted `client/src/i18n/legacy.js`, `client/src/i18n/index.js`, `client/src/i18n/translate.js`, `client/src/i18n/en.json`, `client/src/i18n/id.json`, `client/test/i18n-contract.test.mjs`, `scripts/i18n-ui-check.mjs`, and `package.json`.
+- Fix: React locale keys are now the only functional translation path. `I18nRuntime` supplies context and updates only document language/theme metadata. A pure dictionary resolver performs Indonesian fallback, interpolation, and `Intl.PluralRules` selection without touching rendered descendants.
+- Tests: 18/18 focused i18n contracts and 70/70 complete client contracts passed. The isolated Playwright harness passed Auth, Workspace, Settings, and Notifications in English and Indonesian, verified a live language change plus persistence after reload, and checked desktop and 390px without horizontal overflow or unexpected browser errors.
+- Actual verification result: resolved and verified on 2026-09-03. Source search found none of `translateUiText`, `MutationObserver`, `createTreeWalker`, `querySelectorAll`, `nodeValue`, or `setAttribute` in the i18n runtime/main entry; `legacy.js` is absent. Production build transformed 1,698 modules successfully, with the existing 654.85kB vendor-chunk advisory recorded separately. Landing-owned files remain unchanged from audited base `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de` at this checkpoint.
+- Residual risk: every future functional string must be introduced as a locale key, and count-sensitive copy must provide plural variants. The source contract and browser harness guard the remediated routes, but do not replace ongoing review for newly added surfaces.
 
 ## AUDIT-007 — CSS compatibility debt
 
@@ -144,17 +144,18 @@ This is a living evidence register. Findings are closed only by source inspectio
 
 ## Additional Security Surfaces
 
-The following remain open for dedicated phases: removal of the DOM translation walker, CSS compatibility debt, complete Settings/theme browser evidence, route isolation for the non-AI Admin console, upload quarantine/malware/PII/prompt-injection states, content break-glass, retention execution, backup/restore proof, and the complete release workflow. AI provider secret storage, guarded egress, immutable activation/rollback, capability enforcement, and production configuration contracts now have focused evidence.
+The following remain open for dedicated phases: CSS compatibility debt, complete Settings/theme browser evidence, route isolation for the non-AI Admin console, upload quarantine/malware/PII/prompt-injection states, content break-glass, retention execution, backup/restore proof, and the complete release workflow. Runtime DOM translation is now removed and verified; AI provider secret storage, guarded egress, immutable activation/rollback, capability enforcement, and production configuration contracts also have focused evidence.
 
 ## Current Verdict
 
-`NO-GO` for the full production-grade mission. The AI control-plane slice is verified, but AUDIT-006 through AUDIT-009 and the remaining security/release surfaces above are not closed. Current fresh evidence includes 179/179 server tests, 69/69 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
+`NO-GO` for the full production-grade mission. The AI control-plane slice and AUDIT-006 are verified, but AUDIT-007 through AUDIT-009 and the remaining security/release surfaces above are not closed. Current fresh evidence includes 179/179 server tests, 70/70 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI and i18n browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
 
 ## Verification snapshot — 2026-09-03
 
-- Audited base: `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de`; verification branch checkpoint before this documentation: `bb8ef7f`.
+- Audited base: `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de`; verification branch checkpoint before this documentation: `bb9ba65`.
 - Server: 179 passed, 0 failed, 0 skipped.
-- Client: 69 passed, 0 failed, 0 skipped.
+- Client: 70 passed, 0 failed, 0 skipped.
+- I18n: 18 focused contracts passed; DOM translation source scan clean; real-browser Auth, Workspace, Settings, and Notifications passed in ID/EN at desktop and 390px with persistence after reload.
 - Focused AI/control plane: 59 passed, 0 failed, 0 skipped.
 - Migration: 2 passed, 0 failed; copy includes available WAL sidecar and refuses overwrite.
 - API E2E: auth, profile, evidence, timeline, quality gate, template DOCX, restore, and verified password-change flow passed against a local synthetic provider; two metadata-only provider requests were observed.
@@ -165,4 +166,4 @@ The following remain open for dedicated phases: removal of the DOM translation w
 - Gitleaks 8.30.1: 229 commits and approximately 8.63MB scanned; 0 leaks. The downloaded Windows archive matched SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e` before execution.
 - Landing-owned files: no diff from the audited base at this checkpoint.
 - Non-failing runtime advisory: Node reports that built-in SQLite remains experimental. This is a platform warning, not a skipped or failed test.
-- Rendered evidence: `output/playwright/admin-ai/providers-desktop.png`, `models-actions-desktop.png`, `health-operations-desktop.png`, and `changes-mobile-dark.png`.
+- Rendered evidence: `output/playwright/admin-ai/providers-desktop.png`, `models-actions-desktop.png`, `health-operations-desktop.png`, `changes-mobile-dark.png`, `output/playwright/i18n/workspace-en.png`, and `settings-id.png`.

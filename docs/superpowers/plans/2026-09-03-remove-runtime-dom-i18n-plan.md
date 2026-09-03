@@ -142,7 +142,7 @@ Run: `node --test --test-concurrency=1 "client/test/*.test.mjs" && npm run lint 
 
 Expected: all commands exit 0; record any non-failing build advisory separately.
 
-- [ ] **Step 5: Commit browser proof**
+- [x] **Step 5: Commit browser proof**
 
 ```text
 git add scripts/i18n-ui-check.mjs package.json
@@ -159,29 +159,29 @@ git commit -m "test: prove keyed locale rendering"
 - Consumes: fresh source, client, browser, lint, typecheck, build, and Landing-freeze evidence from Tasks 1–2.
 - Produces: a finding record whose status and residual risks match the current repository.
 
-- [ ] **Step 1: Verify the forbidden mechanism and legacy module are absent**
+- [x] **Step 1: Verify the forbidden mechanism and legacy module are absent**
 
 Run: `rg -n "translateUiText|MutationObserver|createTreeWalker|querySelectorAll|nodeValue|setAttribute" client/src/i18n client/src/main.jsx`
 
 Expected: no runtime translation matches.
 
-- [ ] **Step 2: Verify Landing-owned files remain unchanged from the audited base**
+- [x] **Step 2: Verify Landing-owned files remain unchanged from the audited base**
 
 Run: `git diff --quiet 71e741fd4aeb2c90d469aaf9f5819e4fa29d97de -- client/src/pages/Landing client/src/landing.css client/src/styles/landing.css client/public/landing`
 
 Expected: exit 0.
 
-- [ ] **Step 3: Update the finding and changelog**
+- [x] **Step 3: Update the finding and changelog**
 
 Record the changed files, red reproduction, root-cause removal, exact pass/fail counts, browser routes/viewports, screenshots, build advisory, and residual risk that every future functional string must be introduced as a locale key. Keep AUDIT-007 through AUDIT-009 and the overall production verdict open.
 
-- [ ] **Step 4: Run final diff and evidence checks**
+- [x] **Step 4: Run final diff and evidence checks**
 
 Run: `git diff --check && git status --short`
 
 Expected: no whitespace errors and only the intended audit/changelog changes.
 
-- [ ] **Step 5: Commit the audit closure**
+- [x] **Step 5: Commit the audit closure**
 
 ```text
 git add docs/audits/full-ux-security-audit.md CHANGELOG.md
