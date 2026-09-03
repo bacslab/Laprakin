@@ -23,10 +23,10 @@
 
 ## Task 3 — Migrate live Admin compatibility rules
 
-- [ ] Capture representative Admin AI and all legacy Admin route visual/computed baselines.
-- [ ] Collapse superseded Admin generations into `styles/admin.css` with semantic tokens and no `!important`.
-- [ ] Delete the replaced compatibility blocks and lower the budget.
-- [ ] Run Admin source/API/browser/build gates; commit.
+- [x] Capture representative Admin AI and all legacy Admin route visual/computed baselines.
+- [x] Collapse superseded Admin generations into `styles/admin.css` with semantic tokens and no `!important`.
+- [x] Delete the replaced compatibility blocks and lower the budget.
+- [x] Run Admin source/API/browser/build gates; commit.
 
 ## Task 4 — Migrate live Workspace and Settings compatibility rules
 

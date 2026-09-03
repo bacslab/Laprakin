@@ -11,6 +11,7 @@
 - Memutakhirkan Playwright ke rilis yang menutup advisory verifikasi sertifikat unduhan browser; audit dependency penuh kembali 0 vulnerability.
 - Menghapus 640 rule dari root Landing lama yang sudah tidak dirender, menurunkan compatibility `!important` dari 4.727 ke 3.060 dan CSS production dari 646,81 kB ke 553,59 kB tanpa mengubah satu pixel Landing aktif.
 - Menghapus 679 rule publik pre-Figma yang sudah tidak dimiliki runtime, menurunkan compatibility `!important` lagi dari 3.060 ke 2.192 dan CSS production ke 479,67 kB (74,65 kB gzip), dengan bukti browser Landing, Auth, Pricing, Settings, serta Admin tetap lulus.
+- Memindahkan cascade Admin lama ke stylesheet route-lazy tanpa `!important`, menghapus 442 cabang selector Admin/CMS dari sheet global, menggabungkan 70 generasi selector duplikat, dan menurunkan budget global ke 1.855; seluruh 14 route cocok dengan baseline computed-style dan Landing tetap identik per pixel.
 - Menghapus runtime penerjemah yang berjalan dengan full-DOM walker/observer; locale kini dirender langsung dari key React dengan fallback Indonesia, interpolasi, pluralization, dan bukti browser ID/EN yang bertahan setelah reload.
 - Membuat Settings mengikuti system/light/dark, high contrast, dan reduced motion dari pengguna maupun sistem; modal kini memindahkan serta mengembalikan fokus dengan benar dan memiliki matriks browser desktop/390px.
 - Membuat API E2E lokal deterministik dengan provider synthetic metadata-only serta migration smoke yang menolak overwrite.
