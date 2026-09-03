@@ -120,19 +120,49 @@ This is a living evidence register. Findings are closed only by source inspectio
 
 - Severity: P0 security
 - User impact: any administrator can reach sensitive operations that require narrower duties, recent MFA, break-glass reason, or a second approval.
-- Evidence: most `/api/admin` routes use `requireAdmin` and the user model primarily exposes `role`.
-- Reproduction: pending capability matrix and unauthorized-route integration tests.
+- Evidence: the original routes relied primarily on `requireAdmin`; direct API tests now exercise the named capability boundary independently from client visibility.
+- Reproduction: direct requests by users without the required capability receive `403 ADMIN_CAPABILITY_REQUIRED` without resource disclosure.
 - Root cause: authentication role and operational capability were modeled as one binary decision.
-- Changed files: not implemented.
-- Fix: server-side capability resolution and per-route middleware before modular Admin UI.
-- Tests: open.
-- Actual verification result: open.
-- Residual risk: remains a launch blocker after P0 integrity and is resolved in the Settings/Admin subproject.
+- Changed files: `server/src/admin-capabilities.js`, `server/src/index.js`, `server/src/admin-ai-routes.js`, `server/test/admin-capabilities.test.mjs`, and `server/test/admin-authorization-api.test.mjs`.
+- Fix: a stable server-side capability vocabulary and immutable role mappings protect sensitive Admin resources. AI mutations also require CSRF, recent MFA, reason, exact confirmation, and independent approval for production processor replacement.
+- Tests: fresh focused AI/control-plane run, 59/59 passing on 2026-09-03; complete current server run, 179/179 passing after the deterministic E2E/migration harness tests were added.
+- Actual verification result: resolved for the named capability routes and verified by direct API denial tests.
+- Residual risk: remaining legacy Admin routes must be mapped and reviewed as their route-backed modules are extracted; browser affordances never substitute for server authorization.
+
+## AUDIT-011 — Static process-wide AI configuration
+
+- Severity: P0 security/reliability
+- User impact: provider credentials, models, fallbacks, and processor disclosure could drift, and unsafe changes lacked a tested atomic activation/rollback boundary.
+- Evidence: the original runtime sourced a process-wide NaraRouter/Cloudflare configuration; it had no immutable drafts, capability evidence, active/LKG pointers, or secure Admin credential lifecycle.
+- Reproduction: focused repository/service/API tests reproduce untested activation, expired evidence, credential replacement, provider outage, undisclosed fallback, and rollback paths.
+- Root cause: provider integration, secret storage, routing, and runtime resolution were coupled to environment configuration.
+- Changed files: `server/src/ai-*`, `server/src/admin-ai-routes.js`, `server/src/admin-capabilities.js`, `server/src/processor-manifest.js`, `server/src/external-ai-consent.js`, Admin AI client modules/locales/styles, focused tests, and operational runbooks.
+- Fix: authenticated secret storage; guarded provider egress; adapter contracts; immutable provider/model/route revisions; synthetic testing; ten-minute evidence; atomic activation/LKG rollback; captured runtime snapshots; consent-aware fallback; metadata-only telemetry; circuit, maintenance, and emergency controls; route-isolated Admin AI UI.
+- Tests: 59/59 focused AI/control-plane checks; 179/179 complete server checks; 69/69 complete client checks; deterministic local API E2E; Admin AI browser proof at desktop and 390px.
+- Actual verification result: control-plane behavior is implemented and verified. Database assertions prove ciphertext-only envelope rows, immutable revision rows, atomic active/LKG pointers, revision-linked usage metadata, and absence of synthetic prompt/output plaintext in usage rows and audit payloads.
+- Residual risk: live provider correctness and production Key Vault/managed-identity permissions require deployment-environment validation; application-wide release remains blocked by open findings below.
 
 ## Additional Security Surfaces
 
-The following remain open for dedicated phases: provider secret storage, SSRF-safe egress, immutable configuration activation/rollback, MFA key separation and rotation, upload quarantine/malware/PII/prompt-injection states, high-risk approvals, content break-glass, retention execution, backup/restore, security scanners, and production configuration enforcement.
+The following remain open for dedicated phases: removal of the DOM translation walker, CSS compatibility debt, complete Settings/theme browser evidence, route isolation for the non-AI Admin console, upload quarantine/malware/PII/prompt-injection states, content break-glass, retention execution, backup/restore proof, and the complete release workflow. AI provider secret storage, guarded egress, immutable activation/rollback, capability enforcement, and production configuration contracts now have focused evidence.
 
 ## Current Verdict
 
-`NO-GO` for production-grade launch. This verdict reflects reproduced integrity, consent, provider-truth, authorization, and missing-evidence gaps. It does not negate the existing 109 server and 48 client tests; those suites validate a narrower legacy contract.
+`NO-GO` for the full production-grade mission. The AI control-plane slice is verified, but AUDIT-006 through AUDIT-009 and the remaining security/release surfaces above are not closed. Current fresh evidence includes 179/179 server tests, 69/69 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
+
+## Verification snapshot — 2026-09-03
+
+- Audited base: `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de`; verification branch checkpoint before this documentation: `bb8ef7f`.
+- Server: 179 passed, 0 failed, 0 skipped.
+- Client: 69 passed, 0 failed, 0 skipped.
+- Focused AI/control plane: 59 passed, 0 failed, 0 skipped.
+- Migration: 2 passed, 0 failed; copy includes available WAL sidecar and refuses overwrite.
+- API E2E: auth, profile, evidence, timeline, quality gate, template DOCX, restore, and verified password-change flow passed against a local synthetic provider; two metadata-only provider requests were observed.
+- Admin AI browser: deep links, password-only credential handling, minimum 12px computed typography, standard font weights, ID/EN, retry, keyboard, dark theme, reduced motion, desktop, and 390px passed.
+- Production build: 1,698 modules transformed; 0 build failures; one advisory for the existing 654.85kB vendor chunk.
+- Production configuration: 15 mandatory checks passed.
+- Dependency audit: 0 vulnerabilities.
+- Gitleaks 8.30.1: 229 commits and approximately 8.63MB scanned; 0 leaks. The downloaded Windows archive matched SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e` before execution.
+- Landing-owned files: no diff from the audited base at this checkpoint.
+- Non-failing runtime advisory: Node reports that built-in SQLite remains experimental. This is a platform warning, not a skipped or failed test.
+- Rendered evidence: `output/playwright/admin-ai/providers-desktop.png`, `models-actions-desktop.png`, `health-operations-desktop.png`, and `changes-mobile-dark.png`.

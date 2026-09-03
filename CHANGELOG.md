@@ -1,5 +1,11 @@
 ## 21.0.7 - 2026-09-02
 
+- Menambahkan control plane AI Admin yang revisioned untuk provider, model, routing, synthetic canary, activation, maintenance, circuit breaker, emergency disable, dan rollback last-known-good.
+- Menyimpan credential provider melalui Azure Key Vault atau envelope AES-256-GCM dengan key khusus, metadata masked, rotasi berversi, serta penghapusan ciphertext tanpa reveal-after-save.
+- Melindungi endpoint provider yang dapat dikonfigurasi dari SSRF, DNS rebinding, redirect, alamat privat/metadata, payload berlebih, dan timeout tidak terbatas.
+- Menambahkan telemetry AI metadata-only per revision/route/provider/model, latency serta first-token latency, fallback, queue, circuit state, dan error category tanpa prompt atau output.
+- Memecah Admin AI menjadi deep link lazy per resource dengan failure recovery, konfirmasi aksesibel, copy Indonesia/Inggris, dark/reduced-motion, dan guard computed typography minimum 12px.
+- Membuat API E2E lokal deterministik dengan provider synthetic metadata-only serta migration smoke yang menolak overwrite.
 - Menutup checkpoint integritas P0 dengan ledger mutasi idempoten, pemulihan stream tanpa POST ulang, dan bukti satu request ID untuk pesan, penggunaan AI, serta operasi kredit.
 - Menambahkan manifest processor NaraRouter yang bertipe dan consent AI eksternal berversi, default-off, dapat dicabut, serta diwajibkan server sebelum provider, persistensi, atau pemakaian kredit.
 - Menghormati preferensi Enter-to-send beserta Shift/Ctrl/Cmd/IME dan memverifikasinya pada desktop serta viewport mobile.

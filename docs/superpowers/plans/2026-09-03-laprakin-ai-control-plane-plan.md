@@ -220,12 +220,12 @@
 - Modify: `docs/runbooks/rollback.md`
 - Modify: `CHANGELOG.md`
 
-- [ ] Run all focused control-plane, capability, consent, chat, document, and Admin tests from fresh processes.
-- [ ] Run complete server/client suites, lint, typecheck, production build, API E2E, browser E2E, production-config validation, migration smoke, secret scan, and dependency audit.
-- [ ] Record privacy-safe database evidence for encrypted secrets, immutable revisions, active/LKG pointers, usage revision metadata, and zero secret/plaintext prompt in audit/telemetry.
-- [ ] Exercise and document provider rotation, outage/kill switch, activation failure, and one-click rollback.
-- [ ] Record screenshots and exact pass/fail/warning counts; leave any unproved requirement open.
-- [ ] Commit: `docs: record ai control plane evidence`.
+- [x] Run all focused control-plane, capability, consent, chat, document, and Admin tests from fresh processes.
+- [x] Run complete server/client suites, lint, typecheck, production build, API E2E, browser E2E, production-config validation, migration smoke, secret scan, and dependency audit.
+- [x] Record privacy-safe database evidence for encrypted secrets, immutable revisions, active/LKG pointers, usage revision metadata, and zero secret/plaintext prompt in audit/telemetry.
+- [x] Exercise and document provider rotation, outage/kill switch, activation failure, and one-click rollback.
+- [x] Record screenshots and exact pass/fail/warning counts; leave any unproved requirement open.
+- [x] Commit: `docs: record ai control plane evidence`.
 
 ## Phase Exit Gate
 
