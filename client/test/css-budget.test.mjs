@@ -6,7 +6,7 @@ const css = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8'
 const importantCount = (css.match(/!important\b/g) || []).length;
 
 test('compatibility stylesheet stays within the measured rule budget', () => {
-  assert.ok(importantCount <= 4730, `CSS !important budget exceeded: ${importantCount} > 4730`);
+  assert.ok(importantCount <= 3060, `CSS !important budget exceeded: ${importantCount} > 3060`);
 });
 
 test('section styles declare explicit ownership layers', async () => {
