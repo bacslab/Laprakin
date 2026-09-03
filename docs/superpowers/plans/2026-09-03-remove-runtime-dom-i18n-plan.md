@@ -32,7 +32,7 @@
 - Consumes: `createTranslator(language)`, `I18nContext`, `useResolvedTheme`, and `prefs.language`/`prefs.theme`.
 - Produces: `I18nRuntime({ children })` that updates `document.documentElement.lang`, updates `body.dataset.laprakinTheme`, and supplies `{ language, t }` without touching descendant DOM.
 
-- [ ] **Step 1: Replace the legacy-boundary assertion with a failing no-DOM-mutation contract**
+- [x] **Step 1: Replace the legacy-boundary assertion with a failing no-DOM-mutation contract**
 
 ```js
 test('i18n runtime never walks or mutates rendered DOM', () => {
@@ -42,13 +42,13 @@ test('i18n runtime never walks or mutates rendered DOM', () => {
 });
 ```
 
-- [ ] **Step 2: Run the contract and verify the intended failure**
+- [x] **Step 2: Run the contract and verify the intended failure**
 
 Run: `node --test client/test/i18n-contract.test.mjs`
 
 Expected: FAIL because `I18nRuntime.jsx` still imports `translateUiText`, creates a tree walker and observer, and `legacy.js` still exists.
 
-- [ ] **Step 3: Reduce `I18nRuntime` to context plus document metadata**
+- [x] **Step 3: Reduce `I18nRuntime` to context plus document metadata**
 
 ```jsx
 export default function I18nRuntime({ children }) {
@@ -66,7 +66,7 @@ export default function I18nRuntime({ children }) {
 
 Delete `client/src/i18n/legacy.js` after confirming it has no other importers.
 
-- [ ] **Step 4: Run the locale and complete client contracts**
+- [x] **Step 4: Run the locale and complete client contracts**
 
 Run: `node --test client/test/i18n-contract.test.mjs`
 
@@ -76,7 +76,7 @@ Run: `node --test --test-concurrency=1 "client/test/*.test.mjs"`
 
 Expected: all client tests pass with no failed or skipped tests.
 
-- [ ] **Step 5: Commit the runtime removal**
+- [x] **Step 5: Commit the runtime removal**
 
 ```text
 git add client/test/i18n-contract.test.mjs client/src/i18n/I18nRuntime.jsx client/src/i18n/legacy.js
@@ -93,7 +93,7 @@ git commit -m "refactor: remove runtime dom translation"
 - Consumes: the existing local API/Vite startup pattern from `scripts/admin-ai-ui-check.mjs`, development verification tokens, `laprakin-preferences`, and stable route accessibility names.
 - Produces: `npm run test:i18n-ui`, a self-contained browser check using isolated temporary storage and a local Chromium executable.
 
-- [ ] **Step 1: Write the failing browser assertions before adding the script implementation**
+- [x] **Step 1: Write the failing browser assertions before adding the script implementation**
 
 The check must prove:
 
@@ -116,13 +116,13 @@ assert.equal(await page.locator('body').evaluate((body) => body.querySelectorAll
 
 The script must also switch to Indonesian through persisted preferences, reload, and assert representative Indonesian labels without a full-page mutation pass.
 
-- [ ] **Step 2: Run the missing command and verify the intended failure**
+- [x] **Step 2: Run the missing command and verify the intended failure**
 
 Run: `npm run test:i18n-ui`
 
 Expected: FAIL because the root script and browser harness do not exist yet.
 
-- [ ] **Step 3: Implement the isolated harness**
+- [x] **Step 3: Implement the isolated harness**
 
 Use random loopback ports, `mkdtemp`, `spawn`, condition-based readiness, and cleanup in `finally`. Reuse Playwright's installed Chromium as the cross-platform fallback after Edge/Brave candidates. Register and verify one development user through the API; never log cookies, CSRF values, verification tokens, or user content. Capture only `output/playwright/i18n/workspace-en.png` and `settings-id.png`.
 
@@ -132,7 +132,7 @@ Add the root command:
 "test:i18n-ui": "node scripts/i18n-ui-check.mjs"
 ```
 
-- [ ] **Step 4: Run browser, client, lint, and build gates**
+- [x] **Step 4: Run browser, client, lint, and build gates**
 
 Run: `npm run test:i18n-ui`
 
