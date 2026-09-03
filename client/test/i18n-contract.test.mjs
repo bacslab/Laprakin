@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
@@ -221,10 +222,11 @@ test('remaining workspace controls and dialogs consume keyed locale copy', () =>
   assert.doesNotMatch(dialogSource, /Konfirmasi|Batal|Lanjutkan/);
 });
 
-test('legacy DOM translation stays behind the i18n runtime boundary', async () => {
+test('i18n runtime never walks or mutates rendered DOM', async () => {
   const mainSource = await readFile(new URL('../src/main.jsx', import.meta.url), 'utf8');
-  assert.match(runtimeSource, /translateUiText/);
   assert.match(mainSource, /I18nRuntime/);
+  assert.doesNotMatch(runtimeSource, /translateUiText|MutationObserver|createTreeWalker|querySelectorAll|nodeValue|setAttribute/);
+  assert.equal(existsSync(new URL('../src/i18n/legacy.js', import.meta.url)), false);
   assert.doesNotMatch(mainSource, /function I18nRuntime/);
   assert.doesNotMatch(mainSource, /translateUiText/);
 });
