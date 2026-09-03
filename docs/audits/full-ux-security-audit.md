@@ -125,7 +125,7 @@ This is a living evidence register. Findings are closed only by source inspectio
 - Root cause: authentication role and operational capability were modeled as one binary decision.
 - Changed files: `server/src/admin-capabilities.js`, `server/src/index.js`, `server/src/admin-ai-routes.js`, `server/test/admin-capabilities.test.mjs`, and `server/test/admin-authorization-api.test.mjs`.
 - Fix: a stable server-side capability vocabulary and immutable role mappings protect sensitive Admin resources. AI mutations also require CSRF, recent MFA, reason, exact confirmation, and independent approval for production processor replacement.
-- Tests: fresh focused AI/control-plane run, 59/59 passing on 2026-09-03; complete current server run, 179/179 passing after the deterministic E2E/migration harness tests were added.
+- Tests: fresh focused AI/control-plane run, 59/59 passing on 2026-09-03; complete current server run, 181/181 passing after the bounded Admin query contracts were added.
 - Actual verification result: resolved for the named capability routes and verified by direct API denial tests.
 - Residual risk: browser affordances never substitute for server authorization; new Admin routes must declare a named server capability and join the route-isolation/browser inventory before release.
 
@@ -138,33 +138,46 @@ This is a living evidence register. Findings are closed only by source inspectio
 - Root cause: provider integration, secret storage, routing, and runtime resolution were coupled to environment configuration.
 - Changed files: `server/src/ai-*`, `server/src/admin-ai-routes.js`, `server/src/admin-capabilities.js`, `server/src/processor-manifest.js`, `server/src/external-ai-consent.js`, Admin AI client modules/locales/styles, focused tests, and operational runbooks.
 - Fix: authenticated secret storage; guarded provider egress; adapter contracts; immutable provider/model/route revisions; synthetic testing; ten-minute evidence; atomic activation/LKG rollback; captured runtime snapshots; consent-aware fallback; metadata-only telemetry; circuit, maintenance, and emergency controls; route-isolated Admin AI UI.
-- Tests: 59/59 focused AI/control-plane checks; 179/179 complete server checks; 69/69 complete client checks; deterministic local API E2E; Admin AI browser proof at desktop and 390px.
+- Tests: 59/59 focused AI/control-plane checks; 181/181 complete server checks; 77/77 complete client checks; deterministic local API E2E; Admin AI browser proof at desktop and 390px.
 - Actual verification result: control-plane behavior is implemented and verified. Database assertions prove ciphertext-only envelope rows, immutable revision rows, atomic active/LKG pointers, revision-linked usage metadata, and absence of synthetic prompt/output plaintext in usage rows and audit payloads.
 - Residual risk: live provider correctness and production Key Vault/managed-identity permissions require deployment-environment validation; application-wide release remains blocked by open findings below.
 
+## Landing freeze gate
+
+- Status: resolved and verified for Definition of Done items 20–22.
+- Reproduction: although the original CTA rule declared weight 700, the later compatibility-layer `font: inherit` reset won. Both CTA buttons and spans computed to the unregistered `Plus Jakarta Sans` family at weight 400 on desktop and mobile.
+- Changed files: `client/src/styles/tokens.css`, `client/src/styles/landing.css`, `client/test/landing-freeze-contract.test.mjs`, committed visual baselines, `scripts/landing-freeze-check.mjs`, and the root test command.
+- Fix: Landing lime/mint and border aliases are now Landing-owned and no longer consume generic accent/text/line tokens. A narrow feature-owned compatibility bridge sets only the two approved CTA glyphs to the installed `Plus Jakarta Sans Variable` face at weight 700 and makes each child span inherit the same family/weight.
+- Tests: 8/8 focused CSS/Landing contracts passed. The deterministic browser gate passed at 1440×1000 and 390×844 after `document.fonts.ready`.
+- Actual verification result: both CTA buttons and spans compute to the variable family at weight 700; rectangles are unchanged; lime remains `#c2ff33`; mint remains `#45ffa2`; horizontal overflow is zero; pixel differences outside CTA rectangles are zero; dark/blue Workspace preferences and dark OS color scheme change zero Landing pixels.
+- Evidence: committed baseline screenshots and metrics under `client/test/visual-baselines/`, generated after/diff artifacts under `output/playwright/landing-freeze/`, and `docs/design/LANDING_FREEZE_EVIDENCE.md`.
+- Residual risk: the narrow CTA bridge remains in the compatibility cascade until AUDIT-007 removes the global font shorthand reset. The visual gate prevents that cleanup from silently changing Landing rendering.
+
 ## Additional Security Surfaces
 
-The following remain open for dedicated phases: CSS compatibility debt, wider Settings routing/persistence/accessibility work, route isolation for the non-AI Admin console, upload quarantine/malware/PII/prompt-injection states, content break-glass, retention execution, backup/restore proof, and the complete release workflow. Runtime DOM translation and Settings theme/motion behavior are now verified; AI provider secret storage, guarded egress, immutable activation/rollback, capability enforcement, and production configuration contracts also have focused evidence.
+The following remain open for dedicated phases: CSS compatibility debt, wider Settings routing/persistence/accessibility work, upload quarantine/malware/PII/prompt-injection states, content break-glass, retention execution, backup/restore proof, and the complete release workflow. Runtime DOM translation, Settings theme/motion behavior, and non-AI Admin route isolation are now verified; AI provider secret storage, guarded egress, immutable activation/rollback, capability enforcement, and production configuration contracts also have focused evidence.
 
 ## Current Verdict
 
-`NO-GO` for the full production-grade mission. The AI control-plane slice, AUDIT-006, AUDIT-008, and AUDIT-009 are verified, but AUDIT-007 and the remaining security/release surfaces above are not closed. Current fresh evidence includes 181/181 server tests, 77/77 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI, legacy Admin isolation, i18n, and Settings browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
+`NO-GO` for the full production-grade mission. The AI control-plane slice, Landing freeze gate, AUDIT-006, AUDIT-008, and AUDIT-009 are verified, but AUDIT-007 and the remaining security/release surfaces above are not closed. Current fresh evidence includes 181/181 server tests, 79/79 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI, legacy Admin isolation, i18n, Settings, and Landing browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
 
 ## Verification snapshot — 2026-09-03
 
-- Audited base: `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de`; verification branch checkpoint before this documentation: `3daa58c`.
-- Server: 179 passed, 0 failed, 0 skipped.
-- Client: 72 passed, 0 failed, 0 skipped.
+- Audited base: `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de`; legacy Admin implementation checkpoint before its closure documentation: `c0a8670`.
+- Server: 181 passed, 0 failed, 0 skipped.
+- Client: 79 passed, 0 failed, 0 skipped.
 - I18n: 18 focused contracts passed; DOM translation source scan clean; real-browser Auth, Workspace, Settings, and Notifications passed in ID/EN at desktop and 390px with persistence after reload.
 - Settings browser: system/light/dark, live OS theme changes, high contrast, system/user reduced motion, persistence, focus entry/return, Escape, and 390px reflow passed with no unexpected browser errors.
 - Focused AI/control plane: 59 passed, 0 failed, 0 skipped.
 - Migration: 2 passed, 0 failed; copy includes available WAL sidecar and refuses overwrite.
 - API E2E: auth, profile, evidence, timeline, quality gate, template DOCX, restore, and verified password-change flow passed against a local synthetic provider; two metadata-only provider requests were observed.
 - Admin AI browser: deep links, password-only credential handling, minimum 12px computed typography, standard font weights, ID/EN, retry, keyboard, dark theme, reduced motion, desktop, and 390px passed.
-- Production build: 1,699 modules transformed; 0 build failures; one advisory for the existing 654.85kB vendor chunk.
+- Legacy Admin browser: 14 independent deep links, resource-request isolation, URL filter/reload state, selected-user deep link, seeded next/previous pagination, data/render failure recovery, desktop, and 390px passed.
+- Landing freeze browser: hero/final CTA variable font and weight passed at 1440×1000 and 390×844; zero pixels changed outside CTA rectangles; dark/blue Workspace preferences changed zero Landing pixels.
+- Production build: 1,717 modules transformed; 0 build failures; separate legacy Admin route chunks and a 6.99kB shell; one advisory for the existing 654.85kB vendor chunk.
 - Production configuration: 15 mandatory checks passed.
-- Dependency audit: 0 vulnerabilities.
+- Dependency audit: 0 vulnerabilities after upgrading Playwright to 1.55.1, the first release outside the detected browser-download certificate advisory range.
 - Gitleaks 8.30.1: 229 commits and approximately 8.63MB scanned; 0 leaks. The downloaded Windows archive matched SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e` before execution.
-- Landing-owned files: no diff from the audited base at this checkpoint.
+- Landing-owned source diff: only the approved token isolation and CTA glyph family/weight bridge; page markup, base Figma stylesheet, copy, assets, dimensions, color values, shadows, responsive rules, and motion remain unchanged.
 - Non-failing runtime advisory: Node reports that built-in SQLite remains experimental. This is a platform warning, not a skipped or failed test.
-- Rendered evidence: `output/playwright/admin-ai/providers-desktop.png`, `models-actions-desktop.png`, `health-operations-desktop.png`, `changes-mobile-dark.png`, `output/playwright/i18n/workspace-en.png`, `settings-id.png`, `output/playwright/settings/settings-light.png`, `settings-dark.png`, and `settings-mobile-high-contrast.png`.
+- Rendered evidence: `output/playwright/landing-freeze/landing-desktop-after.png`, `landing-mobile-after.png`, their pixel diffs and preference variants; `output/playwright/admin-ai/providers-desktop.png`, `models-actions-desktop.png`, `health-operations-desktop.png`, `changes-mobile-dark.png`; `output/playwright/admin-legacy/cms-desktop.png`, `audit-mobile.png`; `output/playwright/i18n/workspace-en.png`, `settings-id.png`; and `output/playwright/settings/settings-light.png`, `settings-dark.png`, `settings-mobile-high-contrast.png`.

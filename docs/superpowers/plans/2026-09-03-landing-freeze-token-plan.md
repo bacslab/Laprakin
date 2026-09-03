@@ -31,7 +31,7 @@
 
 - [x] Run focused contracts, full client tests, lint, typecheck, production build, and Landing browser gate.
 - [x] Update the audit, design evidence, and changelog with exact results and residual risks.
-- [ ] Commit the implementation and evidence in logical checkpoints.
+- [x] Commit the implementation and evidence in logical checkpoints.
 
 ## Exit Gate
 

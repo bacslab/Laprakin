@@ -7,6 +7,8 @@
 - Memecah Admin AI menjadi deep link lazy per resource dengan failure recovery, konfirmasi aksesibel, copy Indonesia/Inggris, dark/reduced-motion, dan guard computed typography minimum 12px.
 - Memecah 14 route Admin non-AI menjadi chunk lazy independen dengan shell stabil, loading/error/retry/freshness lokal, serta error boundary yang mencegah kegagalan render satu modul menjatuhkan console.
 - Menambahkan query Admin yang bounded, filter dan cursor berbasis URL, next/previous navigation, exact selected-user deep link, serta bukti browser desktop/390px untuk isolasi request dan pemulihan kegagalan.
+- Mengunci Landing dengan baseline pixel desktop/390px, token lime/mint khusus Landing, dan CTA Plus Jakarta Sans Variable 700; tidak ada pixel berubah di luar kotak CTA maupun akibat preferensi tema/aksen Workspace.
+- Memutakhirkan Playwright ke rilis yang menutup advisory verifikasi sertifikat unduhan browser; audit dependency penuh kembali 0 vulnerability.
 - Menghapus runtime penerjemah yang berjalan dengan full-DOM walker/observer; locale kini dirender langsung dari key React dengan fallback Indonesia, interpolasi, pluralization, dan bukti browser ID/EN yang bertahan setelah reload.
 - Membuat Settings mengikuti system/light/dark, high contrast, dan reduced motion dari pengguna maupun sistem; modal kini memindahkan serta mengembalikan fokus dengan benar dan memiliki matriks browser desktop/390px.
 - Membuat API E2E lokal deterministik dengan provider synthetic metadata-only serta migration smoke yang menolak overwrite.
