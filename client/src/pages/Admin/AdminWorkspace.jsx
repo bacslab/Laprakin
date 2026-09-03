@@ -1,6 +1,7 @@
 import { UiProvider } from '../../state/ui-context';
 import { useLocation } from '../../router';
 import { loadPage } from '../../lib/load-page';
+import '../../styles/admin.css';
 
 const AdminAiWorkspace = loadPage(() => import('./ai/AdminAiWorkspace'));
 

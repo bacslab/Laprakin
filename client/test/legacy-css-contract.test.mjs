@@ -54,3 +54,15 @@ test('retired pre-Figma public class families are absent from runtime and compat
     assert.doesNotMatch(compatibilitySelectors.join('\n'), new RegExp(`\\.${className}(?![a-zA-Z0-9_-])`));
   }
 });
+
+test('legacy Admin selectors are feature-owned and do not use important overrides', async () => {
+  const compatibility = await readFile('client/src/styles.css', 'utf8');
+  const admin = await readFile('client/src/styles/admin.css', 'utf8');
+  const compatibilitySelectors = [];
+  postcss.parse(compatibility).walkRules((rule) => compatibilitySelectors.push(rule.selector));
+
+  assert.doesNotMatch(compatibilitySelectors.join('\n'), /\.(?:admin(?:-[a-zA-Z0-9_-]+)?|cms-[a-zA-Z0-9_-]+|empty-admin|activity-bars|feedback-admin-body|retention-panel|status-(?:completed|ready|running|queued|failed)|risk-(?:reviewed|open|dismissed))(?![a-zA-Z0-9_-])/);
+  assert.doesNotMatch(admin, /!important\b/);
+  assert.match(admin, /@layer compatibility/);
+  assert.match(admin, /\.admin-workspace\b/);
+});

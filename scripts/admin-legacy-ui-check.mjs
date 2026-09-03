@@ -4,7 +4,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -75,16 +75,54 @@ async function stopProcess(child) {
   await Promise.race([once(child, 'exit'), new Promise((resolve) => setTimeout(resolve, 5_000))]);
 }
 
+const adminSnapshotSelectors = [
+  '.admin-workspace', '.admin-sidebar', '.admin-main', '.admin-header', '.admin-content',
+  '.admin-route-status', '.admin-list-controls', '.admin-privacy-note', '.admin-metric-grid',
+  '.admin-panel', '.admin-panel-head', '.admin-list', '.admin-inline', '.admin-actions',
+  '.admin-user-picker', '.admin-access-detail', '.admin-restriction-form', '.admin-broadcast-grid',
+  '.admin-pricing-grid', '.cms-form', '.cms-copy-section', '.cms-media-card',
+];
+
+async function adminComputedSnapshot(page) {
+  return page.evaluate((selectors) => Object.fromEntries(selectors.map((selector) => {
+    const element = [...document.querySelectorAll(selector)].find((candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      const style = getComputedStyle(candidate);
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    });
+    if (!element) return [selector, null];
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return [selector, {
+      rect: [rect.x, rect.y, rect.width, rect.height].map((value) => Math.round(value * 100) / 100),
+      display: style.display,
+      position: style.position,
+      gridTemplateColumns: style.gridTemplateColumns,
+      gap: style.gap,
+      padding: style.padding,
+      borderRadius: style.borderRadius,
+      backgroundColor: style.backgroundColor,
+      color: style.color,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+      lineHeight: style.lineHeight,
+      overflow: style.overflow,
+      maxHeight: style.maxHeight,
+    }];
+  })), adminSnapshotSelectors);
+}
+
 const root = path.resolve(import.meta.dirname, '..');
 const sandbox = await mkdtemp(path.join(os.tmpdir(), 'laprakin-admin-legacy-ui-'));
 const apiPort = await availablePort();
 const webPort = await availablePort();
 const apiBase = `http://127.0.0.1:${apiPort}`;
 const webBase = `http://127.0.0.1:${webPort}`;
-const email = `admin-legacy-ui-${Date.now()}@example.test`;
-const studentEmail = `student-legacy-ui-${Date.now()}@example.test`;
+const email = 'admin-legacy-ui@example.test';
+const studentEmail = 'student-legacy-ui@example.test';
 const password = 'KataSandi-Uji-2026';
 const screenshotDir = path.join(root, 'output', 'playwright', 'admin-legacy');
+const baselinePath = path.join(root, 'client', 'test', 'visual-baselines', 'admin-legacy-computed.json');
 await mkdir(screenshotDir, { recursive: true });
 
 let serverLogs = '';
@@ -143,21 +181,21 @@ try {
   assert.equal(verification.ok, true, await verification.text());
   const studentRegistration = await fetch(`${apiBase}/api/auth/register`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-laprakin-device': `student-${Date.now()}` },
+    headers: { 'content-type': 'application/json', 'x-laprakin-device': 'student-legacy-ui' },
     body: JSON.stringify({ email: studentEmail, password }),
   });
   const studentRegistrationPayload = await studentRegistration.json();
   assert.equal(studentRegistration.status, 201, JSON.stringify(studentRegistrationPayload));
   const studentVerification = await fetch(`${apiBase}/api/auth/verify`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-laprakin-device': `student-${Date.now()}` },
+    headers: { 'content-type': 'application/json', 'x-laprakin-device': 'student-legacy-ui' },
     body: JSON.stringify({ token: studentRegistrationPayload.developmentVerificationToken }),
   });
   assert.equal(studentVerification.ok, true, await studentVerification.text());
   const seedDb = new DatabaseSync(path.join(sandbox, 'data', 'laprakin.sqlite'));
   const insertUser = seedDb.prepare(`INSERT INTO users (id, email, password_hash, full_name, role, email_verified_at, created_at, updated_at) VALUES (?, ?, 'browser-test', ?, 'student', ?, ?, ?)`);
   for (let index = 0; index < 30; index += 1) {
-    const createdAt = new Date(Date.now() - (index + 1) * 1_000).toISOString();
+    const createdAt = new Date(Date.UTC(2026, 8, 3, 0, 0, index)).toISOString();
     insertUser.run(randomUUID(), `pagination-${String(index).padStart(2, '0')}@example.test`, `Pagination ${index}`, createdAt, createdAt, createdAt);
   }
   seedDb.close();
@@ -218,6 +256,7 @@ try {
     ['/admin/audit', ['/api/admin/audit'], 'Audit log'],
     ['/admin/retention', [], 'Retensi'],
   ];
+  const computedSnapshots = {};
 
   for (const [route, expectedEndpoints, heading] of routes) {
     apiRequests.length = 0;
@@ -228,6 +267,14 @@ try {
     for (const expectedEndpoint of expectedEndpoints) assert.equal(routeDataRequests.some((requestPath) => requestPath === expectedEndpoint || requestPath.startsWith(`${expectedEndpoint}/`)), true, `${route} missed ${expectedEndpoint}:\n${apiRequests.join('\n')}`);
     const unrelated = routeDataRequests.filter((requestPath) => !expectedEndpoints.some((expectedEndpoint) => requestPath === expectedEndpoint || requestPath.startsWith(`${expectedEndpoint}/`)));
     assert.deepEqual(unrelated, [], `${route} requested unrelated Admin resources:\n${unrelated.join('\n')}`);
+    computedSnapshots[route] = await adminComputedSnapshot(page);
+  }
+
+  if (process.env.UPDATE_ADMIN_BASELINES === '1') {
+    await writeFile(baselinePath, `${JSON.stringify(computedSnapshots, null, 2)}\n`);
+  } else {
+    const expectedSnapshots = JSON.parse(await readFile(baselinePath, 'utf8'));
+    assert.deepEqual(computedSnapshots, expectedSnapshots, 'Legacy Admin computed styles changed from the audited baseline.');
   }
 
   await page.goto(`${webBase}/admin/users?q=student-legacy-ui&limit=25`);
