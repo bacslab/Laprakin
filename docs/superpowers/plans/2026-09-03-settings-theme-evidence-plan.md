@@ -8,11 +8,11 @@
 
 ## Task 1 — Resolve system reduced motion
 
-- [ ] Add a failing pure policy test for user/system reduced motion and a source contract proving Workspace consumes the resolved value.
-- [ ] Implement `resolveReducedMotion` and a matchMedia-backed hook with live system-change handling.
-- [ ] Replace the direct `prefs.reducedMotion` attribute decision in `LegacyWorkspaceView`.
-- [ ] Run focused and complete client tests.
-- [ ] Commit the motion policy.
+- [x] Add a failing pure policy test for user/system reduced motion and a source contract proving Workspace consumes the resolved value.
+- [x] Implement `resolveReducedMotion` and a matchMedia-backed hook with live system-change handling.
+- [x] Replace the direct `prefs.reducedMotion` attribute decision in `LegacyWorkspaceView`.
+- [x] Run focused and complete client tests.
+- [x] Commit the motion policy.
 
 ## Task 2 — Add rendered Settings matrix
 

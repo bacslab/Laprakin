@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { resolveReducedMotion } from './motion-policy';
 
 export function getSystemTheme() {
   if (typeof window === 'undefined' || !window.matchMedia) return 'light';
@@ -22,4 +23,22 @@ export function useResolvedTheme(theme = 'system') {
     return () => query.removeEventListener?.('change', update);
   }, [theme]);
   return resolved;
+}
+
+function getSystemReducedMotion() {
+  return typeof window !== 'undefined'
+    && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+}
+
+export function useResolvedReducedMotion(userPreference = false) {
+  const [systemPreference, setSystemPreference] = useState(getSystemReducedMotion);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setSystemPreference(query.matches);
+    update();
+    query.addEventListener?.('change', update);
+    return () => query.removeEventListener?.('change', update);
+  }, []);
+  return resolveReducedMotion(userPreference, systemPreference);
 }

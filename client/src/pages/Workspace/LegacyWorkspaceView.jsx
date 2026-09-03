@@ -21,6 +21,7 @@ import IdentityIntakeModal from './IdentityIntakeModal';
 import WorkspaceTutorial from './WorkspaceTutorial';
 import DocumentSidePanel from './DocumentSidePanel';
 import { loadPage } from '../../lib/load-page';
+import { useResolvedReducedMotion } from '../../lib/theme';
 import { useI18n } from '../../i18n/context';
 
 const ChatSurface = loadPage(() => import('./ChatSurface'));
@@ -56,12 +57,13 @@ export default function LegacyWorkspaceView({
   headerSubtitle, startNewChat, setRoute,
 }) {
   const { t } = useI18n();
+  const reducedMotion = useResolvedReducedMotion(prefs.reducedMotion);
   const navItems = [
     { key: 'chat', label: t('workspace.chats'), icon: MessageCircle },
     { key: 'projects', label: t('workspace.shell.projects'), icon: FolderKanban },
     { key: 'documents', label: t('workspace.documents'), icon: FolderOpen },
   ];
-  return <div className={`workspace ${leftCollapsed ? 'left-collapsed' : ''} ${rightOpen && page === 'chat' ? 'right-open' : ''} ${documentOpen && page === 'chat' ? 'document-open' : ''} ${resolvedTheme === 'dark' ? 'theme-dark' : ''} ${prefs.compact ? 'compact' : ''}`} data-motion={prefs.reducedMotion ? 'reduce' : 'full'} data-accent={workspaceAccent.key} data-contrast={prefs.contrast || 'default'} data-language={prefs.language || 'id'} style={{ '--workspace-orange': workspaceAccent.color, '--workspace-accent': workspaceAccent.color, '--workspace-accent-contrast': workspaceAccent.contrast, '--workspace-accent-ink': resolvedTheme === 'light' ? workspaceAccent.lightInk : workspaceAccent.color }}>
+  return <div className={`workspace ${leftCollapsed ? 'left-collapsed' : ''} ${rightOpen && page === 'chat' ? 'right-open' : ''} ${documentOpen && page === 'chat' ? 'document-open' : ''} ${resolvedTheme === 'dark' ? 'theme-dark' : ''} ${prefs.compact ? 'compact' : ''}`} data-motion={reducedMotion ? 'reduce' : 'full'} data-accent={workspaceAccent.key} data-contrast={prefs.contrast || 'default'} data-language={prefs.language || 'id'} style={{ '--workspace-orange': workspaceAccent.color, '--workspace-accent': workspaceAccent.color, '--workspace-accent-contrast': workspaceAccent.contrast, '--workspace-accent-ink': resolvedTheme === 'light' ? workspaceAccent.lightInk : workspaceAccent.color }}>
     <aside className="left-sidebar">
       <div className="sidebar-top">
         <Link to="/app" className="workspace-brand"><BrandMark /><b>Laprakin</b></Link>
