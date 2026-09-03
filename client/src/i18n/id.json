@@ -337,6 +337,8 @@
       "settings": "Settings",
       "accountMenu": "Menu akun",
       "availableReports": "{{count}} laprak tersedia",
+      "availableReports_one": "{{count}} laprak tersedia",
+      "availableReports_other": "{{count}} laprak tersedia",
       "closeNavigation": "Tutup navigasi",
       "openNavigation": "Buka navigasi",
       "chatTitle": "Chat Laprakin",

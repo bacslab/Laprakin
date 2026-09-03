@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { createTranslatorFromDictionaries } from '../src/i18n/translate.js';
 
 const [id, en, source, landingSource, statusSource, pricingSource, billingSource, tutorialSource, composerSource, previewSource, attachmentSource, overlaysSource, documentSource, workflowSource, settingsSource] = await Promise.all([
   readFile(new URL('../src/i18n/id.json', import.meta.url), 'utf8').then(JSON.parse),
@@ -73,8 +74,21 @@ test('workspace runtime namespaces resolve at the paths used by components', () 
 
 test('translator falls back to Indonesian and interpolates values', () => {
   assert.match(source, /export function createTranslator/);
-  assert.match(source, /language === 'en'/);
-  assert.match(source, /readPath\(language === 'en' \? en : id, key\)/);
+  const translate = createTranslatorFromDictionaries({ id: { greeting: 'Halo {{name}}' }, en: {} }, 'en');
+  assert.equal(translate('greeting', { name: 'Ayu' }), 'Halo Ayu');
+});
+
+test('translator selects plural forms before interpolating and preserves Indonesian fallback', () => {
+  const dictionaries = {
+    id: { reports: { count_one: '{{count}} laprak tersedia', count_other: '{{count}} laprak tersedia' } },
+    en: { reports: { count_one: '{{count}} report available', count_other: '{{count}} reports available' } },
+  };
+  const english = createTranslatorFromDictionaries(dictionaries, 'en');
+  const indonesian = createTranslatorFromDictionaries(dictionaries, 'id');
+  assert.equal(english('reports.count', { count: 1 }), '1 report available');
+  assert.equal(english('reports.count', { count: 2 }), '2 reports available');
+  assert.equal(indonesian('reports.count', { count: 1 }), '1 laprak tersedia');
+  assert.equal(english('reports.missing', { count: 2 }), 'reports.missing');
 });
 
 test('landing page consumes keyed locale copy', () => {

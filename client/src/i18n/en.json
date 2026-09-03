@@ -337,6 +337,8 @@
       "settings": "Settings",
       "accountMenu": "Account menu",
       "availableReports": "{{count}} reports available",
+      "availableReports_one": "{{count}} report available",
+      "availableReports_other": "{{count}} reports available",
       "closeNavigation": "Close navigation",
       "openNavigation": "Open navigation",
       "chatTitle": "Laprakin chat",
