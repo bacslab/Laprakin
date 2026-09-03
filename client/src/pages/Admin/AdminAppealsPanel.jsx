@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import { formatDate } from '../../lib/formatters';
 import { useI18n } from '../../i18n/context';
 
-export default function AdminAppealsPanel({ setNotice, onRefresh }) {
+export default function AdminAppealsPanel({ initialAppeals, setNotice, onRefresh }) {
   const { t } = useI18n();
   const [appeals, setAppeals] = useState([]);
   const [replies, setReplies] = useState({});
   const [busy, setBusy] = useState(false);
-  const loadAppeals = useCallback(() => api('/admin/appeals?status=all').then((data) => setAppeals(data.appeals || [])).catch((error) => setNotice(error.message)), [setNotice]);
-  useEffect(() => { loadAppeals(); }, [loadAppeals]);
+  useEffect(() => { setAppeals(initialAppeals || []); }, [initialAppeals]);
   const review = async (appeal, status) => {
     const reply = (replies[appeal.id] || '').trim();
     if (reply.length < 4) return;
@@ -19,7 +18,7 @@ export default function AdminAppealsPanel({ setNotice, onRefresh }) {
         method: 'PUT',
         body: { status, reply, liftRestrictions: status === 'approved' },
       });
-      await Promise.all([loadAppeals(), onRefresh()]);
+      await onRefresh();
       setNotice(t(status === 'approved' ? 'admin.console.appeals.approvedNotice' : 'admin.console.appeals.reviewedNotice'));
     } catch (error) { setNotice(error.message); } finally { setBusy(false); }
   };

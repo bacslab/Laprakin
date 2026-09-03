@@ -54,7 +54,7 @@ function statusLabel(update, t) {
   return t('admin.console.updates.published');
 }
 
-export function FeatureUpdatesAdmin({ setNotice }) {
+export function FeatureUpdatesAdmin({ setNotice, initialUpdates = null, reloadUpdates = null }) {
   const { t } = useI18n();
   const [updates, setUpdates] = useState([]);
   const [selectedId, setSelectedId] = useState('');
@@ -65,8 +65,8 @@ export function FeatureUpdatesAdmin({ setNotice }) {
   const selected = useMemo(() => updates.find((item) => item.id === selectedId) || null, [updates, selectedId]);
 
   const load = async (preferredId = '') => {
-    const data = await api('/admin/feature-updates');
-    const items = data.updates || [];
+    const data = reloadUpdates ? await reloadUpdates() : await api('/admin/feature-updates');
+    const items = data?.updates || [];
     setUpdates(items);
     const nextId = preferredId || selectedId || items[0]?.id || '';
     const next = items.find((item) => item.id === nextId) || items[0] || null;
@@ -74,7 +74,13 @@ export function FeatureUpdatesAdmin({ setNotice }) {
     setForm(formUpdate(next || EMPTY_UPDATE));
   };
 
-  useEffect(() => { load().catch((error) => setNotice(error.message)); }, []);
+  useEffect(() => {
+    if (!Array.isArray(initialUpdates)) { load().catch((error) => setNotice(error.message)); return; }
+    setUpdates(initialUpdates);
+    const next = initialUpdates.find((item) => item.id === selectedId) || initialUpdates[0] || null;
+    setSelectedId(next?.id || '');
+    setForm(formUpdate(next || EMPTY_UPDATE));
+  }, [initialUpdates]);
   useEffect(() => { if (selected) setForm(formUpdate(selected)); }, [selectedId]);
 
   const createUpdate = async () => {

@@ -34,6 +34,7 @@ import { CHAT_MESSAGE_OPERATION, runCanonicalChatMutation } from './chat-message
 import { getMutationSnapshot } from './mutation-requests.js';
 import { getMessageReactionAnalytics, removeMessageReaction, setMessageReaction } from './message-reactions.js';
 import { listAdminAudit, recordAdminAudit } from './admin-audit.js';
+import { adminListPage, parseAdminListQuery } from './admin-list-query.js';
 import { registerAdminAiRoutes } from './admin-ai-routes.js';
 import { capabilitiesForUser, isPrivilegedUser, requireCapability } from './admin-capabilities.js';
 import { createTotpSecret, getAdminMfaStatus, verifyTotpCode, adminMfaRequired } from './mfa.js';
@@ -5205,16 +5206,19 @@ app.get('/api/admin/events', requireAuth, requireCapability('incidents.manage'),
 });
 
 app.get('/api/admin/users', requireAuth, requireCapability('users.view'), (req, res) => {
-  const query = z.string().trim().max(120).catch('').parse(req.query.q);
-  const limit = z.coerce.number().int().min(1).max(100).catch(50).parse(req.query.limit);
-  const pattern = `%${query.replace(/[%_]/g, '\\$&')}%`;
-  const users = db.prepare(`
+  const query = parseAdminListQuery(req.query, { defaultLimit: 25 });
+  const userId = String(req.query.userId || '').trim().slice(0, 160);
+  const pattern = `%${query.q.replace(/[%_]/g, '\\$&')}%`;
+  const rows = db.prepare(`
     SELECT id, email, full_name, role, email_verified_at, created_at
     FROM users
     WHERE deleted_at IS NULL AND role != 'admin'
+      AND (? = '' OR id = ?)
       AND (? = '' OR email LIKE ? ESCAPE '\\' OR full_name LIKE ? ESCAPE '\\')
-    ORDER BY created_at DESC LIMIT ?
-  `).all(query, pattern, pattern, limit).map((user) => {
+    ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+  `).all(userId, userId, query.q, pattern, pattern, query.limit + 1, query.cursor);
+  const page = adminListPage(rows, query);
+  const users = page.items.map((user) => {
     const wallet = getWallet(user.id);
     const subscription = activeSubscription(user.id);
     const hasPaidCredit = Boolean(db.prepare(`
@@ -5244,7 +5248,7 @@ app.get('/api/admin/users', requireAuth, requireCapability('users.view'), (req, 
       createdAt: user.created_at,
     };
   });
-  res.json({ users });
+  res.json({ users, pageInfo: page.pageInfo });
 });
 
 app.put('/api/admin/users/:id/plan', requireAuth, requireCsrf, requireCapability('billing.manage'), adminMutationLimiter, (req, res) => {
@@ -5442,15 +5446,19 @@ app.delete('/api/admin/users/:id/restrictions/:restrictionId', requireAuth, requ
 });
 
 app.get('/api/admin/appeals', requireAuth, requireCapability('appeals.review'), (req, res) => {
-  const status = z.enum(['open', 'approved', 'rejected', 'all']).catch('open').parse(req.query.status);
-  const appeals = db.prepare(`
+  const query = parseAdminListQuery(req.query, { statuses: ['open', 'approved', 'rejected', 'all'], defaultStatus: 'open', defaultLimit: 25 });
+  const pattern = `%${query.q.replace(/[%_]/g, '\\$&')}%`;
+  const rows = db.prepare(`
     SELECT appeal.*, user.email, user.full_name
     FROM account_appeals appeal
     LEFT JOIN users user ON user.id = appeal.user_id
     WHERE (? = 'all' OR appeal.status = ?)
-    ORDER BY CASE appeal.status WHEN 'open' THEN 0 ELSE 1 END, appeal.created_at DESC
-    LIMIT 200
-  `).all(status, status).map((appeal) => ({
+      AND (? = '' OR user.email LIKE ? ESCAPE '\\' OR user.full_name LIKE ? ESCAPE '\\' OR appeal.message LIKE ? ESCAPE '\\')
+    ORDER BY CASE appeal.status WHEN 'open' THEN 0 ELSE 1 END, appeal.created_at DESC, appeal.id DESC
+    LIMIT ? OFFSET ?
+  `).all(query.status, query.status, query.q, pattern, pattern, pattern, query.limit + 1, query.cursor);
+  const page = adminListPage(rows, query);
+  const appeals = page.items.map((appeal) => ({
     id: appeal.id,
     userId: appeal.user_id || null,
     userEmail: appeal.email || '',
@@ -5461,7 +5469,7 @@ app.get('/api/admin/appeals', requireAuth, requireCapability('appeals.review'), 
     createdAt: appeal.created_at,
     reviewedAt: appeal.reviewed_at || null,
   }));
-  res.json({ appeals });
+  res.json({ appeals, pageInfo: page.pageInfo });
 });
 
 app.put('/api/admin/appeals/:id', requireAuth, requireCsrf, requireCapability('appeals.review'), adminMutationLimiter, asyncHandler(async (req, res) => {
@@ -5513,10 +5521,16 @@ app.put('/api/admin/appeals/:id', requireAuth, requireCsrf, requireCapability('a
 }));
 
 app.get('/api/admin/broadcasts', requireAuth, requireCapability('cms.publish'), (req, res) => {
-  const broadcasts = db.prepare(`
+  const query = parseAdminListQuery(req.query, { defaultLimit: 25 });
+  const pattern = `%${query.q.replace(/[%_]/g, '\\$&')}%`;
+  const rows = db.prepare(`
     SELECT id, audience, subject, image_url, recipient_count, delivered_count, created_at
-    FROM admin_broadcasts ORDER BY created_at DESC LIMIT 100
-  `).all().map((row) => ({
+    FROM admin_broadcasts
+    WHERE (? = '' OR subject LIKE ? ESCAPE '\\' OR audience LIKE ? ESCAPE '\\')
+    ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+  `).all(query.q, pattern, pattern, query.limit + 1, query.cursor);
+  const page = adminListPage(rows, query);
+  const broadcasts = page.items.map((row) => ({
     id: row.id,
     audience: row.audience,
     subject: row.subject,
@@ -5525,7 +5539,7 @@ app.get('/api/admin/broadcasts', requireAuth, requireCapability('cms.publish'), 
     deliveredCount: Number(row.delivered_count || 0),
     createdAt: row.created_at,
   }));
-  res.json({ broadcasts });
+  res.json({ broadcasts, pageInfo: page.pageInfo });
 });
 
 app.post('/api/admin/broadcasts/image', requireAuth, requireCsrf, requireCapability('cms.publish'), uploadLimiter, emailMediaUpload.single('file'), asyncHandler(async (req, res) => {
@@ -5744,16 +5758,20 @@ app.post('/api/admin/credits/grant', requireAuth, requireCsrf, requireCapability
 }));
 
 app.get('/api/admin/alerts', requireAuth, requireCapability('incidents.manage'), (req, res) => {
-  const status = z.enum(['open', 'resolved', 'all']).catch('open').parse(req.query.status);
-  const alerts = db.prepare(`
+  const query = parseAdminListQuery(req.query, { statuses: ['open', 'resolved', 'all'], defaultStatus: 'open', defaultLimit: 25 });
+  const pattern = `%${query.q.replace(/[%_]/g, '\\$&')}%`;
+  const rows = db.prepare(`
     SELECT alert.*, user.email, user.full_name
     FROM admin_alerts alert
     LEFT JOIN users user ON user.id = alert.user_id
     WHERE (? = 'all' OR alert.status = ?)
+      AND (? = '' OR alert.summary LIKE ? ESCAPE '\\' OR alert.kind LIKE ? ESCAPE '\\' OR alert.error_code LIKE ? ESCAPE '\\' OR user.email LIKE ? ESCAPE '\\')
     ORDER BY CASE alert.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
-      alert.created_at DESC
-    LIMIT 200
-  `).all(status, status).map((alert) => ({
+      alert.created_at DESC, alert.id DESC
+    LIMIT ? OFFSET ?
+  `).all(query.status, query.status, query.q, pattern, pattern, pattern, pattern, query.limit + 1, query.cursor);
+  const page = adminListPage(rows, query);
+  const alerts = page.items.map((alert) => ({
     id: alert.id,
     kind: alert.kind,
     severity: alert.severity,
@@ -5768,7 +5786,7 @@ app.get('/api/admin/alerts', requireAuth, requireCapability('incidents.manage'),
     createdAt: alert.created_at,
     resolvedAt: alert.resolved_at || null,
   }));
-  res.json({ alerts });
+  res.json({ alerts, pageInfo: page.pageInfo });
 });
 
 app.put('/api/admin/alerts/:id', requireAuth, requireCsrf, requireCapability('incidents.manage'), adminMutationLimiter, (req, res) => {
@@ -5931,9 +5949,18 @@ app.post('/api/admin/integrations/check', requireAuth, requireCsrf, requireCapab
 }));
 
 app.get('/api/admin/feedback', requireAuth, requireCapability('cms.edit'), (req, res) => {
-  const items = db.prepare(`
-    SELECT * FROM feedback_items ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'reviewing' THEN 1 ELSE 2 END, updated_at DESC LIMIT 100
-  `).all().map((row) => ({
+  const query = parseAdminListQuery(req.query, { statuses: ['open', 'reviewing', 'resolved', 'closed', 'all'], defaultStatus: 'all', defaultLimit: 25 });
+  const category = String(req.query.category || '').trim().slice(0, 80);
+  const pattern = `%${query.q.replace(/[%_]/g, '\\$&')}%`;
+  const rows = db.prepare(`
+    SELECT * FROM feedback_items
+    WHERE (? = 'all' OR status = ?) AND (? = '' OR category = ?)
+      AND (? = '' OR body LIKE ? ESCAPE '\\' OR public_alias LIKE ? ESCAPE '\\')
+    ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'reviewing' THEN 1 ELSE 2 END, updated_at DESC, id DESC
+    LIMIT ? OFFSET ?
+  `).all(query.status, query.status, category, category, query.q, pattern, pattern, query.limit + 1, query.cursor);
+  const page = adminListPage(rows, query);
+  const items = page.items.map((row) => ({
     id: row.id,
     userRef: anonymousUserRef(row.owner_user_id),
     category: row.category,
@@ -5948,7 +5975,7 @@ app.get('/api/admin/feedback', requireAuth, requireCapability('cms.edit'), (req,
     updatedAt: row.updated_at,
     replies: feedbackReplies(row.id),
   }));
-  res.json({ items });
+  res.json({ items, pageInfo: page.pageInfo });
 });
 
 app.put('/api/admin/feedback/:id/status', requireAuth, requireCsrf, requireCapability('cms.edit'), asyncHandler(async (req, res) => {
@@ -6036,16 +6063,21 @@ app.put('/api/admin/cms/landing', requireAuth, requireCsrf, requireCapability('c
   res.json({ landing });
 }));
 
-app.get('/api/admin/feature-updates', requireAuth, requireCapability('cms.edit'), (_req, res) => {
-  const updates = db.prepare(`
+app.get('/api/admin/feature-updates', requireAuth, requireCapability('cms.edit'), (req, res) => {
+  const query = parseAdminListQuery(req.query, { statuses: ['draft', 'published', 'archived', 'all'], defaultStatus: 'all', defaultLimit: 25 });
+  const pattern = `%${query.q.replace(/[%_]/g, '\\$&')}%`;
+  const rows = db.prepare(`
     SELECT feature_updates.*,
       (SELECT COUNT(*) FROM feature_update_receipts receipt WHERE receipt.update_id = feature_updates.id AND receipt.seen_at IS NOT NULL) AS seen_count,
       (SELECT COUNT(*) FROM feature_update_receipts receipt WHERE receipt.update_id = feature_updates.id AND receipt.opened_at IS NOT NULL) AS opened_count
     FROM feature_updates
-    ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END, datetime(updated_at) DESC
-    LIMIT 100
-  `).all().map((row) => ({ ...exposeFeatureUpdate(row), seenCount: Number(row.seen_count || 0), openedCount: Number(row.opened_count || 0) }));
-  res.json({ updates });
+    WHERE (? = 'all' OR status = ?) AND (? = '' OR title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\' OR version_label LIKE ? ESCAPE '\\')
+    ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END, datetime(updated_at) DESC, id DESC
+    LIMIT ? OFFSET ?
+  `).all(query.status, query.status, query.q, pattern, pattern, pattern, query.limit + 1, query.cursor);
+  const page = adminListPage(rows, query);
+  const updates = page.items.map((row) => ({ ...exposeFeatureUpdate(row), seenCount: Number(row.seen_count || 0), openedCount: Number(row.opened_count || 0) }));
+  res.json({ updates, pageInfo: page.pageInfo });
 });
 
 app.post('/api/admin/feature-updates', requireAuth, requireCsrf, requireCapability('cms.edit'), asyncHandler(async (req, res) => {
@@ -6125,13 +6157,18 @@ app.put('/api/admin/risk-events/:id', requireAuth, requireCsrf, requireCapabilit
 }));
 
 app.get('/api/admin/audit', requireAuth, requireCapability('audit.view'), (req, res) => {
+  const query = parseAdminListQuery(req.query, { defaultLimit: 25 });
+  const rawCursor = String(req.query.cursor || '').trim();
+  const legacyTimestampCursor = rawCursor && !/^\d+$/.test(rawCursor) ? rawCursor : null;
   const rows = listAdminAudit({
     actorUserId: String(req.query.actorUserId || '').trim() || null,
-    action: String(req.query.action || '').trim(),
-    limit: req.query.limit,
-    cursor: String(req.query.cursor || '').trim() || null,
+    action: query.q || String(req.query.action || '').trim(),
+    limit: query.limit + 1,
+    cursor: legacyTimestampCursor,
+    offset: query.cursor,
   });
-  const events = rows
+  const page = adminListPage(rows, query);
+  const events = page.items
     .map((row) => ({
       id: row.id,
       actorRef: row.actor_user_id ? anonymousUserRef(row.actor_user_id) : 'Sistem',
@@ -6140,7 +6177,7 @@ app.get('/api/admin/audit', requireAuth, requireCapability('audit.view'), (req, 
       metadata: row.metadata || {},
       createdAt: row.created_at,
     }));
-  res.json({ events });
+  res.json({ events, pageInfo: page.pageInfo });
 });
 
 app.post('/api/admin/retention/run', requireAuth, requireCsrf, requireCapability('retention.execute'), asyncHandler(async (req, res) => {

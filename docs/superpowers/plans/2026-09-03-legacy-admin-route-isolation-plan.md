@@ -16,20 +16,20 @@
 
 ## Task 2 — Extract lazy route modules
 
-- [ ] Create a stable `AdminLegacyRoutes` resolver for every existing non-AI Admin path.
-- [ ] Move overview, credits, alerts, integrations, feedback, risk, CMS, audit, and retention into domain modules.
-- [ ] Lazy-load existing pricing, users, appeals, broadcasts, and updates panels at their route boundaries.
-- [ ] Give every route its own resource state, skeleton, retry, and last-updated indicator.
-- [ ] Add route-level error boundaries so a render failure cannot take down the shell.
-- [ ] Verify each deep link and code-split bundle in build/browser evidence; commit.
+- [x] Create a stable `AdminLegacyRoutes` resolver for every existing non-AI Admin path.
+- [x] Move overview, credits, alerts, integrations, feedback, risk, CMS, audit, and retention into domain modules.
+- [x] Lazy-load existing pricing, users, appeals, broadcasts, and updates panels at their route boundaries.
+- [x] Give every route its own resource state, skeleton, retry, and last-updated indicator.
+- [x] Add route-level error boundaries so a render failure cannot take down the shell.
+- [x] Verify each deep link and code-split bundle in build/browser evidence; commit.
 
 ## Task 3 — Bounded queries and URL state
 
-- [ ] Add server-backed pagination/cursors and validated filters where an Admin list can grow without bound.
-- [ ] Persist filter/cursor state in the URL for users, alerts, feedback, audit, appeals, and other list routes.
-- [ ] Preserve selected-user deep links at `/admin/users/:id` without exposing content or PII beyond capability rules.
-- [ ] Add direct API and browser tests for filter isolation, next/previous navigation, reload, and error recovery.
-- [ ] Commit client/server query contracts and migrations if required.
+- [x] Add server-backed pagination/cursors and validated filters where an Admin list can grow without bound.
+- [x] Persist filter/cursor state in the URL for users, alerts, feedback, audit, appeals, and other list routes.
+- [x] Preserve selected-user deep links at `/admin/users/:id` without exposing content or PII beyond capability rules.
+- [x] Add direct API and browser tests for filter isolation, next/previous navigation, reload, and error recovery.
+- [x] Commit client/server query contracts and migrations if required.
 
 ## Task 4 — Close AUDIT-009 honestly
 

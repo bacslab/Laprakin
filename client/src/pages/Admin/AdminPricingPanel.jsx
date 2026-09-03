@@ -5,11 +5,11 @@ import { pricingFallback, pricingFeatures } from '../../data/pricing';
 import { Button } from '../../components/Button';
 import { useI18n } from '../../i18n/context';
 
-export default function AdminPricingPanel({ setNotice }) {
+export default function AdminPricingPanel({ setNotice, initialPricing, reloadPricing = null }) {
   const { t } = useI18n();
   const [products, setProducts] = useState([]);
   const [busy, setBusy] = useState(false);
-  const loadPricing = useCallback(() => api('/admin/pricing').then((data) => {
+  const applyPricing = useCallback((data) => {
     const createProduct = (sku, label, plan, fallback, price) => ({
       sku,
       label,
@@ -28,8 +28,9 @@ export default function AdminPricingPanel({ setNotice }) {
       createProduct('monthly', t('admin.console.pricing.pro'), data.monthly, pricingFallback.monthly, data.monthly?.originalPrice || data.monthly?.price || 29900),
       createProduct('pro', t('admin.console.pricing.max'), data.pro, pricingFallback.pro, data.pro?.originalPrice || data.pro?.price || 45900),
     ]);
-  }).catch((error) => setNotice(error.message)), [setNotice]);
-  useEffect(() => { loadPricing(); }, [loadPricing]);
+  }, [t]);
+  const loadPricing = useCallback(() => (reloadPricing ? reloadPricing() : api('/admin/pricing')).then((data) => { if (data) applyPricing(data); }).catch((error) => setNotice(error.message)), [applyPricing, reloadPricing, setNotice]);
+  useEffect(() => { applyPricing(initialPricing); }, [applyPricing, initialPricing]);
   const update = (sku, patch) => setProducts((items) => items.map((item) => item.sku === sku ? { ...item, ...patch } : item));
   const save = async () => {
     setBusy(true);

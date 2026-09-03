@@ -145,6 +145,14 @@ try {
   const users = await admin.request('/admin/users');
   assert.deepEqual(new Set(users.users.map((user) => user.id)), new Set([userA.id, userB.id]));
   assert.equal(users.users.some((user) => 'nim' in user || 'documents' in user), false);
+  const firstUserPage = await admin.request('/admin/users?limit=1');
+  assert.equal(firstUserPage.users.length, 1);
+  assert.equal(firstUserPage.pageInfo.nextCursor, '1');
+  const secondUserPage = await admin.request(`/admin/users?limit=1&cursor=${firstUserPage.pageInfo.nextCursor}`);
+  assert.equal(secondUserPage.users.length, 1);
+  assert.notEqual(secondUserPage.users[0].id, firstUserPage.users[0].id);
+  const filteredUser = await admin.request(`/admin/users?q=${encodeURIComponent(userA.email)}&userId=${encodeURIComponent(userA.id)}`);
+  assert.deepEqual(filteredUser.users.map((user) => user.id), [userA.id]);
 
   const upgradedPlan = await admin.request(`/admin/users/${userA.id}/plan`, {
     method: 'PUT',
@@ -227,6 +235,7 @@ try {
 
   const alerts = await admin.request('/admin/alerts?status=open');
   assert.ok(alerts.alerts.some((alert) => alert.id === alertId && alert.severity === 'critical'));
+  assert.equal(alerts.pageInfo.limit, 25);
   await admin.request(`/admin/alerts/${alertId}`, {
     method: 'PUT',
     body: JSON.stringify({ status: 'resolved' }),
@@ -260,6 +269,7 @@ try {
   const appeals = await admin.request('/admin/appeals?status=open');
   const appeal = appeals.appeals.find((item) => item.userId === userA.id);
   assert.ok(appeal);
+  assert.equal(appeals.pageInfo.cursor, '0');
   await admin.request(`/admin/appeals/${appeal.id}`, {
     method: 'PUT',
     body: JSON.stringify({
@@ -306,6 +316,9 @@ try {
   }, 201);
   assert.equal(broadcast.recipientCount, 2);
   assert.equal(broadcast.deliveredCount, 2);
+  const broadcastHistory = await admin.request('/admin/broadcasts?q=Update&limit=1');
+  assert.equal(broadcastHistory.broadcasts.length, 1);
+  assert.equal(broadcastHistory.pageInfo.limit, 1);
   const broadcastOutbox = testDb.prepare(`
     SELECT text_body, html_body FROM email_outbox
     WHERE kind = 'admin_broadcast' ORDER BY created_at DESC LIMIT 1
@@ -346,6 +359,15 @@ try {
   const paidStorage = await studentB.request('/storage/summary');
   assert.equal(paidStorage.limitBytes, 750 * 1024 * 1024);
 
+  const feedbackPage = await admin.request('/admin/feedback?status=all&limit=10');
+  assert.deepEqual(feedbackPage.items, []);
+  assert.equal(feedbackPage.pageInfo.limit, 10);
+  const updatePage = await admin.request('/admin/feature-updates?status=all&limit=10');
+  assert.equal(updatePage.pageInfo.limit, 10);
+  const auditPage = await admin.request('/admin/audit?q=admin.&limit=1');
+  assert.equal(auditPage.events.length, 1);
+  assert.equal(auditPage.pageInfo.limit, 1);
+
   const controller = new AbortController();
   const stream = await fetch(`${base}/api/admin/events`, {
     headers: admin.headers(),
@@ -356,7 +378,7 @@ try {
   controller.abort();
   assert.match(new TextDecoder().decode(firstEvent.value), /event: ready/);
 
-  console.log('Admin operations passed: credits, restrictions and appeals, broadcasts, pricing, metadata-only telemetry, and realtime alerts.');
+  console.log('Admin operations passed: bounded filters and pagination, credits, restrictions and appeals, broadcasts, pricing, metadata-only telemetry, and realtime alerts.');
 } finally {
   testDb?.close();
   server.kill();

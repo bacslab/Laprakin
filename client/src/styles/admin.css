@@ -68,9 +68,38 @@
     color: var(--admin-text, #1f1f1e);
   }
 
+  .admin-route-status {
+    width: min(1180px, calc(100% - 48px));
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin: 14px auto -6px;
+    color: var(--admin-muted, #666);
+    font-size: .72rem;
+  }
+
+  .admin-list-controls {
+    width: min(1180px, calc(100% - 48px));
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 14px auto;
+  }
+  .admin-list-controls label { display: grid; gap: 5px; color: var(--admin-muted, #666); font-size: .68rem; }
+  .admin-list-controls input,
+  .admin-list-controls select { min-width: 180px; min-height: 36px; padding: 7px 9px; border: 1px solid var(--admin-line, #ddd); border-radius: 8px; background: var(--admin-card, #fff); color: var(--admin-text, #222); }
+  .admin-list-pagination { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .admin-list-pagination button { min-height: 36px; padding: 7px 10px; border: 1px solid var(--admin-line, #ddd); border-radius: 8px; background: var(--admin-card, #fff); color: var(--admin-text, #222); }
+  .admin-list-pagination button:disabled { opacity: .45; }
+
   @media (max-width: 620px) {
     .admin-main > .admin-loading-state { min-height: calc(100dvh - 126px); }
     .admin-route-alert { width: calc(100% - 28px); align-items: flex-start; flex-direction: column; }
+    .admin-route-status { width: calc(100% - 28px); justify-content: space-between; }
+    .admin-list-controls { width: calc(100% - 28px); }
+    .admin-list-pagination { width: 100%; justify-content: space-between; margin-left: 0; }
   }
 
   .admin-ai-shell {

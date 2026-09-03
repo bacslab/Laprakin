@@ -1474,8 +1474,10 @@
       "loadingTitle": "Memuat Admin Console…",
       "loadingDescription": "Jika data belum masuk, gunakan tombol muat ulang setelah beberapa saat.",
       "loadFailed": "Bagian ini tidak dapat dimuat",
+      "renderFailed": "Bagian ini mengalami masalah tampilan",
       "lastUpdated": "Terakhir diperbarui: {{date}}",
       "retry": "Coba muat ulang",
+      "list": { "search": "Cari", "searchPlaceholder": "Cari di daftar ini", "recipientSearch": "Cari penerima", "status": "Status", "all": "Semua", "allUsers": "Semua user", "previous": "Sebelumnya", "next": "Berikutnya", "page": "Halaman {{page}}" },
       "privacyTitle": "Privacy-first monitoring",
       "privacyDescription": "Hanya metadata operasional. Isi chat, dokumen, file, NIM, IP, fingerprint, prompt, dan output AI tidak ditampilkan.",
       "metrics": {

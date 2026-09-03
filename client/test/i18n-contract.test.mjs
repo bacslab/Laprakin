@@ -28,6 +28,7 @@ const workspaceCollectionsSource = await readFile(new URL('../src/pages/Workspac
 const workspaceSidebarSource = await readFile(new URL('../src/pages/Workspace/Sidebar/ChatSessionRow.jsx', import.meta.url), 'utf8');
 const identitySource = await readFile(new URL('../src/pages/Workspace/IdentityIntakeModal.jsx', import.meta.url), 'utf8');
 const adminConsoleSource = await readFile(new URL('../src/pages/Admin/LegacyAdminWorkspace.jsx', import.meta.url), 'utf8');
+const adminOperationalSource = (await Promise.all(['OverviewRoute', 'CreditsRoute', 'AlertsRoute', 'RetentionRoute'].map((name) => readFile(new URL(`../src/pages/Admin/legacy/${name}.jsx`, import.meta.url), 'utf8')))).join('\n');
 const adminPricingSource = await readFile(new URL('../src/pages/Admin/AdminPricingPanel.jsx', import.meta.url), 'utf8');
 const adminAccessSource = await readFile(new URL('../src/pages/Admin/AdminAccessPanel.jsx', import.meta.url), 'utf8');
 const adminAppealsSource = await readFile(new URL('../src/pages/Admin/AdminAppealsPanel.jsx', import.meta.url), 'utf8');
@@ -195,12 +196,13 @@ test('workspace shell navigation and configuration consume keyed locale copy', (
 });
 
 test('admin console shell and operational panels consume keyed locale copy', () => {
-  assert.match(adminConsoleSource, /admin\.console\.tabs\.overview/);
-  assert.match(adminConsoleSource, /admin\.console\.privacyDescription/);
-  assert.match(adminConsoleSource, /admin\.console\.credits\.grantNotice/);
-  assert.match(adminConsoleSource, /admin\.console\.alerts\.markResolved/);
-  assert.match(adminConsoleSource, /admin\.console\.retention\.done/);
-  assert.doesNotMatch(adminConsoleSource, /Privacy-first monitoring|Tambahkan kredit|Error operasional|Pembersihan retensi/);
+  const operationalSources = `${adminConsoleSource}\n${adminOperationalSource}`;
+  assert.match(operationalSources, /admin\.console\.tabs\.overview/);
+  assert.match(operationalSources, /admin\.console\.privacyDescription/);
+  assert.match(operationalSources, /admin\.console\.credits\.grantNotice/);
+  assert.match(operationalSources, /admin\.console\.alerts\.markResolved/);
+  assert.match(operationalSources, /admin\.console\.retention\.done/);
+  assert.doesNotMatch(operationalSources, /Privacy-first monitoring|Tambahkan kredit|Error operasional|Pembersihan retensi/);
   assert.match(adminPricingSource, /admin\.console\.pricing\.planAndBenefits/);
   assert.match(adminAccessSource, /admin\.console\.access\.restrictionApplied/);
   assert.match(adminAppealsSource, /admin\.console\.appeals\.approvedNotice/);

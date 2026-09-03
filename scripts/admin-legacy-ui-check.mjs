@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
@@ -8,6 +8,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -81,6 +82,7 @@ const webPort = await availablePort();
 const apiBase = `http://127.0.0.1:${apiPort}`;
 const webBase = `http://127.0.0.1:${webPort}`;
 const email = `admin-legacy-ui-${Date.now()}@example.test`;
+const studentEmail = `student-legacy-ui-${Date.now()}@example.test`;
 const password = 'KataSandi-Uji-2026';
 const screenshotDir = path.join(root, 'output', 'playwright', 'admin-legacy');
 await mkdir(screenshotDir, { recursive: true });
@@ -139,16 +141,40 @@ try {
     body: JSON.stringify({ token: registrationPayload.developmentVerificationToken }),
   });
   assert.equal(verification.ok, true, await verification.text());
+  const studentRegistration = await fetch(`${apiBase}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-laprakin-device': `student-${Date.now()}` },
+    body: JSON.stringify({ email: studentEmail, password }),
+  });
+  const studentRegistrationPayload = await studentRegistration.json();
+  assert.equal(studentRegistration.status, 201, JSON.stringify(studentRegistrationPayload));
+  const studentVerification = await fetch(`${apiBase}/api/auth/verify`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-laprakin-device': `student-${Date.now()}` },
+    body: JSON.stringify({ token: studentRegistrationPayload.developmentVerificationToken }),
+  });
+  assert.equal(studentVerification.ok, true, await studentVerification.text());
+  const seedDb = new DatabaseSync(path.join(sandbox, 'data', 'laprakin.sqlite'));
+  const insertUser = seedDb.prepare(`INSERT INTO users (id, email, password_hash, full_name, role, email_verified_at, created_at, updated_at) VALUES (?, ?, 'browser-test', ?, 'student', ?, ?, ?)`);
+  for (let index = 0; index < 30; index += 1) {
+    const createdAt = new Date(Date.now() - (index + 1) * 1_000).toISOString();
+    insertUser.run(randomUUID(), `pagination-${String(index).padStart(2, '0')}@example.test`, `Pagination ${index}`, createdAt, createdAt, createdAt);
+  }
+  seedDb.close();
 
   browser = await chromium.launch({ headless: true, executablePath: browserExecutable() });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
   const browserErrors = [];
   const apiRequests = [];
+  const apiRequestTargets = [];
   page.on('pageerror', (error) => browserErrors.push(String(error)));
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (url.pathname.startsWith('/api/admin/')) apiRequests.push(url.pathname);
+    if (url.pathname.startsWith('/api/admin/')) {
+      apiRequests.push(url.pathname);
+      apiRequestTargets.push(`${url.pathname}${url.search}`);
+    }
   });
 
   await page.goto(`${webBase}/auth?next=${encodeURIComponent('/admin/audit')}`, { waitUntil: 'networkidle' });
@@ -171,26 +197,84 @@ try {
     '/api/admin/audit',
     '/api/admin/alerts',
     '/api/admin/ai/usage',
+    '/api/admin/pricing',
+    '/api/admin/appeals',
+    '/api/admin/broadcasts',
+    '/api/admin/feature-updates',
   ];
   const routes = [
-    ['/admin', '/api/admin/overview', 'Monitoring'],
-    ['/admin/users', '/api/admin/users', 'Akses user'],
-    ['/admin/feedback', '/api/admin/feedback', 'Feedback'],
-    ['/admin/cms', '/api/admin/cms/landing', 'Landing CMS'],
-    ['/admin/audit', '/api/admin/audit', 'Audit log'],
-    ['/admin/alerts', '/api/admin/alerts', 'Error realtime'],
+    ['/admin', ['/api/admin/overview'], 'Monitoring'],
+    ['/admin/credits', ['/api/admin/users'], 'Kredit user'],
+    ['/admin/pricing', ['/api/admin/pricing'], 'Harga & diskon'],
+    ['/admin/alerts', ['/api/admin/alerts'], 'Error realtime'],
+    ['/admin/integrations', ['/api/admin/ai/usage'], 'AI & Login'],
+    ['/admin/updates', ['/api/admin/feature-updates'], 'Updates'],
+    ['/admin/broadcasts', ['/api/admin/users', '/api/admin/broadcasts'], 'Email user'],
+    ['/admin/feedback', ['/api/admin/feedback'], 'Feedback'],
+    ['/admin/users', ['/api/admin/users'], 'Akses user'],
+    ['/admin/appeals', ['/api/admin/appeals'], 'Appeal'],
+    ['/admin/risk', ['/api/admin/overview'], 'Risk review'],
+    ['/admin/cms', ['/api/admin/cms/landing'], 'Landing CMS'],
+    ['/admin/audit', ['/api/admin/audit'], 'Audit log'],
+    ['/admin/retention', [], 'Retensi'],
   ];
 
-  for (const [route, expectedEndpoint, heading] of routes) {
+  for (const [route, expectedEndpoints, heading] of routes) {
     apiRequests.length = 0;
     await page.goto(`${webBase}${route}`);
     await page.getByRole('heading', { name: heading, exact: true, level: 1 }).waitFor();
     await page.getByText(/Terakhir diperbarui:/).waitFor();
     const routeDataRequests = apiRequests.filter((requestPath) => dataEndpoints.some((endpoint) => requestPath === endpoint || requestPath.startsWith(`${endpoint}/`)));
-    assert.equal(routeDataRequests.some((requestPath) => requestPath === expectedEndpoint || requestPath.startsWith(`${expectedEndpoint}/`)), true, `${route} missed ${expectedEndpoint}:\n${apiRequests.join('\n')}`);
-    const unrelated = routeDataRequests.filter((requestPath) => !(requestPath === expectedEndpoint || requestPath.startsWith(`${expectedEndpoint}/`)));
+    for (const expectedEndpoint of expectedEndpoints) assert.equal(routeDataRequests.some((requestPath) => requestPath === expectedEndpoint || requestPath.startsWith(`${expectedEndpoint}/`)), true, `${route} missed ${expectedEndpoint}:\n${apiRequests.join('\n')}`);
+    const unrelated = routeDataRequests.filter((requestPath) => !expectedEndpoints.some((expectedEndpoint) => requestPath === expectedEndpoint || requestPath.startsWith(`${expectedEndpoint}/`)));
     assert.deepEqual(unrelated, [], `${route} requested unrelated Admin resources:\n${unrelated.join('\n')}`);
   }
+
+  await page.goto(`${webBase}/admin/users?q=student-legacy-ui&limit=25`);
+  await page.getByLabel('Cari', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Cari', { exact: true }).inputValue(), 'student-legacy-ui');
+  await page.getByRole('button', { name: new RegExp(studentEmail) }).click();
+  await page.waitForURL(`**/admin/users/${studentRegistrationPayload.user.id}?q=student-legacy-ui&limit=25`);
+  await page.reload();
+  await page.getByText(studentEmail, { exact: true }).first().waitFor();
+  assert.equal(page.url().includes(`/admin/users/${studentRegistrationPayload.user.id}?q=student-legacy-ui&limit=25`), true);
+
+  await page.goto(`${webBase}/admin/users?limit=10`);
+  await page.getByRole('button', { name: 'Berikutnya', exact: true }).click();
+  await page.waitForURL('**/admin/users?cursor=10&limit=10');
+  await page.getByText('Halaman 2', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Sebelumnya', exact: true }).click();
+  await page.waitForURL('**/admin/users?cursor=0&limit=10');
+  await page.reload();
+  assert.equal(await page.getByLabel('Cari', { exact: true }).inputValue(), '');
+
+  apiRequestTargets.length = 0;
+  await page.goto(`${webBase}/admin/alerts?q=CONTRACT&status=open&limit=10`);
+  await page.getByText(/Terakhir diperbarui:/).waitFor();
+  assert.equal(await page.getByLabel('Cari', { exact: true }).inputValue(), 'CONTRACT');
+  assert.equal(await page.getByLabel('Status', { exact: true }).inputValue(), 'open');
+  assert.equal(apiRequestTargets.some((target) => target.includes('/api/admin/alerts?') && target.includes('q=CONTRACT') && target.includes('status=open') && target.includes('limit=10')), true, apiRequestTargets.join('\n'));
+  await page.reload();
+  assert.equal(await page.getByLabel('Status', { exact: true }).inputValue(), 'open');
+
+  const errorCountBeforeRenderProof = browserErrors.length;
+  let malformedOverviewOnce = true;
+  await page.route(`${apiBase}/api/admin/overview*`, async (route) => {
+    if (malformedOverviewOnce) {
+      malformedOverviewOnce = false;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto(`${webBase}/admin`);
+  await page.getByText('Bagian ini mengalami masalah tampilan', { exact: true }).waitFor();
+  assert.equal(await page.locator('.admin-sidebar').isVisible(), true, 'The Admin shell disappeared during a render failure.');
+  await page.getByRole('button', { name: 'Coba muat ulang' }).click();
+  await page.getByText(/Terakhir diperbarui:/).waitFor();
+  const expectedRenderErrors = browserErrors.splice(errorCountBeforeRenderProof);
+  assert.equal(expectedRenderErrors.length >= 1, true, 'The malformed route did not surface a render error.');
+  assert.equal(expectedRenderErrors.every((message) => message.includes("reading 'users'")), true, expectedRenderErrors.join('\n'));
 
   let failAuditOnce = true;
   await page.route(`${apiBase}/api/admin/audit*`, async (route) => {
@@ -220,7 +304,7 @@ try {
 
   assert.deepEqual(browserErrors, []);
   await context.close();
-  console.log(`Legacy Admin UI passed: six isolated direct routes, local failure recovery, persistent shell, freshness, desktop, and 390px mobile. Screenshots: ${screenshotDir}`);
+  console.log(`Legacy Admin UI passed: fourteen isolated direct routes, URL-backed user deep link, route render/data failure recovery, persistent shell, freshness, desktop, and 390px mobile. Screenshots: ${screenshotDir}`);
 } finally {
   await browser?.close().catch(() => {});
   await Promise.all([stopProcess(apiProcess), stopProcess(webProcess)]);

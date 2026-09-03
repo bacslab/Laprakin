@@ -33,14 +33,14 @@ export function recordAdminAudit({ actorUserId, action, target, payloadDiff = {}
   return row;
 }
 
-export function listAdminAudit({ actorUserId = null, action = '', limit = 100, cursor = null, store = db } = {}) {
+export function listAdminAudit({ actorUserId = null, action = '', limit = 100, cursor = null, offset = 0, store = db } = {}) {
   const filters = ["(target_type = 'admin' OR action LIKE 'admin.%' OR action LIKE 'retention.%')"];
   const params = [];
   if (actorUserId) { filters.push('actor_user_id = ?'); params.push(actorUserId); }
-  if (action) { filters.push('action = ?'); params.push(action); }
+  if (action) { filters.push("action LIKE ? ESCAPE '\\'"); params.push(`%${String(action).replace(/[%_]/g, '\\$&')}%`); }
   if (cursor) { filters.push('created_at < ?'); params.push(cursor); }
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-  const rows = store.prepare(`SELECT id, actor_user_id, action, target_id, metadata_json, created_at FROM audit_logs ${where} ORDER BY created_at DESC LIMIT ?`).all(...params, Math.max(1, Math.min(Number(limit) || 100, 200)));
+  const rows = store.prepare(`SELECT id, actor_user_id, action, target_id, metadata_json, created_at FROM audit_logs ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`).all(...params, Math.max(1, Math.min(Number(limit) || 100, 200)), Math.max(0, Number(offset) || 0));
   return rows.map((row) => ({ ...row, metadata: JSON.parse(row.metadata_json || '{}') }));
 }
 
