@@ -6,6 +6,7 @@
 - Menambahkan telemetry AI metadata-only per revision/route/provider/model, latency serta first-token latency, fallback, queue, circuit state, dan error category tanpa prompt atau output.
 - Memecah Admin AI menjadi deep link lazy per resource dengan failure recovery, konfirmasi aksesibel, copy Indonesia/Inggris, dark/reduced-motion, dan guard computed typography minimum 12px.
 - Menghapus runtime penerjemah yang berjalan dengan full-DOM walker/observer; locale kini dirender langsung dari key React dengan fallback Indonesia, interpolasi, pluralization, dan bukti browser ID/EN yang bertahan setelah reload.
+- Membuat Settings mengikuti system/light/dark, high contrast, dan reduced motion dari pengguna maupun sistem; modal kini memindahkan serta mengembalikan fokus dengan benar dan memiliki matriks browser desktop/390px.
 - Membuat API E2E lokal deterministik dengan provider synthetic metadata-only serta migration smoke yang menolak overwrite.
 - Menutup checkpoint integritas P0 dengan ledger mutasi idempoten, pemulihan stream tanpa POST ulang, dan bukti satu request ID untuk pesan, penggunaan AI, serta operasi kredit.
 - Menambahkan manifest processor NaraRouter yang bertipe dan consent AI eksternal berversi, default-off, dapat dicabut, serta diwajibkan server sebelum provider, persistensi, atau pemakaian kredit.

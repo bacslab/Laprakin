@@ -27,10 +27,10 @@
 
 ## Task 3 — Close AUDIT-008 honestly
 
-- [ ] Confirm Landing-owned files are unchanged from `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de`.
-- [ ] Update the audit, changelog, and this plan with exact fresh evidence.
-- [ ] Keep AUDIT-007, AUDIT-009, and wider Settings requirements open.
-- [ ] Run `git diff --check` and commit the audit closure.
+- [x] Confirm Landing-owned files are unchanged from `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de`.
+- [x] Update the audit, changelog, and this plan with exact fresh evidence.
+- [x] Keep AUDIT-007, AUDIT-009, and wider Settings requirements open.
+- [x] Run `git diff --check` and commit the audit closure.
 
 ## Exit Gate
 

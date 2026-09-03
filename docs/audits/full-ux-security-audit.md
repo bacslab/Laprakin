@@ -90,18 +90,18 @@ This is a living evidence register. Findings are closed only by source inspectio
 - Actual verification result: open.
 - Residual risk: no broad CSS deletion before visual baselines.
 
-## AUDIT-008 — Settings theme behavior lacks rendered proof
+## AUDIT-008 — Settings theme and motion behavior
 
 - Severity: P1 UX/accessibility
 - User impact: Settings may diverge from workspace theme or reduced-motion/high-contrast preferences.
-- Evidence: source contains theme helpers, but no rendered matrix proves system/light/dark/high-contrast/reduced-motion behavior.
-- Reproduction: pending browser matrix.
-- Root cause: legacy modal styles and preference wiring require runtime inspection.
-- Changed files: not implemented.
-- Fix: stable Settings routes and shared semantic tokens in the Settings/Admin phase.
-- Tests: open.
-- Actual verification result: missing evidence.
-- Residual risk: source inspection cannot close this finding.
+- Evidence: source contained theme helpers but no rendered matrix; Workspace derived `data-motion` only from `prefs.reducedMotion`, ignoring the operating-system preference.
+- Reproduction: `npm run test:settings-ui` was absent. The first browser run then failed because opening Settings left focus on the trigger behind the modal. A pure policy test also demonstrated the missing user/system motion resolution boundary.
+- Root cause: theme styles had accumulated compatibility overrides without behavioral proof, the motion state modeled only the explicit user toggle, and the shared Modal primitive did not establish initial dialog focus.
+- Changed files: `client/src/lib/motion-policy.js`, `client/src/lib/theme.js`, `client/src/pages/Workspace/LegacyWorkspaceView.jsx`, `client/src/components/Dialog.jsx`, `client/test/motion-policy.test.mjs`, `scripts/settings-ui-check.mjs`, and `package.json`.
+- Fix: Workspace now combines the user toggle with live `prefers-reduced-motion`; Settings continues to consume Workspace semantic tokens. Modal focuses its first visible control and returns focus to the trigger. The isolated browser matrix validates the actual cascade rather than relying on source intent.
+- Tests: 2/2 focused motion-policy tests, 72/72 complete client tests, and the Settings Playwright matrix passed; lint, typecheck, and production build also exited 0.
+- Actual verification result: resolved and verified on 2026-09-03. System-dark, forced-light, forced-dark, and live system-light changes produced matching body, Workspace, Settings color-scheme, surface luminance, and text contrast. High-contrast tokens changed and secondary copy met the asserted 7:1 threshold. System and user reduced motion both suppressed Settings transitions; preferences survived reload; Escape/focus return and initial focus passed; 390px had no horizontal overflow or unexpected browser errors.
+- Residual risk: this closes theme/motion correctness, not the wider Settings roadmap. Stable deep links/query state, server-backed preference sync with optimistic rollback, full 320px/400% reflow, and application-wide typography remediation remain open under later phases; the compatibility CSS debt remains AUDIT-007.
 
 ## AUDIT-009 — Admin monolith and failure coupling
 
@@ -144,26 +144,27 @@ This is a living evidence register. Findings are closed only by source inspectio
 
 ## Additional Security Surfaces
 
-The following remain open for dedicated phases: CSS compatibility debt, complete Settings/theme browser evidence, route isolation for the non-AI Admin console, upload quarantine/malware/PII/prompt-injection states, content break-glass, retention execution, backup/restore proof, and the complete release workflow. Runtime DOM translation is now removed and verified; AI provider secret storage, guarded egress, immutable activation/rollback, capability enforcement, and production configuration contracts also have focused evidence.
+The following remain open for dedicated phases: CSS compatibility debt, wider Settings routing/persistence/accessibility work, route isolation for the non-AI Admin console, upload quarantine/malware/PII/prompt-injection states, content break-glass, retention execution, backup/restore proof, and the complete release workflow. Runtime DOM translation and Settings theme/motion behavior are now verified; AI provider secret storage, guarded egress, immutable activation/rollback, capability enforcement, and production configuration contracts also have focused evidence.
 
 ## Current Verdict
 
-`NO-GO` for the full production-grade mission. The AI control-plane slice and AUDIT-006 are verified, but AUDIT-007 through AUDIT-009 and the remaining security/release surfaces above are not closed. Current fresh evidence includes 179/179 server tests, 70/70 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI and i18n browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
+`NO-GO` for the full production-grade mission. The AI control-plane slice, AUDIT-006, and AUDIT-008 are verified, but AUDIT-007, AUDIT-009, and the remaining security/release surfaces above are not closed. Current fresh evidence includes 179/179 server tests, 72/72 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI, i18n, and Settings browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
 
 ## Verification snapshot — 2026-09-03
 
-- Audited base: `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de`; verification branch checkpoint before this documentation: `bb9ba65`.
+- Audited base: `71e741fd4aeb2c90d469aaf9f5819e4fa29d97de`; verification branch checkpoint before this documentation: `3daa58c`.
 - Server: 179 passed, 0 failed, 0 skipped.
-- Client: 70 passed, 0 failed, 0 skipped.
+- Client: 72 passed, 0 failed, 0 skipped.
 - I18n: 18 focused contracts passed; DOM translation source scan clean; real-browser Auth, Workspace, Settings, and Notifications passed in ID/EN at desktop and 390px with persistence after reload.
+- Settings browser: system/light/dark, live OS theme changes, high contrast, system/user reduced motion, persistence, focus entry/return, Escape, and 390px reflow passed with no unexpected browser errors.
 - Focused AI/control plane: 59 passed, 0 failed, 0 skipped.
 - Migration: 2 passed, 0 failed; copy includes available WAL sidecar and refuses overwrite.
 - API E2E: auth, profile, evidence, timeline, quality gate, template DOCX, restore, and verified password-change flow passed against a local synthetic provider; two metadata-only provider requests were observed.
 - Admin AI browser: deep links, password-only credential handling, minimum 12px computed typography, standard font weights, ID/EN, retry, keyboard, dark theme, reduced motion, desktop, and 390px passed.
-- Production build: 1,698 modules transformed; 0 build failures; one advisory for the existing 654.85kB vendor chunk.
+- Production build: 1,699 modules transformed; 0 build failures; one advisory for the existing 654.85kB vendor chunk.
 - Production configuration: 15 mandatory checks passed.
 - Dependency audit: 0 vulnerabilities.
 - Gitleaks 8.30.1: 229 commits and approximately 8.63MB scanned; 0 leaks. The downloaded Windows archive matched SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e` before execution.
 - Landing-owned files: no diff from the audited base at this checkpoint.
 - Non-failing runtime advisory: Node reports that built-in SQLite remains experimental. This is a platform warning, not a skipped or failed test.
-- Rendered evidence: `output/playwright/admin-ai/providers-desktop.png`, `models-actions-desktop.png`, `health-operations-desktop.png`, `changes-mobile-dark.png`, `output/playwright/i18n/workspace-en.png`, and `settings-id.png`.
+- Rendered evidence: `output/playwright/admin-ai/providers-desktop.png`, `models-actions-desktop.png`, `health-operations-desktop.png`, `changes-mobile-dark.png`, `output/playwright/i18n/workspace-en.png`, `settings-id.png`, `output/playwright/settings/settings-light.png`, `settings-dark.png`, and `settings-mobile-high-contrast.png`.
