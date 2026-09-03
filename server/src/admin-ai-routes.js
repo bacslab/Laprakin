@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createAiConfigurationRepository } from './ai-configuration-repository.js';
 import { createAiConfigurationService } from './ai-configuration-service.js';
-import { validateProviderUrl } from './ai-egress-policy.js';
+import { AiEgressPolicyError, validateProviderUrl } from './ai-egress-policy.js';
 import { createOpenAiCompatibleAdapter } from './ai-providers/openai-compatible.js';
 import { createAiSecretStore } from './ai-secret-store.js';
 import { captureAiRuntimeConfiguration, getAiReadiness } from './ai.js';
@@ -57,6 +57,7 @@ const modelInput = z.object({
   maxOutputTokens: z.coerce.number().int().min(0).max(1_000_000).default(0),
   costMetadata: costMetadata.default({}),
 }).strict();
+const manualModelInput = modelInput.omit({ capabilityEvidence: true });
 
 const fallbackInput = z.object({ providerId, modelId: z.string().trim().min(1).max(180) }).strict();
 const routeInput = z.object({
@@ -89,7 +90,15 @@ function egressPolicy(config) {
 }
 
 function checkedProvider(provider, config, actor = null) {
-  const url = validateProviderUrl(provider.baseUrl, egressPolicy(config));
+  let url;
+  try {
+    url = validateProviderUrl(provider.baseUrl, egressPolicy(config));
+  } catch (error) {
+    if (error instanceof AiEgressPolicyError) {
+      throw new HttpError(400, 'Provider URL tidak diizinkan oleh kebijakan deployment.', error.code);
+    }
+    throw error;
+  }
   if (url.search) throw new HttpError(400, 'Provider URL query parameters are not allowed.', 'AI_EGRESS_QUERY_BLOCKED');
   const customHosts = new Set((config.aiCustomProviderHosts || []).map((host) => String(host).toLowerCase()));
   if (customHosts.has(url.hostname.toLowerCase()) && !['owner', 'admin'].includes(String(actor?.role || '').toLowerCase())) {
@@ -354,11 +363,11 @@ export function registerAdminAiRoutes(app, {
   });
 
   app.post('/api/admin/ai/models', ...secureMutation('ai.models.manage'), (req, res) => {
-    const input = z.object({ revisionId, reason, model: modelInput }).strict().parse(req.body || {});
+    const input = z.object({ revisionId, reason, model: manualModelInput }).strict().parse(req.body || {});
     const source = sourceRevision(repository, input.revisionId);
     if (!source.providers.some((provider) => provider.providerId === input.model.providerId)) throw new HttpError(404, 'Provider AI tidak ditemukan.', 'AI_CONFIGURATION_PROVIDER_NOT_FOUND');
     if (source.models.some((model) => model.providerId === input.model.providerId && model.modelId === input.model.modelId)) throw new HttpError(409, 'Model sudah ada pada revisi ini.', 'AI_CONFIGURATION_MODEL_EXISTS');
-    const draft = service.createModelDraft({ auth: auth(req), reason: input.reason, parentRevisionId: source.id, providers: source.providers, models: [...source.models, { ...input.model, source: 'manual', health: input.model.state }], routes: source.routes });
+    const draft = service.createModelDraft({ auth: auth(req), reason: input.reason, parentRevisionId: source.id, providers: source.providers, models: [...source.models, { ...input.model, capabilityEvidence: evidenceMap.parse({}), source: 'manual', health: input.model.state }], routes: source.routes });
     audit(req.user.id, 'admin.ai_model_added', 'ai_configuration_revision', draft.id, { providerId: input.model.providerId, modelId: input.model.modelId, reason: input.reason });
     res.status(201).json({ revision: safeRevision(draft) });
   });

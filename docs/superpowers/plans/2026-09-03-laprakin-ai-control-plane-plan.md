@@ -202,13 +202,13 @@
 - Modify: `client/src/styles/admin.css`
 - Test: `scripts/ui-workflow-check.py`
 
-- [ ] Write red route/API/UI contract tests for stable deep links, lazy modules, independent loading/error/retry/last-updated states, pagination/filter state, capability-driven affordances, and password-only credential inputs.
-- [ ] Implement calm, compact provider, model, routing, health, and change-history modules without loading unrelated CMS/user/feedback data.
-- [ ] Clear credential form state after success; never implement reveal-after-save or place credentials in browser storage.
-- [ ] Provide explicit draft/test/canary/impact/activate/rollback states and accessible confirmations.
-- [ ] Verify desktop, 390 px mobile, keyboard-only, screen-reader names, theme modes, reduced motion, and failure recovery in the browser.
-- [ ] Run client tests, lint, typecheck, and build.
-- [ ] Commit: `feat: add modular admin ai configuration`.
+- [x] Write red route/API/UI contract tests for stable deep links, lazy modules, independent loading/error/retry/last-updated states, pagination/filter state, capability-driven affordances, and password-only credential inputs.
+- [x] Implement calm, compact provider, model, routing, health, and change-history modules without loading unrelated CMS/user/feedback data.
+- [x] Clear credential form state after success; never implement reveal-after-save or place credentials in browser storage.
+- [x] Provide explicit draft/test/canary/impact/activate/rollback states and accessible confirmations.
+- [x] Verify desktop, 390 px mobile, keyboard-only, screen-reader names, theme modes, reduced motion, and failure recovery in the browser.
+- [x] Run client tests, lint, typecheck, and build.
+- [x] Commit: `feat: add modular admin ai configuration`.
 
 ## Task 10: Close the AI control-plane phase
 

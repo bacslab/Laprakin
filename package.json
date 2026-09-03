@@ -28,6 +28,7 @@
     "test:template-docx": "node scripts/template-docx-check.mjs",
     "test:workflow-api": "node scripts/workflow-api-check.mjs",
     "test:admin-ops": "node scripts/admin-ops-check.mjs",
+    "test:admin-ai-ui": "node scripts/admin-ai-ui-check.mjs",
     "test:ai-live": "node scripts/ai-live-check.mjs",
     "bench:ai": "node scripts/bench-nararouter.mjs",
     "prepare:production-env": "node scripts/prepare-production-env.mjs",

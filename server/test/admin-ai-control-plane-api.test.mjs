@@ -92,6 +92,7 @@ test('admin AI APIs enforce capabilities, MFA, revision lifecycle, confirmations
   const base = `http://127.0.0.1:${apiPort}`;
   const unique = `${Date.now()}-${randomUUID()}`;
   const ownerEmail = `ai-owner-${unique}@example.test`;
+  let serverOutput = '';
   const child = spawn(process.execPath, ['server/src/index.js'], {
     cwd: root,
     env: {
@@ -107,16 +108,20 @@ test('admin AI APIs enforce capabilities, MFA, revision lifecycle, confirmations
       JWT_SECRET: 'admin-ai-api-jwt-secret-2026', DEVICE_HMAC_SECRET: 'admin-ai-api-device-secret-2026',
       TOKEN_HMAC_SECRET: 'admin-ai-api-token-secret-2026',
     },
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
+  child.stdout.on('data', (chunk) => { serverOutput += chunk.toString(); });
+  child.stderr.on('data', (chunk) => { serverOutput += chunk.toString(); });
 
   let database;
   try {
     const deadline = Date.now() + 30_000;
+    let serverReady = false;
     while (Date.now() < deadline) {
-      try { if ((await fetch(`${base}/api/health`)).ok) break; } catch { /* server is starting */ }
+      try { if ((await fetch(`${base}/api/health`)).ok) { serverReady = true; break; } } catch { /* server is starting */ }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
+    assert.equal(serverReady, true, `API did not start.\n${serverOutput.slice(-4_000)}`);
     const owner = client(base, `ai-owner-${unique}`);
     const ownerRegistration = await owner.registerAndVerify(ownerEmail);
     assert.equal(ownerRegistration.user.role, 'admin');
@@ -139,6 +144,9 @@ test('admin AI APIs enforce capabilities, MFA, revision lifecycle, confirmations
       method: 'POST',
       body: JSON.stringify({ code: totpCodeForTest(enrollment.secret, Math.floor(Date.now() / 30_000)) }),
     });
+    await owner.request('/auth/me');
+    const renewedMfa = await owner.request('/admin/mfa/status');
+    assert.equal(renewedMfa.mfa.verified, true);
 
     const csrfDenied = await owner.request('/admin/ai/providers', {
       method: 'POST', omitCsrf: true, expectedStatus: 403,
@@ -157,6 +165,16 @@ test('admin AI APIs enforce capabilities, MFA, revision lifecycle, confirmations
       }),
     });
     assert.equal(missingReason.error.code, 'VALIDATION_ERROR');
+
+    const blockedHost = await owner.request('/admin/ai/providers', {
+      method: 'POST', expectedStatus: 400,
+      body: JSON.stringify({
+        reason: 'Reject a provider outside the deployment allowlist',
+        provider: { providerId: 'blocked', displayName: 'Blocked Host', baseUrl: `https://unlisted.example.test:${providerPort}/v1` },
+      }),
+    });
+    assert.equal(blockedHost.error.code, 'AI_EGRESS_HOST_NOT_ALLOWED');
+    assert.equal(String(blockedHost.error.message).includes('unlisted.example.test'), false);
 
     const created = await owner.request('/admin/ai/providers', {
       method: 'POST', expectedStatus: 201,
@@ -189,14 +207,28 @@ test('admin AI APIs enforce capabilities, MFA, revision lifecycle, confirmations
     assert.equal(discovered.revision.models[0].modelId, 'test-model');
     currentRevisionId = discovered.revision.id;
 
+    const selfAttestedEvidence = await owner.request('/admin/ai/models', {
+      method: 'POST', expectedStatus: 400,
+      body: JSON.stringify({
+        revisionId: currentRevisionId,
+        reason: 'Reject untested manual capability evidence',
+        model: {
+          providerId: 'managed', modelId: 'self-attested-model',
+          capabilities: { vision: true }, capabilityEvidence: { vision: 'verified' },
+        },
+      }),
+    });
+    assert.equal(selfAttestedEvidence.error.code, 'VALIDATION_ERROR');
+
     const manual = await owner.request('/admin/ai/models', {
       method: 'POST', expectedStatus: 201,
       body: JSON.stringify({
         revisionId: currentRevisionId,
         reason: 'Add a manual fallback model',
-        model: { providerId: 'managed', modelId: 'manual-model', capabilities: {}, capabilityEvidence: {} },
+        model: { providerId: 'managed', modelId: 'manual-model', capabilities: {} },
       }),
     });
+    assert.equal(manual.revision.models.find((model) => model.modelId === 'manual-model').capabilityEvidence.vision, 'unverified');
     currentRevisionId = manual.revision.id;
     const modelPage = await owner.request(`/admin/ai/models?revisionId=${encodeURIComponent(currentRevisionId)}&limit=1`);
     assert.equal(modelPage.models.length, 1);

@@ -2322,7 +2322,7 @@ app.put('/api/auth/password', requireAuth, requireCsrf, (_req, _res, next) => {
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
   // Renew persistent cookie on active use. Session remains revocable via versioning.
-  const csrfToken = setSession(res, req.user);
+  const csrfToken = setSession(res, req.user, { mfaVerifiedAt: req.session?.mfaVerifiedAt || null });
   res.json({ user: req.user, wallet: getWallet(req.user.id), aiModes: aiModeAccessForUser(req.user.id), csrfToken });
 });
 
