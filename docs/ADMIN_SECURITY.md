@@ -34,7 +34,7 @@ lapisan deployment; aplikasi tidak menambah penyedia identitas baru.
   mengikuti `SESSION_DAYS`.
 - Logout, reset password, dan pencabutan sesi menaikkan `session_version`, sehingga
   token lama tidak lagi diterima.
-- Semua endpoint `/api/admin/*` wajib memakai `requireAdmin`; mutation juga wajib
+- Semua endpoint `/api/admin/*` wajib memakai `requireCapability(...)` setelah autentikasi; mutation juga wajib
   memakai `requireCsrf` dan mencatat `audit(...)`. Middleware step-up MFA berlaku
   seragam setelah autentikasi untuk seluruh permukaan admin, termasuk event dan
   panel yang baru ditambahkan.
@@ -63,6 +63,19 @@ password, prompt, isi dokumen, dan raw source. IP disimpan sebagai hash SHA-256
 satu arah dan tidak diekspos sebagai alamat mentah. `/api/admin/audit` mendukung
 filter `action`, `actorUserId`, `limit`, dan `cursor`, serta hanya mengembalikan
 metadata aman.
+
+## Isolasi route dan query
+
+Shell Admin non-AI hanya merender navigasi, tema, identitas sesi, dan satu route aktif.
+Empat belas route domain dimuat secara lazy, memiliki resource state, retry, freshness,
+dan error boundary sendiri. Kegagalan request atau render satu route tidak boleh
+menghilangkan shell atau memicu request data route lain.
+
+Daftar yang dapat tumbuh memakai `limit` 1–100 dan cursor numerik bounded. Search,
+status, dan cursor disimpan di URL agar deep link serta reload stabil. Route user
+terpilih berbentuk `/admin/users/:id`; server tetap memeriksa `users.view` dan hanya
+mengembalikan metadata operasional yang sudah diizinkan. Tambahkan route baru ke
+inventaris `AdminLegacyRoutes`, capability server, contract test, dan browser matrix.
 
 ## TOTP opsional
 

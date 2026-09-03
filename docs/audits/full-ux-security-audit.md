@@ -107,14 +107,14 @@ This is a living evidence register. Findings are closed only by source inspectio
 
 - Severity: P1 reliability/UX
 - User impact: one unrelated endpoint can block the whole console; initial payload and recovery cost grow with every module.
-- Evidence: `LegacyAdminWorkspace.jsx` loads seven unrelated resources in one `Promise.all` and switches local tabs without route-backed deep links.
-- Reproduction: pending independent-route failure tests.
+- Evidence: the original `LegacyAdminWorkspace.jsx` loaded seven unrelated resources in one `Promise.all`, required overview and CMS before rendering the shell, and referenced an unimported loading icon. The current production build emits a 6.99 kB legacy shell plus separate chunks for all 14 non-AI route modules.
+- Reproduction: the first focused contract failed on the global batch/shell gate. Browser interception then reproduced an Audit data failure and a malformed Overview render; both now remain local while the shell and navigation stay usable.
 - Root cause: a tabbed page owns all remote state instead of route modules owning their own queries.
-- Changed files: not implemented.
-- Fix: route-backed lazy modules, independent boundaries, retry, pagination, filters, and last-updated state.
-- Tests: open.
-- Actual verification result: open.
-- Residual risk: admin redesign cannot be treated as visual-only.
+- Changed files: `client/src/pages/Admin/LegacyAdminWorkspace.jsx`, `client/src/pages/Admin/AdminLegacyRoutes.jsx`, `client/src/pages/Admin/legacy/*`, the existing Admin domain panels, `client/src/styles/admin.css`, `server/src/admin-list-query.js`, `server/src/admin-audit.js`, the bounded Admin list routes in `server/src/index.js`, and their focused/API/browser tests.
+- Fix: the shell now resolves every non-AI path through a lazy route map and a route-level render boundary. Every route owns loading, stale/error, retry, and freshness state. Users, credits, alerts, feedback, audit, appeals, broadcasts, and updates use bounded server queries; list search/status/cursor state survives in the URL, and `/admin/users/:id` performs an exact capability-protected lookup without adding content fields.
+- Tests: 3/3 focused route contracts, 4/4 list-query contracts, 77/77 complete client tests, 181/181 complete server tests, direct Admin operations, lint, typecheck, production build, and the legacy Admin browser matrix passed.
+- Actual verification result: resolved and verified on 2026-09-03. All 14 non-AI deep links requested only their route-owned resources; URL search/status survived reload; a seeded 31-user dataset passed next/previous navigation; selected-user deep links survived reload; 390px had no horizontal overflow; data and render failures recovered locally.
+- Residual risk: list continuation uses bounded numeric cursors, so concurrent inserts can shift items between adjacent Admin pages; reloading page one reconciles live operational lists. This is a list-consistency tradeoff, not a return of whole-console failure coupling.
 
 ## AUDIT-010 — Binary admin authorization
 
@@ -127,7 +127,7 @@ This is a living evidence register. Findings are closed only by source inspectio
 - Fix: a stable server-side capability vocabulary and immutable role mappings protect sensitive Admin resources. AI mutations also require CSRF, recent MFA, reason, exact confirmation, and independent approval for production processor replacement.
 - Tests: fresh focused AI/control-plane run, 59/59 passing on 2026-09-03; complete current server run, 179/179 passing after the deterministic E2E/migration harness tests were added.
 - Actual verification result: resolved for the named capability routes and verified by direct API denial tests.
-- Residual risk: remaining legacy Admin routes must be mapped and reviewed as their route-backed modules are extracted; browser affordances never substitute for server authorization.
+- Residual risk: browser affordances never substitute for server authorization; new Admin routes must declare a named server capability and join the route-isolation/browser inventory before release.
 
 ## AUDIT-011 — Static process-wide AI configuration
 
@@ -148,7 +148,7 @@ The following remain open for dedicated phases: CSS compatibility debt, wider Se
 
 ## Current Verdict
 
-`NO-GO` for the full production-grade mission. The AI control-plane slice, AUDIT-006, and AUDIT-008 are verified, but AUDIT-007, AUDIT-009, and the remaining security/release surfaces above are not closed. Current fresh evidence includes 179/179 server tests, 72/72 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI, i18n, and Settings browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
+`NO-GO` for the full production-grade mission. The AI control-plane slice, AUDIT-006, AUDIT-008, and AUDIT-009 are verified, but AUDIT-007 and the remaining security/release surfaces above are not closed. Current fresh evidence includes 181/181 server tests, 77/77 client tests, 59/59 focused AI/control-plane checks, deterministic API E2E, production configuration validation, Admin operations, Admin AI, legacy Admin isolation, i18n, and Settings browser proof, dependency audit, and full-history secret scan; this evidence must not be generalized to the still-open application-wide requirements.
 
 ## Verification snapshot — 2026-09-03
 

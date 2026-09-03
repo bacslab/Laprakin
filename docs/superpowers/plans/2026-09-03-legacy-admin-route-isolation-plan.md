@@ -33,10 +33,10 @@
 
 ## Task 4 — Close AUDIT-009 honestly
 
-- [ ] Run all server/client/integration/browser/build gates affected by the extraction.
-- [ ] Confirm no blocking all-resource initialization remains and Landing-owned files are unchanged.
-- [ ] Update audit, changelog, architecture notes, screenshots, and residual risks.
-- [ ] Commit the audit closure while keeping unrelated mission blockers open.
+- [x] Run all server/client/integration/browser/build gates affected by the extraction.
+- [x] Confirm no blocking all-resource initialization remains and Landing-owned files are unchanged.
+- [x] Update audit, changelog, architecture notes, screenshots, and residual risks.
+- [x] Commit the audit closure while keeping unrelated mission blockers open.
 
 ## Exit Gate
 
