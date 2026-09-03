@@ -1,0 +1,35 @@
+{
+  "page": {
+    "width": 390,
+    "height": 8801,
+    "overflow": 0,
+    "lime": "#c2ff33",
+    "mint": "#45ffa2"
+  },
+  "ctas": [
+    {
+      "buttonFamily": "\"Plus Jakarta Sans\", system-ui, sans-serif",
+      "spanFamily": "\"Plus Jakarta Sans\", system-ui, sans-serif",
+      "buttonWeight": "400",
+      "spanWeight": "400",
+      "bounds": {
+        "x": 90,
+        "y": 383,
+        "width": 210,
+        "height": 52
+      }
+    },
+    {
+      "buttonFamily": "\"Plus Jakarta Sans\", system-ui, sans-serif",
+      "spanFamily": "\"Plus Jakarta Sans\", system-ui, sans-serif",
+      "buttonWeight": "400",
+      "spanWeight": "400",
+      "bounds": {
+        "x": 90,
+        "y": 8113,
+        "width": 210,
+        "height": 52
+      }
+    }
+  ]
+}

@@ -3,10 +3,10 @@
 @layer sections {
   /* The landing stylesheet now owns the existing Figma-inspired landing surface. */
   .fg-page {
-    --fg-lime: var(--accent);
-    --fg-mint: #45ffa2;
-    --fg-border: color-mix(in srgb, var(--line) 62%, transparent);
-    --fg-border-strong: color-mix(in srgb, var(--text) 42%, var(--line));
+    --fg-lime: var(--landing-accent);
+    --fg-mint: var(--landing-accent-secondary);
+    --fg-border: var(--landing-border);
+    --fg-border-strong: var(--landing-border-strong);
     font-family: var(--font-sans);
   }
 
@@ -21,7 +21,24 @@
   }
 
   .fg-page .fg-gradient-button:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--landing-accent);
     outline-offset: 4px;
+  }
+}
+
+/*
+ * The legacy compatibility layer resets every button with `font: inherit`.
+ * Keep this feature-owned bridge until that reset is removed; it is deliberately
+ * limited to the two approved Landing CTAs and changes glyph rendering only.
+ */
+@layer compatibility {
+  .fg-page .fg-gradient-button {
+    font-family: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-weight: 700;
+  }
+
+  .fg-page .fg-gradient-button span {
+    font-family: inherit;
+    font-weight: inherit;
   }
 }

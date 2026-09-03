@@ -41,6 +41,10 @@
     --breakpoint-mobile: 700px;
     --breakpoint-tablet: 920px;
     --breakpoint-wide: 1200px;
+    --landing-accent: #c2ff33;
+    --landing-accent-secondary: #45ffa2;
+    --landing-border: color-mix(in srgb, #e7e0d8 62%, transparent);
+    --landing-border-strong: color-mix(in srgb, #211d19 42%, #e7e0d8);
     --landing-bg: #f4f0e9;
     --landing-surface: #fffdf9;
     --landing-text: #1d1a18;
