@@ -1,0 +1,4 @@
+# Synthetic, non-production contract fixtures verified in source.
+c2ec9643704a00e1aee08adde325c9069da960cc:server/test/ai-configuration-repository.test.mjs:generic-api-key:32
+46c1b51ecd04f65f03188f3442f081e74b1359a1:scripts/production-config-check.mjs:generic-api-key:26
+40822932bd8a7336e09064d588528c37b54a3d44:server/test/admin-authorization-api.test.mjs:generic-api-key:90
