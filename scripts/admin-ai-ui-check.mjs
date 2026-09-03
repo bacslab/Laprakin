@@ -77,6 +77,22 @@ async function stopProcess(child) {
   ]);
 }
 
+async function assertReadableTypography(page, surface) {
+  const violations = await page.locator('.admin-ai-shell').evaluate((shell) => [...shell.querySelectorAll('*')].flatMap((element) => {
+    const style = getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden' || !element.getClientRects().length) return [];
+    const ownsText = [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.nodeValue.trim());
+    const isTextControl = element.matches('input:not([type="checkbox"]):not([type="radio"]), textarea, select');
+    if (!ownsText && !isTextControl) return [];
+    const fontSize = Number.parseFloat(style.fontSize);
+    const fontWeight = Number.parseInt(style.fontWeight, 10);
+    const mono = style.fontFamily.toLowerCase().includes('dm mono');
+    const invalidWeight = mono ? ![400, 500].includes(fontWeight) : ![400, 500, 600, 700, 800].includes(fontWeight);
+    return fontSize < 12 || invalidWeight ? [{ tag: element.tagName, text: (element.textContent || element.getAttribute('aria-label') || element.getAttribute('placeholder') || '').trim().slice(0, 80), fontSize, fontWeight, fontFamily: style.fontFamily }] : [];
+  }));
+  assert.deepEqual(violations, [], `${surface} typography violations:\n${JSON.stringify(violations, null, 2)}`);
+}
+
 const root = path.resolve(import.meta.dirname, '..');
 const sandbox = await mkdtemp(path.join(os.tmpdir(), 'laprakin-admin-ai-ui-'));
 const apiPort = await availablePort();
@@ -186,6 +202,7 @@ try {
   assert.equal(providerResponse.status(), 201, `${JSON.stringify(providerPayload)}\n${serverLogs}`);
   await page.waitForURL('**/admin/ai/providers/ui-check**');
   await page.getByRole('heading', { name: 'UI Check Provider', exact: true, level: 1 }).waitFor();
+  await assertReadableTypography(page, 'provider details');
   const credential = page.getByLabel('Credential baru', { exact: true });
   assert.equal(await credential.getAttribute('type'), 'password');
   assert.equal(await credential.getAttribute('autocomplete'), 'new-password');
@@ -219,6 +236,7 @@ try {
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   assert.equal(await capabilityButton.evaluate((node) => node === document.activeElement), true);
   assert.equal(await page.getByRole('button', { name: 'Nonaktifkan model' }).isVisible(), true);
+  await assertReadableTypography(page, 'model registry');
   await page.screenshot({ path: path.join(screenshotDir, 'models-actions-desktop.png'), fullPage: true });
 
   const routes = [
@@ -231,6 +249,7 @@ try {
     await page.goto(`${webBase}${route}`, { waitUntil: 'networkidle' });
     try {
       await page.getByRole('heading', { name: title, exact: true }).waitFor({ timeout: 10_000 });
+      await assertReadableTypography(page, route);
     } catch (error) {
       const diagnostic = {
         route,
@@ -302,7 +321,7 @@ try {
   await reducedContext.close();
   await context.close();
 
-  console.log(`Admin AI UI passed: isolated deep links, secret-safe credential input, English/Indonesian copy, failure retry, keyboard navigation, dark theme, reduced motion, desktop, and 390px mobile. Screenshots: ${screenshotDir}`);
+  console.log(`Admin AI UI passed: isolated deep links, secret-safe credential input, 12px minimum computed typography with standard weights, English/Indonesian copy, failure retry, keyboard navigation, dark theme, reduced motion, desktop, and 390px mobile. Screenshots: ${screenshotDir}`);
 } finally {
   await browser?.close().catch(() => {});
   await Promise.all([stopProcess(api), stopProcess(web)]);
