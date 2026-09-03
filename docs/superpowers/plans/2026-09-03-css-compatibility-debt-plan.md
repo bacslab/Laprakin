@@ -12,7 +12,7 @@
 - [x] Add a failing contract that rejects `.landing-page` selectors in the compatibility sheet and lowers the budget from 4,730 to 3,060.
 - [x] Remove only selector branches rooted at `.landing-page`, retaining live selector branches in mixed rules.
 - [x] Prove the committed Landing screenshot hashes, computed CTA metrics, and preference-independence result remain unchanged.
-- [ ] Run full client, lint, typecheck, and build gates; commit.
+- [x] Run full client, lint, typecheck, and build gates; commit.
 
 ## Task 2 — Delete retired unscoped public-surface selectors
 
