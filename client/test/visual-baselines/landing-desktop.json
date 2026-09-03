@@ -8,10 +8,10 @@
   },
   "ctas": [
     {
-      "buttonFamily": "\"Plus Jakarta Sans\", system-ui, sans-serif",
-      "spanFamily": "\"Plus Jakarta Sans\", system-ui, sans-serif",
-      "buttonWeight": "400",
-      "spanWeight": "400",
+      "buttonFamily": "\"Plus Jakarta Sans Variable\", \"Plus Jakarta Sans\", system-ui, sans-serif",
+      "spanFamily": "\"Plus Jakarta Sans Variable\", \"Plus Jakarta Sans\", system-ui, sans-serif",
+      "buttonWeight": "700",
+      "spanWeight": "700",
       "bounds": {
         "x": 597,
         "y": 489,
@@ -20,10 +20,10 @@
       }
     },
     {
-      "buttonFamily": "\"Plus Jakarta Sans\", system-ui, sans-serif",
-      "spanFamily": "\"Plus Jakarta Sans\", system-ui, sans-serif",
-      "buttonWeight": "400",
-      "spanWeight": "400",
+      "buttonFamily": "\"Plus Jakarta Sans Variable\", \"Plus Jakarta Sans\", system-ui, sans-serif",
+      "spanFamily": "\"Plus Jakarta Sans Variable\", \"Plus Jakarta Sans\", system-ui, sans-serif",
+      "buttonWeight": "700",
+      "spanWeight": "700",
       "bounds": {
         "x": 597,
         "y": 8697,

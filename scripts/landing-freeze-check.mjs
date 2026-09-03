@@ -165,7 +165,11 @@ web.stderr.on('data', (chunk) => { webLogs += chunk; });
 
 try {
   await waitFor(webBase, () => webLogs);
-  const browser = await chromium.launch({ headless: true, executablePath: browserExecutable() });
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: browserExecutable(),
+    args: ['--disable-gpu', '--force-color-profile=srgb'],
+  });
   const results = {};
   try {
     for (const [name, viewport] of Object.entries(viewports)) {
