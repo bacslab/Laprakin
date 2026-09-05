@@ -57,10 +57,58 @@ export function AssistantMessageActions({ message, onRegenerate, onReaction, bus
   </footer>;
 }
 
-export function UserMessageActions({ message, onEdit, busy = false }) {
+export function InlineUserMessageEditor({ message, onSubmit, onCancel, busy = false }) {
   const { t } = useI18n();
+  const [draft, setDraft] = useState(String(message.content || ''));
+  const editorRef = useRef(null);
+  useEffect(() => {
+    setDraft(String(message.content || ''));
+    const frame = window.requestAnimationFrame(() => editorRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [message.id, message.content]);
+  const submit = (event) => {
+    event.preventDefault();
+    const content = draft.trim();
+    if (!content || busy) return;
+    onSubmit?.(message.id, content);
+  };
+  return <form className="message-inline-editor" onSubmit={submit}>
+    <textarea
+      ref={editorRef}
+      aria-label={t('workspace.messageActions.editInput')}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') { event.preventDefault(); onCancel?.(); }
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
+      }}
+      disabled={busy}
+      rows="3"
+    />
+    <div className="message-inline-editor-actions">
+      <button type="button" onClick={onCancel} disabled={busy}>{t('workspace.messageActions.cancelEdit')}</button>
+      <button type="submit" className="message-inline-editor-save" disabled={busy || !draft.trim()}>{t('workspace.messageActions.saveEdit')}</button>
+    </div>
+  </form>;
+}
+
+export function UserMessageActions({ message, onEdit, busy = false }) {
+  const { t, language } = useI18n();
+  const { setNotice } = useApp();
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(String(message.content || ''));
+      setCopied(true);
+      setNotice(t('workspace.messageActions.copyMessageNotice'));
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch { setNotice(t('workspace.messageActions.copyMessageFailed')); }
+  };
+  const timestamp = new Date(message.created_at || message.createdAt || Date.now()).toLocaleTimeString(language === 'en' ? 'en-US' : 'id-ID', { hour: '2-digit', minute: '2-digit' });
   return <footer className="message-actions message-actions-user" aria-label={t('workspace.messageActions.userLabel')}>
+    <button type="button" onClick={copy} disabled={busy} aria-label={t('workspace.messageActions.copyMessage')} title={t('workspace.messageActions.copyMessage')}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
     <button type="button" onClick={() => onEdit?.(message)} disabled={busy} aria-label={t('workspace.messageActions.edit')} title={t('workspace.messageActions.edit')}><Pencil size={14} />{t('workspace.messageActions.edit')}</button>
+    <time dateTime={message.created_at || message.createdAt}>{timestamp}</time>
   </footer>;
 }
 

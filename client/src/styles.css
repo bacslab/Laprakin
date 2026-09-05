@@ -2,6 +2,7 @@
 button,
 input,
 textarea { font: inherit; }
+button { font-family: inherit; }
 :root{--orange:#f26a21;--orange-deep:#bd4e14;--orange-soft:#fff0e6;--ink:#211d19;--muted:#746b63;--line:#e7e0d8;--canvas:#f8f6f3;--card:#fff;--dark:#171411;--success:#2f7d59;--danger:#b54535;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--ink);background:var(--canvas)}
 *{box-sizing:border-box}html,body,#root{min-width:0;width:100%;min-height:100%;margin:0}body{overflow-x:hidden;background:var(--canvas)}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.52}a{color:inherit;text-decoration:none}h1,h2,h3,p{margin:0}textarea{resize:vertical;min-height:76px}
 .button, .icon-button, .workspace button, .modal button{transition:color .16s ease,background-color .16s ease,border-color .16s ease,opacity .16s ease}
@@ -2909,8 +2910,8 @@ body { margin:0; overflow-x:hidden; }
   --pricing-accent:#c2ff33!important;
 }
 .button.primary, .app-dialog-confirm{
-  border-color:#c2ff33!important;
-  background:#c2ff33!important;
+  border-color:var(--app-accent,#c2ff33)!important;
+  background:var(--app-accent,#c2ff33)!important;
   color:#0b1105!important;
 }
 input:checked + .toggle-dot,
@@ -5965,6 +5966,25 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 .workspace .message-actions-user { justify-content:flex-end; margin:0 0 8px; }
 .workspace .message-actions-user button { width:auto; min-height:25px; padding:0 8px; gap:5px; font-size:.56rem; }
 .workspace .message-actions-user button:disabled { opacity:.5; cursor:not-allowed; }
+.workspace button { font-family:inherit; }
+.workspace .message.is-editing { max-width:min(90%,700px); }
+.workspace .message-inline-editor { width:min(100%,620px); display:grid; gap:8px; padding:8px; border:1px solid var(--workspace-line); border-radius:10px; background:var(--workspace-card); }
+.workspace .message-inline-editor textarea { min-height:74px; max-height:220px; resize:vertical; border:1px solid var(--workspace-line); border-radius:7px; padding:9px 10px; background:var(--workspace-bg); color:var(--workspace-text); font-size:.7rem; line-height:1.5; }
+.workspace .message-inline-editor textarea:focus { border-color:var(--workspace-accent); box-shadow:0 0 0 1px color-mix(in srgb,var(--workspace-accent) 42%,transparent); }
+.workspace .message-inline-editor-actions { display:flex; justify-content:flex-end; gap:6px; }
+.workspace .message-inline-editor-actions button { min-height:27px; padding:0 9px; border:1px solid var(--workspace-line); border-radius:6px; background:transparent; color:var(--workspace-muted); font-size:.58rem; font-weight:800; }
+.workspace .message-inline-editor-actions button:hover:not(:disabled) { background:var(--workspace-hover); color:var(--workspace-text); }
+.workspace .message-inline-editor-actions .message-inline-editor-save { border-color:var(--workspace-accent); background:var(--workspace-accent); color:var(--workspace-accent-contrast); }
+.workspace .message-inline-editor-actions .message-inline-editor-save:hover:not(:disabled) { filter:brightness(.94); }
+.workspace .session-menu>button,
+.workspace .session-menu-folder>button { white-space:nowrap; }
+.workspace .session-menu button span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.workspace .session-menu button:hover span { animation:workspace-sidebar-marquee 5.5s ease-in-out infinite alternate; text-overflow:clip; }
+@keyframes workspace-sidebar-marquee { 0%,28% { transform:translateX(0); } 72%,100% { transform:translateX(-18px); } }
+.workspace .composer-disclaimer { color:var(--workspace-muted); font-weight:700; }
+.workspace .message-actions-user time { margin-left:2px; color:var(--workspace-muted); font-size:.52rem; }
+.app-dialog:not(.is-danger) .app-dialog-icon { border-color:color-mix(in srgb,var(--app-accent,#c2ff33) 35%,transparent); background:color-mix(in srgb,var(--app-accent,#c2ff33) 13%,transparent); color:var(--app-accent,#c2ff33); }
+.app-dialog:not(.is-danger) .app-dialog-confirm { border-color:var(--app-accent,#c2ff33); background:var(--app-accent,#c2ff33); }
 .workspace .composer-editing-banner { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 auto 6px; width:min(760px,calc(100% - 34px)); color:var(--workspace-muted); font-size:.58rem; }
 .workspace .composer-editing-banner span { display:inline-flex; align-items:center; gap:5px; }
 .workspace .composer-editing-banner button { border:0; border-radius:6px; padding:4px 7px; background:var(--workspace-hover); color:var(--workspace-muted); font-size:.56rem; }

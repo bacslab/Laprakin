@@ -54,7 +54,7 @@
     "featuresEyebrow": "The features",
     "featuresTitle": "Fitur Laprakin",
     "featuresDescription": "Empat kemampuan utama yang membantu dari bahan sampai dokumen siap ditinjau.",
-    "featureImageAlt": "Tampilan fitur Laprakin: {{title}}",
+    "featurePlaceholder": "Pratinjau fitur",
     "faqEyebrow": "FAQ",
     "faqTitle": "Pertanyaan yang sering muncul",
     "faqDescription": "Hal penting yang perlu kamu tahu sebelum mulai menggunakan Laprakin.",
@@ -91,7 +91,7 @@
     "features": {
       "upload": { "title": "Upload berbagai sumber", "description": "Masukkan PDF, DOCX, screenshot, gambar, spreadsheet, teks, dan tautan dalam satu workspace." },
       "aiMode": { "title": "Mode AI sesuai kebutuhan", "description": "Gunakan Basic untuk tugas harian, Thinking untuk analisis, dan XtraThink untuk pembahasan yang lebih kompleks." },
-      "identity": { "title": "Lengkapi identitas akademik", "description": "Isi profil akademik dan data laporan agar dokumen mengikuti kebutuhanmu. Data ini dipakai hanya saat pembuatan dokumen." },
+      "export": { "title": "Export ke Word", "description": "Unduh laporan dalam format DOCX untuk diperiksa, dirapikan, dan dikumpulkan saat sudah siap." },
       "personalize": { "title": "Personalisasi penulisan", "description": "Atur nama panggilan, gaya bahasa, sudut pandang, struktur awal, dan instruksi tambahan sebagai acuan AI." }
     },
     "faq": {
@@ -571,13 +571,14 @@
       "attachSource": "Lampirkan bahan",
       "saveEdit": "Simpan perubahan pesan",
       "send": "Kirim pesan",
-      "aiConsentTitle": "Izinkan pemrosesan melalui {{providers}}",
-      "aiConsentDescription": "Data yang dapat dikirim: {{data}}. Izin dapat dicabut dari Pengaturan.",
+      "aiConsentTitle": "Izinkan Laprakin memproses bahanmu",
+      "aiConsentDescription": "Data yang dapat digunakan: {{data}}. Izin dapat dicabut dari Pengaturan.",
       "aiConsentAllow": "Tinjau dan izinkan",
       "aiConsentSaving": "Menyimpan...",
       "documentType": "Pilih jenis dokumen",
       "hintEnter": "Enter untuk kirim · Shift + Enter untuk baris baru · file hanya terlihat di akunmu",
       "hintShortcut": "Ctrl atau ⌘ + Enter untuk kirim · Enter untuk baris baru · file hanya terlihat di akunmu",
+      "disclaimer": "Laprakin dapat membuat kesalahan, periksa kembali hasil yang dibuat",
       "dataClasses": {
         "chat_content": "isi percakapan",
         "uploaded_source_text": "teks dari bahan yang diunggah",
@@ -792,7 +793,13 @@
       "needsImprovementTitle": "Perlu diperbaiki",
       "regenerate": "Buat ulang jawaban",
       "userLabel": "Aksi pesanmu",
-      "edit": "Ubah pesan"
+      "edit": "Ubah pesan",
+      "copyMessage": "Salin pesanmu",
+      "copyMessageNotice": "Pesanmu disalin.",
+      "copyMessageFailed": "Pesanmu belum dapat disalin.",
+      "editInput": "Ubah isi pesan",
+      "cancelEdit": "Batalkan perubahan",
+      "saveEdit": "Simpan dan buat ulang"
     },
     "brief": {
       "eyebrow": "Lengkapi konteks",
@@ -939,8 +946,8 @@
         "nicknameReset": "Sapaan kembali memakai nama depan."
       },
       "data": {
-        "aiConsentTitle": "Pemrosesan AI eksternal",
-        "aiConsentDescription": "Pemroses aktif: {{providers}}. Jenis data: {{data}}.",
+        "aiConsentTitle": "Pemrosesan untuk menyiapkan jawaban",
+        "aiConsentDescription": "Data yang digunakan: {{data}}. Izin dapat dicabut kapan saja.",
         "aiConsentUnavailable": "belum tersedia",
         "aiConsentToggle": "Izinkan pemrosesan AI",
         "aiConsentToggleDescription": "Persetujuan dicatat per versi pemroses dan dapat dicabut kapan saja.",
@@ -949,7 +956,7 @@
         "copyTitle": "Salinan data",
         "copyDescription": "Unduh profil, preferensi, dan ringkasan aktivitas akun.",
         "download": "Unduh data",
-        "privacyNote": "Manifest pemroses {{version}} adalah sumber daftar provider dan jenis data. Retensi serta penggunaan untuk pelatihan mengikuti kebijakan privasi aktif dan kebijakan provider yang ditampilkan saat persetujuan.",
+        "privacyNote": "Versi kebijakan {{version}} menentukan cara bahanmu diproses. Retensi dan penggunaan data mengikuti kebijakan privasi yang berlaku.",
         "deleteTitle": "Hapus akun",
         "deleteDescription": "Unduh data yang diperlukan terlebih dahulu. Tindakan ini tidak dapat dibatalkan.",
         "confirmationLabel": "Ketik email akun untuk konfirmasi",

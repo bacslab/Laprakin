@@ -32,14 +32,8 @@ const SOURCES = [
 const FEATURES = [
   ['landing.features.upload.title', 'landing.features.upload.description'],
   ['landing.features.aiMode.title', 'landing.features.aiMode.description'],
-  ['landing.features.identity.title', 'landing.features.identity.description'],
+  ['landing.features.export.title', 'landing.features.export.description'],
   ['landing.features.personalize.title', 'landing.features.personalize.description'],
-];
-const FEATURE_IMAGES = [
-  '/landing/fitur/Fitur 1.png',
-  '/landing/fitur/Fitur 2.png',
-  '/landing/fitur/Fitur 3.png',
-  '/landing/fitur/Fitur 4.png',
 ];
 const FEATURE_ROWS = Array.from({ length: Math.ceil(FEATURES.length / 2) }, (_, index) => FEATURES.slice(index * 2, index * 2 + 2));
 
@@ -207,13 +201,12 @@ export default function LandingView({
           <p>{t('landing.featuresDescription')}</p>
         </SectionTitle>
         <div className="fg-features-stack">
-          {FEATURE_ROWS.map((row, rowIndex) => <div className="fg-feature-row" key={row[0][0]}>
-            {row.map(([titleKey, textKey], columnIndex) => {
-              const featureIndex = rowIndex * 2 + columnIndex;
+          {FEATURE_ROWS.map((row) => <div className="fg-feature-row" key={row[0][0]}>
+            {row.map(([titleKey, textKey]) => {
               const title = t(titleKey);
               return <article key={titleKey}>
               <div className="fg-feature-copy"><h3>{title}</h3><p>{t(textKey)}</p></div>
-              <img className="fg-feature-image" src={FEATURE_IMAGES[featureIndex]} alt={t('landing.featureImageAlt', { title })} />
+              <MediaPlaceholder label={t('landing.featurePlaceholder')} unavailable={t('landing.mediaUnavailable')} />
               </article>;
             })}
           </div>)}

@@ -34,6 +34,7 @@ import I18nRuntime from './i18n/I18nRuntime';
 import { createTranslator } from './i18n';
 import { AppDialog } from './components/Dialog';
 import BillingPage from './pages/Billing/BillingPage';
+import { workspaceAccents } from './data/workspace';
 
 const LandingRoutePage = loadPage(() => import('./pages/Landing/LandingPage'));
 const AuthPageModule = loadPage(() => import('./pages/Auth/AuthPage'));
@@ -107,6 +108,11 @@ function AppProvider({ children }) {
   const [prefs, setPrefs] = useState(readPrefs);
   const [notice, setNotice] = useState(null);
   const [dialog, setDialog] = useState(null);
+  useEffect(() => {
+    const accent = workspaceAccents.find((item) => item.key === prefs.accent) || workspaceAccents[0];
+    document.documentElement.style.setProperty('--app-accent', accent.color);
+    return () => document.documentElement.style.removeProperty('--app-accent');
+  }, [prefs.accent]);
   const translate = useMemo(() => createTranslator(prefs.language), [prefs.language]);
   const sessionChecked = useRef(false);
   const refreshSession = async () => {

@@ -54,7 +54,7 @@
     "featuresEyebrow": "The features",
     "featuresTitle": "Laprakin features",
     "featuresDescription": "Four core capabilities that help from source collection to a review-ready document.",
-    "featureImageAlt": "Laprakin feature screen: {{title}}",
+    "featurePlaceholder": "Feature preview",
     "faqEyebrow": "FAQ",
     "faqTitle": "Frequently asked questions",
     "faqDescription": "The important things to know before you start using Laprakin.",
@@ -91,7 +91,7 @@
     "features": {
       "upload": { "title": "Upload every source", "description": "Add PDFs, DOCX files, screenshots, images, spreadsheets, text, and links in one workspace." },
       "aiMode": { "title": "AI modes for the task", "description": "Use Basic for daily work, Thinking for analysis, and XtraThink for more complex discussion." },
-      "identity": { "title": "Complete your academic identity", "description": "Add academic and report details so the document fits your needs. This data is used only while creating the document." },
+      "export": { "title": "Export to Word", "description": "Download the report as a DOCX file to review, tidy, and submit when it is ready." },
       "personalize": { "title": "Personalize the writing", "description": "Set your preferred name, tone, perspective, starting structure, and extra instructions for the AI." }
     },
     "faq": {
@@ -571,13 +571,14 @@
       "attachSource": "Attach material",
       "saveEdit": "Save message changes",
       "send": "Send message",
-      "aiConsentTitle": "Allow processing through {{providers}}",
-      "aiConsentDescription": "Data that may be sent: {{data}}. You can revoke consent in Settings.",
+      "aiConsentTitle": "Allow Laprakin to process your materials",
+      "aiConsentDescription": "Data that may be used: {{data}}. You can revoke consent in Settings.",
       "aiConsentAllow": "Review and allow",
       "aiConsentSaving": "Saving...",
       "documentType": "Choose document type",
       "hintEnter": "Enter to send · Shift + Enter for a new line · files are visible only in your account",
       "hintShortcut": "Ctrl or ⌘ + Enter to send · Enter for a new line · files are visible only in your account",
+      "disclaimer": "Laprakin can make mistakes, so please review the generated result",
       "dataClasses": {
         "chat_content": "conversation content",
         "uploaded_source_text": "text from uploaded materials",
@@ -792,7 +793,13 @@
       "needsImprovementTitle": "Needs improvement",
       "regenerate": "Regenerate answer",
       "userLabel": "Your message actions",
-      "edit": "Edit message"
+      "edit": "Edit message",
+      "copyMessage": "Copy your message",
+      "copyMessageNotice": "Your message was copied.",
+      "copyMessageFailed": "Your message could not be copied.",
+      "editInput": "Edit message content",
+      "cancelEdit": "Cancel changes",
+      "saveEdit": "Save and regenerate"
     },
     "brief": {
       "eyebrow": "Complete the context",
@@ -939,8 +946,8 @@
         "nicknameReset": "Greeting now uses your first name."
       },
       "data": {
-        "aiConsentTitle": "External AI processing",
-        "aiConsentDescription": "Active processors: {{providers}}. Data classes: {{data}}.",
+        "aiConsentTitle": "Processing to prepare your answer",
+        "aiConsentDescription": "Data used: {{data}}. You can revoke consent at any time.",
         "aiConsentUnavailable": "not available",
         "aiConsentToggle": "Allow AI processing",
         "aiConsentToggleDescription": "Consent is recorded for the current processor version and can be revoked at any time.",
@@ -949,7 +956,7 @@
         "copyTitle": "Data copy",
         "copyDescription": "Download your profile, preferences, and account activity summary.",
         "download": "Download data",
-        "privacyNote": "Processor manifest {{version}} is the source of truth for providers and data classes. Retention and training use follow the active privacy policy and the provider policy shown at consent time.",
+        "privacyNote": "Policy version {{version}} determines how your materials are processed. Retention and data use follow the active privacy policy.",
         "deleteTitle": "Delete account",
         "deleteDescription": "Download any data you need first. This action cannot be undone.",
         "confirmationLabel": "Type your account email to confirm",
