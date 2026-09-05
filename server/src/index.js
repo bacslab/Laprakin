@@ -6375,7 +6375,8 @@ app.use('/api', (req, res) => res.status(404).json({
 
 if ((config.isProd || config.serveStatic) && fs.existsSync(config.staticClientDir)) {
   app.use(express.static(config.staticClientDir, { index: false, maxAge: '1h' }));
-  app.get('*', (_req, res) => res.sendFile(path.join(config.staticClientDir, 'index.html')));
+  // Express 5/path-to-regexp rejects the legacy `'*'` pattern at startup.
+  app.get(/.*/, (_req, res) => res.sendFile(path.join(config.staticClientDir, 'index.html')));
 }
 
 app.use((err, req, res, _next) => {
