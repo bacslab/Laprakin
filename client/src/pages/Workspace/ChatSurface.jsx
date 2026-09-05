@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowLeft, Globe2, UploadCloud } from 'lucide-react';
-import { getRegenerationTarget } from '../../lib/chat-message-actions';
+import { collapseMessageRevisions, getRegenerationTarget } from '../../lib/chat-message-actions';
 import { userGreetingName } from '../../lib/user';
 import { useI18n } from '../../i18n/context';
 import { SourceBar } from './AttachmentComponents';
@@ -9,24 +9,26 @@ import Composer from './Composer';
 import { ThinkingRail, WorkPlanRail, WorkflowPanel } from './WorkspaceWorkflow';
 import { AssistantMessageActions, ChatBriefPanel, DocumentCard, DocumentQuiz, InlineContext, InlineUserMessageEditor, MessageContent, UserMessageActions } from './ChatComponents';
 
-export default function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, removeAttachment, updateAttachmentCategory, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, aiConsentData, onEnableExternalAi, onUpgrade, enterToSend = true, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz, editingMessage, onEditMessage, onEditSubmit, onCancelEdit, onRevise, onMessageReaction }) {
+export default function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, aiConsentData, onEnableExternalAi, onUpgrade, enterToSend = true, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz, editingMessage, onEditMessage, onEditSubmit, onCancelEdit, onRevise, onMessageReaction }) {
   const { t } = useI18n();
   const blankChat = !active || (!messages.length && !attachments.length && !active.document_id);
   const [previewFile, setPreviewFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const greetingName = userGreetingName(user);
   const greetingClass = greetingName.length > 17 ? 'greeting-name-very-long' : greetingName.length > 12 ? 'greeting-name-long' : '';
-  const visibleMessages = messages
-    .filter((message) => message.meta?.kind !== 'attachments')
+  const visibleMessages = collapseMessageRevisions(messages
+    .filter((message) => message.meta?.kind !== 'attachments'))
     .filter((message, index, items) => {
       if (!index || message.role !== 'assistant') return true;
       const previous = items[index - 1];
       return previous.role !== 'assistant' || previous.content.trim() !== message.content.trim();
     });
   const userMessages = visibleMessages.filter((message) => message.role === 'user');
+  const visibleUserIds = new Set(userMessages.map((message) => message.id));
   const attachmentBuckets = new Map();
   attachments.forEach((file) => {
     let messageId = file.message_id;
+    if (messageId && !visibleUserIds.has(messageId)) messageId = '';
     if (!messageId && userMessages.length) {
       const uploadedAt = new Date(file.created_at || file.createdAt || 0).getTime();
       messageId = userMessages.find((message) => new Date(message.created_at || message.createdAt || 0).getTime() >= uploadedAt)?.id
@@ -63,7 +65,7 @@ export default function ChatSurface({ active, messages, attachments, documentSta
     {dragActive && <div className="workspace-drop-hint" aria-hidden="true"><UploadCloud size={22} /><b>{t('workspace.chatSurface.dropHint')}</b><small>{t('workspace.chatSurface.dropDescription')}</small></div>}
     <div className="chat-thread">
       {quizMode && documentState ? <div className="quiz-workspace-panel"><header><div><small>{t('workspace.chatSurface.quizEyebrow')}</small><h2>{t('workspace.chatSurface.quizTitle')}</h2></div><button type="button" onClick={onCloseQuiz}><ArrowLeft size={14}/>{t('workspace.chatSurface.quizBack')}</button></header><DocumentQuiz access={documentState.quizAccess} busy={busy} onStart={onStartQuiz} onSubmit={onSubmitQuiz} /></div> : blankChat ? <div className="chat-welcome chat-welcome-minimal"><h1 className={greetingClass}>{t('workspace.chatSurface.greetingLead')} <em>{t('workspace.chatSurface.greetingAccent')}</em> {t('workspace.chatSurface.greetingTail', { name: greetingName })}</h1></div> : <div className="thread-content">
-      {visibleMessages.map((message) => <div className={`message-turn message-turn-${message.role}`} key={message.id}>
+      {visibleMessages.map((message) => <div className={`message-turn message-turn-${message.role} ${editingMessage?.id === message.id ? 'is-editing' : ''}`} key={message.id}>
         {message.role === 'user' && attachmentBuckets.get(message.id)?.length ? <SourceBar compact attachments={attachmentBuckets.get(message.id)} onOpen={setPreviewFile} /> : null}
         {message.role === 'assistant' && !message.meta?.isClarification && message.meta?.workPlan?.steps?.length ? <WorkPlanRail
           plan={message.meta.workPlan}
@@ -98,7 +100,7 @@ export default function ChatSurface({ active, messages, attachments, documentSta
         : !hasEmbeddedPlan && <WorkflowPanel workflow={workflow} busy={busy} onCreate={createDocument} onAction={onWorkflowAction} aiMode={aiMode} />}
       {busy && !active?.document_id && !['queued', 'running', 'retry_queued'].includes(activeJob?.status) && <ThinkingRail />}
     </div>}</div>
-    {!quizMode && <Composer input={input} setInput={setInput} busy={busy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} centered={blankChat} pendingFiles={pendingFiles} onPasteImages={onPasteImages} onAddPendingFiles={onAddPendingFiles} onRemovePending={onRemovePending} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} aiConsentData={aiConsentData} onEnableExternalAi={onEnableExternalAi} onUpgrade={onUpgrade} enterToSend={enterToSend} />}
+    {!quizMode && <Composer input={input} setInput={setInput} busy={busy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} centered={blankChat} pendingFiles={pendingFiles} onPasteImages={onPasteImages} onRemovePending={onRemovePending} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} aiConsentData={aiConsentData} onEnableExternalAi={onEnableExternalAi} onUpgrade={onUpgrade} enterToSend={enterToSend} />}
     {previewFile && <AttachmentPreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />}
   </div>;
 }

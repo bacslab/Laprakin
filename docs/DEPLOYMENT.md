@@ -187,12 +187,11 @@ Model **tarik**, bukan dorong. VM yang memeriksa GitHub, karena port 22 dibatasi
 2. Workflow `test.yml` menjalankan unit test, audit dependency, pemindaian secret
    dengan Gitleaks, SAST dengan Semgrep CE, dan pemindaian vulnerability filesystem
    dengan Trivy untuk severity `HIGH` dan `CRITICAL` yang sudah memiliki perbaikan.
-3. Job `release` memajukan branch `release` ke commit tersebut **hanya bila kelima
-   gate lulus**. Hasil setiap gate tetap terlihat pada GitHub Actions.
-4. `laprakin-deploy.timer` di VM memeriksa `release` setiap lima menit.
+3. Setelah seluruh gate lulus, branch `main` menjadi sumber revisi yang siap dipakai. Hasil setiap gate tetap terlihat pada GitHub Actions.
+4. `laprakin-deploy.timer` di VM memeriksa `main` setiap lima menit.
 5. Bila ada revisi baru: backup → `git archive` ke `/opt/laprakin` → build `laprakin-laprakin:candidate` → jalankan container **canary** terisolasi di port 4555 dengan data sementara → tunggu `/api/health/ready` → baru promosikan ke `latest` dan restart produksi.
 
-Commit yang gagal salah satu gate tidak pernah mencapai `release`. Image yang gagal boot tidak pernah dipromosikan; produksi tetap melayani image lama. Bila produksi ternyata tidak sehat setelah promosi, skrip mengembalikan `laprakin-laprakin:previous` tanpa menunggu operator.
+Commit yang gagal salah satu gate tidak boleh didorong ke `main`. Image yang gagal boot tidak pernah dipromosikan; produksi tetap melayani image lama. Bila produksi ternyata tidak sehat setelah promosi, skrip mengembalikan `laprakin-laprakin:previous` tanpa menunggu operator.
 
 ### Checklist repository sebelum publik
 

@@ -6,9 +6,8 @@
 # Model tarik hanya butuh koneksi keluar, sehingga NSG tetap tertutup dan tidak
 # ada private key SSH yang dititipkan sebagai secret di GitHub.
 #
-# Hanya branch `release` yang dipakai. Branch itu dimajukan oleh workflow CI
-# setelah unit test dan audit lulus, jadi commit yang gagal test tidak pernah
-# sampai ke pengguna.
+# Hanya branch `main` yang dipakai. CI wajib lulus sebelum perubahan didorong
+# ke branch ini, dan VM menarik revisi yang sama dengan yang dilihat pengguna.
 #
 # Urutan tiap deploy: backup -> build image kandidat -> uji boot di container
 # canary terisolasi -> baru promosikan. Bila canary gagal, produksi tidak
@@ -38,7 +37,7 @@ REPO_DIR="$STATE_DIR/repo"
 # oleh kebijakan repository. Untuk repository privat, set LAPRAKIN_REPO_URL ke
 # URL SSH dan deploy key yang sesuai.
 REPO_URL="${LAPRAKIN_REPO_URL:-https://github.com/bacslab/Laprakin.git}"
-BRANCH="${LAPRAKIN_DEPLOY_BRANCH:-release}"
+BRANCH="${LAPRAKIN_DEPLOY_BRANCH:-main}"
 SSH_KEY="${LAPRAKIN_DEPLOY_KEY:-$STATE_DIR/deploy-key}"
 NOTIFY="${LAPRAKIN_NOTIFY_BIN:-/usr/local/bin/laprakin-notify.sh}"
 CANARY_PORT="${LAPRAKIN_CANARY_PORT:-4555}"
@@ -117,9 +116,8 @@ if [[ "$REPO_URL" == git@github.com:* ]]; then
   fi
 fi
 
-# Branch release baru terbentuk setelah workflow CI pertama selesai. Sampai saat
-# itu kondisinya sama seperti deploy key yang belum terdaftar: bagian dari setup,
-# bukan kegagalan yang perlu dikabarkan tiap lima menit.
+# Branch main selalu menjadi sumber deployment. Jika repository belum dapat
+# diakses, timer menunggu pada percobaan berikutnya tanpa mengirim spam alert.
 if ! git ls-remote --exit-code --heads "$REPO_URL" "$BRANCH" >/dev/null 2>&1; then
   echo "deploy: branch $BRANCH belum ada di remote; dilewati"
   exit 0

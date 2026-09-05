@@ -595,15 +595,6 @@ export function useLegacyWorkspaceController() {
   };
   const pasteImagesIntoChat = (event) => { const images = clipboardImageFiles(event); if (!images.length) return; event.preventDefault(); setPendingLandingFiles((items) => mergeFiles(items, images).slice(0, 12)); };
   const addPendingFiles = (files) => { const incoming = Array.from(files || []); if (!incoming.length) return; setPendingLandingFiles((items) => mergeFiles(items, incoming).slice(0, 12)); };
-  const removeAttachment = async (id) => { if (!active) return; try { const refreshed = await api(`/chat/sessions/${active.id}/attachments/${id}`, { method: 'DELETE' }); hydrate(refreshed); if (refreshed.session.document_id) { const nextDocument = await api(`/documents/${refreshed.session.document_id}`); setDocumentState(nextDocument); setActiveJob(nextDocument.jobs?.[0] || null); } } catch (err) { setNotice(err.message); } };
-  const updateAttachmentCategory = async (id, kind) => {
-    if (!active) return;
-    try {
-      const refreshed = await api(`/chat/sessions/${active.id}/attachments/${id}`, { method: 'PATCH', body: { kind } });
-      hydrate(refreshed);
-      setNotice(t('workspace.notices.attachmentCategoryUpdated'));
-    } catch (err) { setNotice(err.message); }
-  };
   const waitForJob = async (jobId) => { const started = Date.now(); while (Date.now() - started < 300000) { const job = await api(`/jobs/${jobId}`); setActiveJob(job); if (['completed', 'failed', 'canceled'].includes(job.status)) return job; await new Promise((resolve) => setTimeout(resolve, 650)); } throw new Error('Proses masih berjalan. Timeline akan tetap tersedia saat chat ini dibuka lagi.'); };
   const waitForDocumentReady = async (documentId, sessionId) => {
     const started = Date.now();
@@ -890,7 +881,7 @@ export function useLegacyWorkspaceController() {
     openProject, createProject, createProjectChat, setProjectPinned, workspacePlanLabel,
     hasSubscriptionPlan, isMaxPlan, headerSubtitle, workspaceAccent, recordProductUpdate,
     closeProductUpdate, sidebarGroupProps, pinnedProjects, pinnedSessions, recentGroups,
-    startNewChat, send, upload, uploadRef, removeAttachment, updateAttachmentCategory, createDocument,
+    startNewChat, send, upload, uploadRef, createDocument,
     performChatAction, pasteImagesIntoChat, addPendingFiles, startDocumentQuiz, submitDocumentQuiz,
     reviseChatMessage, reactToMessage, documentAction, downloadExport, restoreDocumentVersion, pendingConfigRequest, saveConfig,
     completeIdentityIntake, closeTutorial, logout,

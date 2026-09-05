@@ -63,3 +63,94 @@ export function getRegenerationTarget(messages, assistantMessageId) {
   }
   return null;
 }
+
+function revisionDetails(message) {
+  const revision = message?.meta?.revision;
+  if (!revision || typeof revision !== 'object') return { sourceMessageId: '', revisionNumber: 0 };
+  const revisionNumber = Number(revision.revisionNumber);
+  return {
+    sourceMessageId: String(revision.sourceMessageId || '').trim(),
+    revisionNumber: Number.isFinite(revisionNumber) && revisionNumber > 0 ? revisionNumber : 0,
+  };
+}
+
+function revisionSortValue(message, index) {
+  const { revisionNumber } = revisionDetails(message);
+  const timestamp = Date.parse(message?.created_at || message?.createdAt || '') || 0;
+  return [revisionNumber, timestamp, index];
+}
+
+function compareRevisionVersions(left, right) {
+  const leftValue = revisionSortValue(left.message, left.index);
+  const rightValue = revisionSortValue(right.message, right.index);
+  for (let index = 0; index < leftValue.length; index += 1) {
+    if (leftValue[index] !== rightValue[index]) return leftValue[index] - rightValue[index];
+  }
+  return 0;
+}
+
+/**
+ * Return only the active branch of a conversation.
+ *
+ * The API intentionally keeps each edited user message as a lightweight
+ * version record while removing the old answer branch. The view should not
+ * render that source record as a second bubble, otherwise an edit looks like
+ * a duplicate message. This helper collapses each linear revision chain to
+ * its newest user message and the answer immediately following it.
+ */
+export function collapseMessageRevisions(messages) {
+  if (!Array.isArray(messages)) return [];
+
+  const items = messages.filter(Boolean);
+  const users = items.filter((message) => message.role === 'user' && message.id);
+  const userById = new Map(users.map((message) => [message.id, message]));
+  const groups = new Map();
+
+  const rootFor = (message) => {
+    let current = message;
+    const seen = new Set([message.id]);
+    while (true) {
+      const { sourceMessageId } = revisionDetails(current);
+      const parent = sourceMessageId ? userById.get(sourceMessageId) : null;
+      if (!parent || seen.has(parent.id)) return current.id;
+      seen.add(parent.id);
+      current = parent;
+    }
+  };
+
+  users.forEach((message, index) => {
+    const rootId = rootFor(message);
+    const versions = groups.get(rootId) || [];
+    versions.push({ message, index });
+    groups.set(rootId, versions);
+  });
+
+  const activeUserIds = new Set();
+  const versionInfoById = new Map();
+  groups.forEach((versions) => {
+    versions.sort(compareRevisionVersions);
+    const latest = versions.at(-1);
+    activeUserIds.add(latest.message.id);
+    if (versions.length > 1) {
+      versionInfoById.set(latest.message.id, {
+        current: versions.length,
+        total: versions.length,
+      });
+    }
+  });
+
+  const visible = [];
+  let previousUser = null;
+  items.forEach((message) => {
+    if (message.role === 'user') {
+      previousUser = message;
+      if (!activeUserIds.has(message.id)) return;
+      const revisionInfo = versionInfoById.get(message.id);
+      visible.push(revisionInfo ? { ...message, revisionInfo } : message);
+      return;
+    }
+    if (message.role === 'assistant' && previousUser && !activeUserIds.has(previousUser.id)) return;
+    visible.push(message);
+  });
+  return visible;
+}

@@ -46,7 +46,7 @@ function resizeComposerTextarea(textarea) {
   textarea.style.overflowY = overflowing ? 'auto' : 'hidden';
 }
 
-export default function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, centered, pendingFiles = [], onPasteImages, onRemovePending, aiMode, setAiMode, aiModeAccess, aiConsentData, onEnableExternalAi, onUpgrade, enterToSend = true, editingMessage = null, onCancelEdit }) {
+export default function Composer({ input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, centered, pendingFiles = [], onPasteImages, onRemovePending, aiMode, setAiMode, aiModeAccess, aiConsentData, onEnableExternalAi, onUpgrade, enterToSend = true }) {
   const { t } = useI18n();
   const textareaRef = useRef(null);
   const [consentBusy, setConsentBusy] = useState(false);
@@ -80,19 +80,12 @@ export default function Composer({ input, setInput, busy, attachmentKind, setAtt
       window.removeEventListener('resize', resize);
     };
   }, []);
-  useEffect(() => {
-    if (!editingMessage) return undefined;
-    setInput(editingMessage.content || '');
-    const frame = window.requestAnimationFrame(() => textareaRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
-  }, [editingMessage, setInput]);
   const enableExternalProcessing = async () => {
     setConsentBusy(true);
     try { await onEnableExternalAi?.(); } catch { /* controller surfaces the typed error */ } finally { setConsentBusy(false); }
   };
   return <div className={`composer-zone ${centered ? 'composer-centered composer-claude' : ''}`}>
     {pendingFiles.length ? <div className="pending-files">{pendingFiles.map((file, index) => <PendingAttachmentChip file={file} index={index} key={`${file.name}-${index}`} onRemove={onRemovePending} />)}</div> : null}
-    {editingMessage && <div className="composer-editing-banner" role="status" aria-live="polite"><span><Pencil size={13} />{t('workspace.composer.editBanner')}</span><button type="button" onClick={onCancelEdit} disabled={busy}>{t('workspace.composer.cancelEdit')}</button></div>}
     {!externalProcessingReady && <div className="composer-consent" role="status"><div><b>{t('workspace.composer.aiConsentTitle')}</b><small>{t('workspace.composer.aiConsentDescription', { data: consentDataClasses.join(', ') })}</small></div><button type="button" onClick={enableExternalProcessing} disabled={consentBusy}>{consentBusy ? t('workspace.composer.aiConsentSaving') : t('workspace.composer.aiConsentAllow')}</button></div>}
     <form className={`composer ${centered ? 'composer-style-reference' : ''}`} onSubmit={send}>
       <textarea ref={textareaRef} aria-label={placeholder || t('workspace.composer.chatMessage')} rows="2" value={input} onChange={(event) => setInput(event.target.value)} onPaste={onPasteImages} onKeyDown={(event) => { if (shouldSubmitComposerKey({ key: event.key, shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey, isComposing: event.nativeEvent.isComposing, enterToSend })) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={placeholder} />
@@ -104,7 +97,7 @@ export default function Composer({ input, setInput, busy, attachmentKind, setAtt
         </div>
         <div className="composer-actions">
           <AiModeMenu value={aiMode} onChange={setAiMode} access={aiModeAccess} onUpgrade={onUpgrade} />
-          <button className="send-button" type="submit" disabled={busy || !externalProcessingReady || (!input.trim() && !pendingFiles.length)} aria-label={editingMessage ? t('workspace.composer.saveEdit') : t('workspace.composer.send')}><Send size={17} /></button>
+          <button className="send-button" type="submit" disabled={busy || !externalProcessingReady || (!input.trim() && !pendingFiles.length)} aria-label={t('workspace.composer.send')}><Send size={17} /></button>
         </div>
       </div>
     </form>

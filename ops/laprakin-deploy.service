@@ -1,5 +1,5 @@
 [Unit]
-Description=Deploy Laprakin from the release branch
+Description=Deploy Laprakin from the main branch
 After=docker.service network-online.target
 Requires=docker.service
 

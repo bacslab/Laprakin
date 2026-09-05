@@ -96,20 +96,3 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
-
-  # Gerbang rilis. Branch `release` hanya maju ketika test, audit dependency,
-  # secret scan, SAST, dan vulnerability scan lulus. VM production hanya
-  # men-deploy dari branch ini, sehingga commit yang gagal gate tidak pernah
-  # sampai ke pengguna tanpa perlu membuka port apa pun ke runner GitHub.
-  release:
-    needs: [unit, audit, secret-scan, sast, vulnerability-scan]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Majukan branch release ke commit yang lulus
-        run: git push origin "${{ github.sha }}:refs/heads/release" --force

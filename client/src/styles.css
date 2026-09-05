@@ -5985,11 +5985,6 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 .workspace .message-actions-user time { margin-left:2px; color:var(--workspace-muted); font-size:.52rem; }
 .app-dialog:not(.is-danger) .app-dialog-icon { border-color:color-mix(in srgb,var(--app-accent,#c2ff33) 35%,transparent); background:color-mix(in srgb,var(--app-accent,#c2ff33) 13%,transparent); color:var(--app-accent,#c2ff33); }
 .app-dialog:not(.is-danger) .app-dialog-confirm { border-color:var(--app-accent,#c2ff33); background:var(--app-accent,#c2ff33); }
-.workspace .composer-editing-banner { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 auto 6px; width:min(760px,calc(100% - 34px)); color:var(--workspace-muted); font-size:.58rem; }
-.workspace .composer-editing-banner span { display:inline-flex; align-items:center; gap:5px; }
-.workspace .composer-editing-banner button { border:0; border-radius:6px; padding:4px 7px; background:var(--workspace-hover); color:var(--workspace-muted); font-size:.56rem; }
-.workspace .composer-editing-banner button:hover { color:var(--workspace-text); }
-
 .identity-intake-follow-up { margin-top:5px!important; }
 
 /* Natural document actions: lime is reserved for primary status, not navigation. */
@@ -7232,6 +7227,46 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
     display:inline-flex!important;
     justify-self:end!important;
   }
+}
+
+/* Message actions stay quiet until the message is hovered or reached by keyboard. */
+.workspace .message-turn > .message-actions {
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .16s ease;
+}
+.workspace .message-turn:hover > .message-actions,
+.workspace .message-turn:focus-within > .message-actions,
+.workspace .message-turn > .message-actions:focus-within,
+.workspace .message-turn.is-editing > .message-actions {
+  opacity:1;
+  pointer-events:auto;
+}
+.workspace .message-actions-user button {
+  width:25px;
+  padding:0;
+}
+.workspace .message-version-badge {
+  display:inline-flex;
+  align-items:center;
+  min-height:25px;
+  margin-left:2px;
+  border:1px solid var(--workspace-line);
+  border-radius:999px;
+  padding:0 8px;
+  color:var(--workspace-muted);
+  font-size:.54rem;
+  font-weight:800;
+  white-space:nowrap;
+}
+@media (hover:none){
+  .workspace .message-turn > .message-actions {
+    opacity:1;
+    pointer-events:auto;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  .workspace .message-turn > .message-actions { transition:none; }
 }
 
 /* Settings content icons remain neutral regardless of the selected accent. */

@@ -1,5 +1,5 @@
 [Unit]
-Description=Check the release branch for new commits every five minutes
+Description=Check the main branch for new commits every five minutes
 
 [Timer]
 OnCalendar=*:0/5

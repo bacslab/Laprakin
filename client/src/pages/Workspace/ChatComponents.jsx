@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Check, CheckCircle2, CodeXml, Copy, FileText, LoaderCircle, Pencil, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, CodeXml, Copy, FileText, LoaderCircle, Pencil, RefreshCw, Share2, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { useI18n } from '../../i18n/context';
 import { useApp } from '../../state/ui-context';
@@ -47,9 +47,19 @@ export function AssistantMessageActions({ message, onRegenerate, onReaction, bus
       window.setTimeout(() => setCopied(false), 1400);
     } catch { setNotice(t('workspace.messageActions.copyFailed')); }
   };
+  const share = async () => {
+    try {
+      if (typeof navigator.share === 'function') await navigator.share({ title: 'Laprakin', text });
+      else await navigator.clipboard.writeText(text);
+      setNotice(t('workspace.messageActions.shareNotice'));
+    } catch (error) {
+      if (error?.name !== 'AbortError') setNotice(t('workspace.messageActions.shareFailed'));
+    }
+  };
   const rate = (value) => onReaction?.(message.id, value);
   return <footer className="message-actions" aria-label={t('workspace.messageActions.label')}>
     <button type="button" onClick={copy} aria-label={t('workspace.messageActions.copy')} title={t('workspace.messageActions.copy')}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
+    <button type="button" onClick={share} aria-label={t('workspace.messageActions.share')} title={t('workspace.messageActions.share')}><Share2 size={14} /></button>
     <button type="button" className={message.reaction === 'like' ? 'selected' : ''} onClick={() => rate('like')} aria-label={t('workspace.messageActions.helpful')} title={t('workspace.messageActions.helpfulTitle')}><ThumbsUp size={14} /></button>
     <button type="button" className={message.reaction === 'dislike' ? 'selected' : ''} onClick={() => rate('dislike')} aria-label={t('workspace.messageActions.needsImprovement')} title={t('workspace.messageActions.needsImprovementTitle')}><ThumbsDown size={14} /></button>
     {onRegenerate && <button type="button" onClick={onRegenerate} disabled={busy} aria-label={t('workspace.messageActions.regenerate')} title={t('workspace.messageActions.regenerate')}><RefreshCw size={14} /></button>}
@@ -104,10 +114,22 @@ export function UserMessageActions({ message, onEdit, busy = false }) {
       window.setTimeout(() => setCopied(false), 1400);
     } catch { setNotice(t('workspace.messageActions.copyMessageFailed')); }
   };
+  const share = async () => {
+    const text = String(message.content || '');
+    try {
+      if (typeof navigator.share === 'function') await navigator.share({ title: 'Laprakin', text });
+      else await navigator.clipboard.writeText(text);
+      setNotice(t('workspace.messageActions.shareMessageNotice'));
+    } catch (error) {
+      if (error?.name !== 'AbortError') setNotice(t('workspace.messageActions.shareMessageFailed'));
+    }
+  };
   const timestamp = new Date(message.created_at || message.createdAt || Date.now()).toLocaleTimeString(language === 'en' ? 'en-US' : 'id-ID', { hour: '2-digit', minute: '2-digit' });
   return <footer className="message-actions message-actions-user" aria-label={t('workspace.messageActions.userLabel')}>
     <button type="button" onClick={copy} disabled={busy} aria-label={t('workspace.messageActions.copyMessage')} title={t('workspace.messageActions.copyMessage')}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
-    <button type="button" onClick={() => onEdit?.(message)} disabled={busy} aria-label={t('workspace.messageActions.edit')} title={t('workspace.messageActions.edit')}><Pencil size={14} />{t('workspace.messageActions.edit')}</button>
+    <button type="button" onClick={share} disabled={busy} aria-label={t('workspace.messageActions.shareMessage')} title={t('workspace.messageActions.shareMessage')}><Share2 size={14} /></button>
+    <button type="button" onClick={() => onEdit?.(message)} disabled={busy} aria-label={t('workspace.messageActions.edit')} title={t('workspace.messageActions.edit')}><Pencil size={14} /></button>
+    {message.revisionInfo && <span className="message-version-badge" aria-label={t('workspace.messageActions.version', message.revisionInfo)}>{t('workspace.messageActions.version', message.revisionInfo)}</span>}
     <time dateTime={message.created_at || message.createdAt}>{timestamp}</time>
   </footer>;
 }
