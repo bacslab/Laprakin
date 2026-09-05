@@ -9,6 +9,7 @@ export const ADMIN_CAPABILITIES = Object.freeze([
   'ai.health.view',
   'users.view',
   'users.pii.reveal',
+  'users.content.reveal',
   'users.restrict',
   'appeals.review',
   'billing.view',
@@ -27,7 +28,10 @@ const AI_CAPABILITIES = ADMIN_CAPABILITIES.slice(0, 6);
 
 const ROLE_CAPABILITIES = Object.freeze({
   owner: ADMIN_CAPABILITIES,
-  admin: ADMIN_CAPABILITIES,
+  admin: Object.freeze(ADMIN_CAPABILITIES.filter((capability) => ![
+    'users.pii.reveal',
+    'users.content.reveal',
+  ].includes(capability))),
   ai_admin: Object.freeze(AI_CAPABILITIES),
   support_admin: Object.freeze([
     'users.view',
@@ -50,6 +54,12 @@ const ROLE_CAPABILITIES = Object.freeze({
     'users.pii.reveal',
     'audit.view',
     'retention.execute',
+  ]),
+  content_forensics_admin: Object.freeze([
+    'users.view',
+    'users.content.reveal',
+    'audit.view',
+    'incidents.manage',
   ]),
   security_admin: Object.freeze([
     'users.view',

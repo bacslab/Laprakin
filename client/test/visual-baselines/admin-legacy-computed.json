@@ -1965,7 +1965,27 @@
       "maxHeight": "730px"
     },
     ".admin-inline": null,
-    ".admin-actions": null,
+    ".admin-actions": {
+      "rect": [
+        1265,
+        700.84,
+        130,
+        21
+      ],
+      "display": "block",
+      "position": "static",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "0px",
+      "borderRadius": "0px",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "color": "rgb(31, 31, 28)",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "lineHeight": "normal",
+      "overflow": "visible",
+      "maxHeight": "none"
+    },
     ".admin-user-picker": {
       "rect": [
         252,
@@ -1992,7 +2012,7 @@
         570,
         208.22,
         838,
-        510.25
+        536.63
       ],
       "display": "grid",
       "position": "static",

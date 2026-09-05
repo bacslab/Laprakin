@@ -38,6 +38,15 @@ test('auth stylesheet owns the viewport-locked authentication section', () => {
   assert.match(css, /@media\(max-height: 720px\)/);
 });
 
+test('legacy form reset stays compatible while Auth reasserts its readable control scale', () => {
+  const auth = readFileSync(new URL('../src/styles/auth.css', import.meta.url), 'utf8');
+  const compatibility = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+
+  assert.match(compatibility, /button\s*,\s*input\s*,\s*textarea\s*\{\s*font:\s*inherit;/);
+  assert.match(auth, /@layer\s+compatibility\s*\{[\s\S]*\.auth-page\s+\.auth-submit\s*\{\s*font-size:\s*\.7rem/);
+  assert.match(auth, /\.auth-page\s+\.auth-form\s+input\s*\{\s*font-size:\s*\.72rem/);
+});
+
 test('pricing stylesheet owns public and standalone pricing sections', () => {
   const css = readFileSync('client/src/styles/pricing.css', 'utf8');
 

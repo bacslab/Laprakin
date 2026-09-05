@@ -17,6 +17,7 @@ const REQUIRED_CAPABILITIES = [
   'ai.health.view',
   'users.view',
   'users.pii.reveal',
+  'users.content.reveal',
   'users.restrict',
   'appeals.review',
   'billing.view',
@@ -45,7 +46,16 @@ test('roles resolve to least-privilege capability sets without trusting browser 
     'credits.grant',
     'pricing.manage',
   ]);
-  assert.deepEqual(capabilitiesForUser({ role: 'admin' }), REQUIRED_CAPABILITIES);
+  assert.equal(capabilitiesForUser({ role: 'admin' }).includes('users.pii.reveal'), false);
+  assert.equal(capabilitiesForUser({ role: 'admin' }).includes('users.content.reveal'), false);
+  assert.equal(capabilitiesForUser({ role: 'owner' }).includes('users.pii.reveal'), true);
+  assert.equal(capabilitiesForUser({ role: 'owner' }).includes('users.content.reveal'), true);
+  assert.deepEqual(capabilitiesForUser({ role: 'privacy_admin' }), [
+    'users.view',
+    'users.pii.reveal',
+    'audit.view',
+    'retention.execute',
+  ]);
   assert.equal(hasCapability({ role: 'support_admin' }, 'users.restrict'), true);
   assert.equal(hasCapability({ role: 'support_admin' }, 'ai.providers.manage'), false);
 });

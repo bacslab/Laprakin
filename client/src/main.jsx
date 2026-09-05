@@ -229,7 +229,7 @@ function ProtectedBilling() {
 }
 function PricingRedirect() { const location = useLocation(); return <Navigate to={`/pricing${location.search || ''}`} replace />; }
 
-const PRIVILEGED_ADMIN_ROLES = new Set(['owner', 'admin', 'ai_admin', 'support_admin', 'billing_admin', 'content_admin', 'privacy_admin', 'security_admin', 'auditor']);
+const PRIVILEGED_ADMIN_ROLES = new Set(['owner', 'admin', 'ai_admin', 'support_admin', 'billing_admin', 'content_admin', 'content_forensics_admin', 'privacy_admin', 'security_admin', 'auditor']);
 function ProtectedAdmin() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (!PRIVILEGED_ADMIN_ROLES.has(user.role)) return <Navigate to="/app" replace />; return <AdminWorkspaceBoundary AdminMfaGate={AdminMfaGate} LegacyWorkspace={LegacyAdminWorkspace} />; }
 
 

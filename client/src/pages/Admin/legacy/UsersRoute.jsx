@@ -13,9 +13,15 @@ export default function UsersRoute({ setNotice }) {
   const navigate = useNavigate();
   const selectedUserId = decodeURIComponent(location.pathname.split('/').filter(Boolean)[2] || '');
   const [query, setQuery] = useAdminListQuery('/admin/users', { limit: 25 });
-  const load = useCallback(() => api(adminListApiPath('/admin/users', query, { userId: selectedUserId })), [query.q, query.cursor, query.limit, selectedUserId]);
+  const load = useCallback(async () => {
+    const [userData, capabilityData] = await Promise.all([
+      api(adminListApiPath('/admin/users', query, { userId: selectedUserId })),
+      api('/admin/capabilities'),
+    ]);
+    return { ...userData, capabilities: capabilityData.capabilities || [] };
+  }, [query.q, query.cursor, query.limit, selectedUserId]);
   const resource = useAdminRouteResource(load, { events: ['credit'] });
   const selectUser = (id) => navigate(`${id ? `/admin/users/${encodeURIComponent(id)}` : '/admin/users'}${location.search}`);
   const extra = selectedUserId ? <button type="button" onClick={() => selectUser('')}>{t('admin.console.list.allUsers')}</button> : null;
-  return <AdminRouteState resource={resource}>{(data) => <><AdminListControls query={query} setQuery={setQuery} pageInfo={data.pageInfo} extra={extra}/><AdminAccessPanel users={data.users} selectedUserId={selectedUserId} onSelectUser={selectUser} setNotice={setNotice} onRefresh={resource.reload}/></>}</AdminRouteState>;
+  return <AdminRouteState resource={resource}>{(data) => <><AdminListControls query={query} setQuery={setQuery} pageInfo={data.pageInfo} extra={extra}/><AdminAccessPanel users={data.users} capabilities={data.capabilities} selectedUserId={selectedUserId} onSelectUser={selectUser} setNotice={setNotice} onRefresh={resource.reload}/></>}</AdminRouteState>;
 }

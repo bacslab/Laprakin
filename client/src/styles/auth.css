@@ -81,50 +81,50 @@
   .auth-page .auth-brand .brand-mark { width: 24px; height: 24px; object-fit: contain; }
   .auth-page.theme-light .auth-brand .brand-mark { filter: grayscale(1) brightness(0); }
   .auth-page.theme-dark .auth-brand .brand-mark { filter: grayscale(1) brightness(2.4); }
-  .auth-page .auth-brand b { font-size: 17px; font-weight: 750; letter-spacing: -.035em; }
-  .auth-page .auth-brand small { display: inline-flex; align-items: center; justify-content: center; height: 17px; padding: 0 6px; border: 1px solid var(--auth-line); border-radius: 999px; color: var(--auth-muted); font-size: 7px; font-weight: 750; letter-spacing: .06em; }
-  .auth-back-link { display: flex; align-items: center; gap: 7px; color: var(--auth-muted); font-size: 11px; font-weight: 650; text-decoration: none; transition: color .2s ease, background-color .2s ease; }
+  .auth-page .auth-brand b { font-size: .78rem; font-weight: 800; letter-spacing: -.035em; }
+  .auth-page .auth-brand small { display: inline-flex; align-items: center; justify-content: center; height: 17px; padding: 0 6px; border: 1px solid var(--auth-line); border-radius: 999px; color: var(--auth-muted); font-size: .5rem; font-weight: 800; letter-spacing: .06em; }
+  .auth-back-link { display: flex; align-items: center; gap: 7px; color: var(--auth-muted); font-size: .68rem; font-weight: 800; text-decoration: none; transition: color .2s ease, background-color .2s ease; }
   .auth-back-link:hover { color: var(--auth-text); }
   .auth-shell { position: relative; z-index: 1; min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; align-items: center; justify-items: center; padding: 16px 20px 14px; overflow: hidden; }
   .auth-page .auth-card { width: min(404px, calc(100vw - 32px)); display: grid; gap: 16px; margin: 0; padding: 26px; border: 1px solid var(--auth-line); border-radius: 18px; background: var(--auth-surface); color: var(--auth-text); box-shadow: none; backdrop-filter: none; }
   body[data-laprakin-theme] .auth-page .auth-card { border-color: var(--auth-line); background: var(--auth-surface); color: var(--auth-text); }
   .auth-card-heading { text-align: left; }
   .auth-card-heading .auth-eyebrow { display: block; margin-bottom: 12px; color: var(--auth-muted); font-size: 8px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
-  body[data-laprakin-theme] .auth-page .auth-card h1 { margin: 0; color: var(--auth-text); font-size: 30px; line-height: 1.04; font-weight: 740; letter-spacing: -.05em; }
-  .auth-page .auth-card-heading>p { max-width: 330px; margin: 8px 0 0; color: var(--auth-muted); font-size: 11px; line-height: 1.6; }
+  body[data-laprakin-theme] .auth-page .auth-card h1 { margin: 0; color: var(--auth-text); font-size: 1.3rem; line-height: 1.15; font-weight: 800; letter-spacing: -.045em; }
+  .auth-page .auth-card-heading>p { max-width: 330px; margin: 8px 0 0; color: var(--auth-muted); font-size: .68rem; line-height: 1.6; }
   .auth-mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border: 1px solid var(--auth-line); border-radius: 11px; background: var(--auth-input); }
-  .auth-mode-tabs button { height: 36px; border: 0; border-radius: 7px; background: transparent; color: var(--auth-muted); font-size: 11px; font-weight: 700; transition: background-color .2s ease, color .2s ease; }
+  .auth-mode-tabs button { height: 36px; border: 0; border-radius: 7px; background: transparent; color: var(--auth-muted); font-size: .7rem; font-weight: 800; transition: background-color .2s ease, color .2s ease; }
   .auth-mode-tabs button:hover { background: var(--auth-soft); color: var(--auth-text); }
   .auth-mode-tabs button.active { background: var(--auth-selected); color: var(--auth-text); }
-  .auth-page .google-button { height: 42px; border: 1px solid var(--auth-line); border-radius: 10px; background: var(--auth-input); color: var(--auth-text); font-size: 11px; font-weight: 700; transition: border-color .2s ease, background-color .2s ease, color .2s ease; }
+  .auth-page .google-button { height: 42px; border: 1px solid var(--auth-line); border-radius: 10px; background: var(--auth-input); color: var(--auth-text); font-size: .7rem; font-weight: 800; transition: border-color .2s ease, background-color .2s ease, color .2s ease; }
   .auth-page .google-button:hover { border-color: var(--auth-line); background: var(--auth-soft); color: var(--auth-text); }
   .auth-page .google-button b { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; background: var(--auth-text); color: var(--auth-surface); font-size: 10px; }
   .auth-divider { display: flex; align-items: center; gap: 12px; margin: 4px 0; color: var(--auth-muted); text-align: center; }
   .auth-divider:before, .auth-divider:after { content: ""; height: 1px; flex: 1; background: var(--auth-line); }
-  .auth-divider span { position: static; padding: 0; background: transparent; color: inherit; font-size: 8px; line-height: 1; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+  .auth-divider span { position: static; padding: 0; background: transparent; color: inherit; font-size: .6rem; line-height: 1; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
   .auth-page .auth-form { display: grid; gap: 12px; }
-  body[data-laprakin-theme] .auth-page .auth-form label { display: grid; gap: 7px; color: var(--auth-text); font-size: 10px; font-weight: 680; }
+  body[data-laprakin-theme] .auth-page .auth-form label { display: grid; gap: 7px; color: var(--auth-text); font-size: .65rem; font-weight: 800; }
   .auth-page .auth-form label>span { display: flex; align-items: center; justify-content: space-between; }
-  .auth-page .auth-form label small { color: var(--auth-muted); font-size: 8px; font-weight: 600; }
-  body[data-laprakin-theme] .auth-page .auth-form input { width: 100%; height: 44px; border: 1px solid var(--auth-line); border-radius: 10px; padding: 0 13px; outline: 0; background: var(--auth-input); color: var(--auth-text); font: 500 12px "Plus Jakarta Sans", system-ui, sans-serif; box-shadow: none; transition: border-color .2s ease, background-color .2s ease; }
+  .auth-page .auth-form label small { color: var(--auth-muted); font-size: .6rem; font-weight: 600; }
+  body[data-laprakin-theme] .auth-page .auth-form input { width: 100%; height: 44px; border: 1px solid var(--auth-line); border-radius: 10px; padding: 0 13px; outline: 0; background: var(--auth-input); color: var(--auth-text); font-family: "Plus Jakarta Sans", system-ui, sans-serif; font-size: .72rem; font-weight: 500; box-shadow: none; transition: border-color .2s ease, background-color .2s ease; }
   .auth-page .auth-form input::placeholder { color: var(--auth-muted); opacity: .72; }
   .auth-page .auth-form input:hover { border-color: var(--auth-line); background: var(--auth-soft); }
   .auth-page .auth-form input:focus { border-color: var(--auth-muted); background: var(--auth-input); box-shadow: none; }
-  .auth-submit { width: 100%; height: 46px; display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 2px; border: 1px solid #a5d82b; border-radius: 11px; background: #c2ff33; color: #101506; font: 750 12px "Plus Jakarta Sans", system-ui, sans-serif; box-shadow: none; transition: transform .2s ease, filter .2s ease; }
-  .auth-submit:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(.94); }
-  .auth-submit:active:not(:disabled) { transform: translateY(0); }
-  .auth-submit:disabled { cursor: not-allowed; opacity: .55; }
+  .auth-page .auth-submit { width: 100%; height: 46px; display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 2px; border: 1px solid #a5d82b; border-radius: 11px; background: #c2ff33; color: #101506; font-family: "Plus Jakarta Sans", system-ui, sans-serif; font-size: .7rem; font-weight: 800; box-shadow: none; transition: transform .2s ease, filter .2s ease; }
+  .auth-page .auth-submit:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(.94); }
+  .auth-page .auth-submit:active:not(:disabled) { transform: translateY(0); }
+  .auth-page .auth-submit:disabled { cursor: not-allowed; opacity: .55; }
   .auth-submit:focus-visible, .auth-mode-tabs button:focus-visible, .auth-page .google-button:focus-visible, .auth-text-button:focus-visible, .auth-back-link:focus-visible { outline: 2px solid var(--auth-text); outline-offset: 3px; }
-  .auth-page .auth-notice { border: 1px solid; border-radius: 10px; padding: 11px 12px; font-size: 11px; line-height: 1.5; }
+  .auth-page .auth-notice { border: 1px solid; border-radius: 10px; padding: 11px 12px; font-size: .64rem; line-height: 1.5; }
   .auth-page .auth-notice.success { border-color: #36543f; background: #18271c; color: #a7d8b3; }
   .auth-page .auth-notice.error { border-color: #633b38; background: #2c1a19; color: #efa8a1; }
   .auth-page .local-verify { display: grid; gap: 10px; border: 1px dashed var(--auth-line); border-radius: 10px; padding: 12px; background: var(--auth-input); }
-  .auth-page .local-verify p { margin: 0; color: var(--auth-muted); font-size: 10px; line-height: 1.5; }
+  .auth-page .local-verify p { margin: 0; color: var(--auth-muted); font-size: .64rem; line-height: 1.5; }
   .auth-card-footer { min-height: 20px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-  .auth-card-footer>span { margin-left: auto; color: var(--auth-muted); font-size: 8px; }
-  .auth-page .auth-text-button { display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 2px 0; background: transparent; color: var(--auth-muted); font-size: 9px; font-weight: 700; text-align: left; transition: color .2s ease; }
+  .auth-card-footer>span { margin-left: auto; color: var(--auth-muted); font-size: .6rem; }
+  .auth-page .auth-text-button { display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 2px 0; background: transparent; color: var(--auth-muted); font-size: .64rem; font-weight: 800; text-align: left; transition: color .2s ease; }
   .auth-page .auth-text-button:hover { color: var(--auth-text); }
-  .auth-legal { width: min(390px, calc(100vw - 42px)); margin: 8px 0 0; color: var(--auth-muted); font-size: 8px; line-height: 1.5; text-align: center; }
+  .auth-legal { width: min(390px, calc(100vw - 42px)); margin: 8px 0 0; color: var(--auth-muted); font-size: .6rem; line-height: 1.5; text-align: center; }
   .auth-legal a { color: var(--auth-text); text-decoration: none; }
   .auth-legal a:hover { text-decoration: underline; }
 
@@ -143,8 +143,8 @@
     .auth-shell { padding: 7px 16px 8px; }
     .auth-page .auth-card { gap: 10px; padding: 15px 18px; }
     .auth-card-heading .auth-eyebrow { display: none; }
-    body[data-laprakin-theme] .auth-page .auth-card h1 { font-size: 25px; }
-    .auth-page .auth-card-heading>p { margin-top: 5px; font-size: 9px; }
+    body[data-laprakin-theme] .auth-page .auth-card h1 { font-size: 1.2rem; }
+    .auth-page .auth-card-heading>p { margin-top: 5px; font-size: .64rem; }
     .auth-mode-tabs button { height: 31px; }
     .auth-page .google-button { height: 35px; }
     .auth-page .auth-form { gap: 8px; }
@@ -152,8 +152,26 @@
     body[data-laprakin-theme] .auth-page .auth-form input { height: 36px; }
     .auth-submit { height: 39px; }
     .auth-card-footer>span { display: none; }
-    .auth-legal { margin-top: 4px; font-size: 7px; }
+    .auth-legal { margin-top: 4px; font-size: .56rem; }
   }
 
   .auth-page .google-logo { width: 18px; height: 18px; flex: 0 0 auto; }
+}
+
+/* The compatibility sheet keeps the legacy global form reset for the frozen
+ * Landing surface. Re-assert the Auth scale here so that reset cannot inflate
+ * controls back to the browser default. */
+@layer compatibility {
+  .auth-page .auth-mode-tabs button,
+  .auth-page .google-button,
+  .auth-page .auth-submit,
+  .auth-page .auth-text-button {
+    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  }
+
+  .auth-page .auth-mode-tabs button { font-size: .7rem; font-weight: 800; }
+  .auth-page .google-button { font-size: .7rem; font-weight: 800; }
+  .auth-page .auth-submit { font-size: .7rem; font-weight: 800; }
+  .auth-page .auth-text-button { font-size: .64rem; font-weight: 800; }
+  .auth-page .auth-form input { font-size: .72rem; font-weight: 500; }
 }

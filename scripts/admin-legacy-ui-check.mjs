@@ -120,6 +120,8 @@ const apiBase = `http://127.0.0.1:${apiPort}`;
 const webBase = `http://127.0.0.1:${webPort}`;
 const email = 'admin-legacy-ui@example.test';
 const studentEmail = 'student-legacy-ui@example.test';
+const studentRoomTitle = 'Browser-only private room title';
+const studentRawMessage = 'Browser-only private conversation content';
 const password = 'KataSandi-Uji-2026';
 const screenshotDir = path.join(root, 'output', 'playwright', 'admin-legacy');
 const baselinePath = path.join(root, 'client', 'test', 'visual-baselines', 'admin-legacy-computed.json');
@@ -198,6 +200,10 @@ try {
     const createdAt = new Date(Date.UTC(2026, 8, 3, 0, 0, index)).toISOString();
     insertUser.run(randomUUID(), `pagination-${String(index).padStart(2, '0')}@example.test`, `Pagination ${index}`, createdAt, createdAt, createdAt);
   }
+  const seededRoomId = `room-${randomUUID()}`;
+  const seededAt = '2026-09-03T00:10:00.000Z';
+  seedDb.prepare('INSERT INTO chat_sessions (id, owner_user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(seededRoomId, studentRegistrationPayload.user.id, studentRoomTitle, seededAt, seededAt);
+  seedDb.prepare("INSERT INTO chat_messages (id, session_id, owner_user_id, role, content, created_at) VALUES (?, ?, ?, 'user', ?, ?)").run(`message-${randomUUID()}`, seededRoomId, studentRegistrationPayload.user.id, studentRawMessage, seededAt);
   seedDb.close();
 
   browser = await chromium.launch({ headless: true, executablePath: browserExecutable() });
@@ -239,6 +245,7 @@ try {
     '/api/admin/appeals',
     '/api/admin/broadcasts',
     '/api/admin/feature-updates',
+    '/api/admin/capabilities',
   ];
   const routes = [
     ['/admin', ['/api/admin/overview'], 'Monitoring'],
@@ -249,7 +256,7 @@ try {
     ['/admin/updates', ['/api/admin/feature-updates'], 'Updates'],
     ['/admin/broadcasts', ['/api/admin/users', '/api/admin/broadcasts'], 'Email user'],
     ['/admin/feedback', ['/api/admin/feedback'], 'Feedback'],
-    ['/admin/users', ['/api/admin/users'], 'Akses user'],
+    ['/admin/users', ['/api/admin/users', '/api/admin/capabilities'], 'Akses user'],
     ['/admin/appeals', ['/api/admin/appeals'], 'Appeal'],
     ['/admin/risk', ['/api/admin/overview'], 'Risk review'],
     ['/admin/cms', ['/api/admin/cms/landing'], 'Landing CMS'],
@@ -277,14 +284,57 @@ try {
     assert.deepEqual(computedSnapshots, expectedSnapshots, 'Legacy Admin computed styles changed from the audited baseline.');
   }
 
-  await page.goto(`${webBase}/admin/users?q=student-legacy-ui&limit=25`);
+  const studentQuery = studentRegistrationPayload.user.id.slice(0, 12);
+  await page.goto(`${webBase}/admin/users?q=${encodeURIComponent(studentQuery)}&limit=25`);
   await page.getByLabel('Cari', { exact: true }).waitFor();
-  assert.equal(await page.getByLabel('Cari', { exact: true }).inputValue(), 'student-legacy-ui');
-  await page.getByRole('button', { name: new RegExp(studentEmail) }).click();
-  await page.waitForURL(`**/admin/users/${studentRegistrationPayload.user.id}?q=student-legacy-ui&limit=25`);
+  assert.equal(await page.getByLabel('Cari', { exact: true }).inputValue(), studentQuery);
+  const studentButton = page.locator('.admin-user-picker .admin-list>button').first();
+  const studentRef = (await studentButton.locator('b').textContent()).trim();
+  assert.match(studentRef, /^U-[A-F0-9]{8}$/);
+  assert.equal((await page.locator('body').textContent()).includes(studentEmail), false, 'Ordinary Admin rendered a target email.');
+  assert.equal(await page.getByRole('button', { name: 'Tampilkan identitas sementara' }).count(), 0, 'The admin role received a PII reveal control.');
+  await studentButton.click();
+  await page.waitForURL(`**/admin/users/${studentRegistrationPayload.user.id}?q=${studentQuery}&limit=25`);
   await page.reload();
-  await page.getByText(studentEmail, { exact: true }).first().waitFor();
-  assert.equal(page.url().includes(`/admin/users/${studentRegistrationPayload.user.id}?q=student-legacy-ui&limit=25`), true);
+  await page.getByText(studentRef, { exact: true }).first().waitFor();
+  await page.getByText(/^R-[A-F0-9]{8}$/).waitFor();
+  const privateBoundaryText = await page.locator('body').textContent();
+  assert.equal(privateBoundaryText.includes(studentEmail), false, 'Ordinary Admin rendered a target email after deep-link reload.');
+  assert.equal(privateBoundaryText.includes(studentRoomTitle), false, 'Ordinary Admin rendered a private room title.');
+  assert.equal(privateBoundaryText.includes(studentRawMessage), false, 'Ordinary Admin rendered private chat content.');
+  assert.equal(page.url().includes(`/admin/users/${studentRegistrationPayload.user.id}?q=${studentQuery}&limit=25`), true);
+
+  const roleDb = new DatabaseSync(path.join(sandbox, 'data', 'laprakin.sqlite'));
+  roleDb.exec('PRAGMA busy_timeout = 10000');
+  roleDb.prepare("UPDATE users SET role = 'privacy_admin' WHERE id = ?").run(registrationPayload.user.id);
+  roleDb.close();
+  await page.reload();
+  await page.getByRole('heading', { name: 'Akses break-glass', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Buka konten sementara' }).count(), 0, 'PII capability unexpectedly granted content access.');
+  await page.getByLabel('Catatan akses', { exact: true }).fill('Investigasi tiket dukungan UI-1234.');
+  await page.getByRole('button', { name: 'Tampilkan identitas sementara' }).click();
+  await page.getByText(studentEmail, { exact: true }).waitFor();
+  await page.getByText(/Akses berakhir dalam \d+ detik/).waitFor();
+  await page.getByRole('button', { name: 'Tutup dan cabut' }).click();
+  await page.getByText(studentEmail, { exact: true }).waitFor({ state: 'detached', timeout: 5000 });
+
+  const contentRoleDb = new DatabaseSync(path.join(sandbox, 'data', 'laprakin.sqlite'));
+  contentRoleDb.exec('PRAGMA busy_timeout = 10000');
+  contentRoleDb.prepare("UPDATE users SET role = 'content_forensics_admin' WHERE id = ?").run(registrationPayload.user.id);
+  contentRoleDb.close();
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+  await page.getByRole('heading', { name: 'Akses break-glass', exact: true }).waitFor({ timeout: 5000 });
+  assert.equal(await page.getByRole('button', { name: 'Tampilkan identitas sementara' }).count(), 0, 'Content capability unexpectedly granted PII access.');
+  await page.getByLabel('Catatan akses', { exact: true }).fill('Investigasi insiden keamanan UI-5678.');
+  await page.getByRole('button', { name: 'Buka konten sementara' }).click();
+  await page.getByText(studentRoomTitle, { exact: true }).waitFor();
+  await page.getByText(studentRawMessage, { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Tutup dan cabut' }).click();
+  await page.getByText(studentRoomTitle, { exact: true }).waitFor({ state: 'detached', timeout: 5000 });
+  const restoreRoleDb = new DatabaseSync(path.join(sandbox, 'data', 'laprakin.sqlite'));
+  restoreRoleDb.exec('PRAGMA busy_timeout = 10000');
+  restoreRoleDb.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(registrationPayload.user.id);
+  restoreRoleDb.close();
 
   await page.goto(`${webBase}/admin/users?limit=10`);
   await page.getByRole('button', { name: 'Berikutnya', exact: true }).click();
@@ -355,5 +405,5 @@ try {
 } finally {
   await browser?.close().catch(() => {});
   await Promise.all([stopProcess(apiProcess), stopProcess(webProcess)]);
-  await rm(sandbox, { recursive: true, force: true });
+  await rm(sandbox, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
 }

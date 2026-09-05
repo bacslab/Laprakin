@@ -1053,6 +1053,23 @@ CREATE TABLE IF NOT EXISTS admin_mfa_secrets (
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_admin_mfa_enrolled ON admin_mfa_secrets(enrolled_at DESC);
+
+CREATE TABLE IF NOT EXISTS admin_break_glass_grants (
+  id TEXT PRIMARY KEY,
+  actor_user_id TEXT NOT NULL,
+  target_user_id TEXT NOT NULL,
+  target_resource_id TEXT,
+  scope TEXT NOT NULL CHECK(scope IN ('pii', 'content')),
+  reason_code TEXT NOT NULL,
+  reason_note TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(actor_user_id) REFERENCES users(id),
+  FOREIGN KEY(target_user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_admin_break_glass_actor_expiry
+  ON admin_break_glass_grants(actor_user_id, expires_at DESC);
 `);
 ensureColumn('ai_usage_events', 'context_type', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('ai_usage_events', 'context_id', "TEXT NOT NULL DEFAULT ''");

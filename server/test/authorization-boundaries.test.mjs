@@ -365,7 +365,7 @@ test('authorization boundaries isolate two users, admin routes, and CSRF mutatio
       const nextRoute = serverSource.indexOf('\napp.', route.index + 1);
       const handler = serverSource.slice(route.index, nextRoute === -1 ? undefined : nextRoute);
       assert.match(handler, /requireCsrf/, `${route[1]} wajib memakai requireCsrf`);
-      assert.match(handler, /\baudit\(/, `${route[1]} wajib mencatat perubahan pada audit log`);
+      assert.match(handler, /\b(?:audit|auditBreakGlass)\(/, `${route[1]} wajib mencatat perubahan pada audit log`);
     }
 
     const configSource = await readFile(path.join(root, 'server/src/config.js'), 'utf8');

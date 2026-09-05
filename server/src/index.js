@@ -34,9 +34,10 @@ import { CHAT_MESSAGE_OPERATION, runCanonicalChatMutation } from './chat-message
 import { getMutationSnapshot } from './mutation-requests.js';
 import { getMessageReactionAnalytics, removeMessageReaction, setMessageReaction } from './message-reactions.js';
 import { listAdminAudit, recordAdminAudit } from './admin-audit.js';
+import { BreakGlassError, createBreakGlassGrant, findActiveBreakGlassGrant, revokeBreakGlassGrant } from './admin-break-glass.js';
 import { adminListPage, parseAdminListQuery } from './admin-list-query.js';
 import { registerAdminAiRoutes } from './admin-ai-routes.js';
-import { capabilitiesForUser, isPrivilegedUser, requireCapability } from './admin-capabilities.js';
+import { capabilitiesForUser, hasCapability, isPrivilegedUser, requireCapability } from './admin-capabilities.js';
 import { createTotpSecret, getAdminMfaStatus, verifyTotpCode, adminMfaRequired } from './mfa.js';
 import { checkPasswordBreach } from './password-breach.js';
 import {
@@ -517,6 +518,12 @@ const adminAppealReviewSchema = z.object({
   liftRestrictions: z.boolean().optional().default(false),
 });
 
+const adminBreakGlassSchema = z.object({
+  reasonCode: z.enum(['support_case', 'security_incident', 'legal_request', 'data_subject_request', 'other']),
+  reasonNote: z.string().trim().min(12, 'Jelaskan alasan akses minimal 12 karakter.').max(500),
+  durationMinutes: z.coerce.number().int().min(1).max(10).default(5),
+});
+
 const adminBroadcastSchema = z.object({
   audience: z.enum(['all', 'paid', 'selected']),
   userIds: z.array(z.string().trim().min(8).max(80)).max(100).optional().default([]),
@@ -713,6 +720,14 @@ const DEFAULT_LANDING_CONTENT = {
 
 function anonymousUserRef(userId = '') {
   return `U-${sha256(`${config.tokenSecret}:${userId}`).slice(0, 8).toUpperCase()}`;
+}
+
+function anonymousRoomRef(roomId = '') {
+  return `R-${sha256(`${config.tokenSecret}:room:${roomId}`).slice(0, 8).toUpperCase()}`;
+}
+
+function redactEmailAddresses(value = '') {
+  return String(value).replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[identitas disembunyikan]');
 }
 
 function normalizeLandingContent(raw = {}) {
@@ -5009,7 +5024,7 @@ function adminMfaState(req) {
   const status = getAdminMfaStatus(req.user.id);
   const required = adminMfaRequired({ role: req.user.role, mfaEnrolled: status.enrolled }, { enforced: config.adminMfaRequired });
   const verifiedAt = Number(req.session?.mfaVerifiedAt || 0);
-  const verified = required && verifiedAt > 0
+  const verified = verifiedAt > 0
     && (Date.now() - verifiedAt) <= config.adminMfaWindowMinutes * 60 * 1000;
   return { ...status, required, verified, verifiedAt: verifiedAt || null };
 }
@@ -5030,7 +5045,7 @@ function requireAdminMfa(req, _res, next) {
 function requireRecentAdminMfa(req, _res, next) {
   const state = adminMfaState(req);
   if (!state.enrolled) {
-    return next(new HttpError(428, 'Aktifkan verifikasi dua langkah sebelum mengubah konfigurasi AI.', 'ADMIN_MFA_ENROLLMENT_REQUIRED'));
+    return next(new HttpError(428, 'Aktifkan verifikasi dua langkah sebelum melakukan tindakan sensitif.', 'ADMIN_MFA_ENROLLMENT_REQUIRED'));
   }
   if (!state.verified) {
     return next(new HttpError(428, 'Verifikasi dua langkah terbaru diperlukan untuk tindakan ini.', 'ADMIN_MFA_REQUIRED'));
@@ -5147,6 +5162,48 @@ function exposeRestriction(row) {
   };
 }
 
+function publicBreakGlassAccess(grant) {
+  return {
+    id: grant.id,
+    scope: grant.scope,
+    userRef: anonymousUserRef(grant.targetUserId),
+    ...(grant.targetResourceId ? { roomRef: anonymousRoomRef(grant.targetResourceId) } : {}),
+    expiresAt: grant.expiresAt,
+  };
+}
+
+function auditBreakGlass(req, action, grant, extra = {}) {
+  recordAdminAudit({
+    actorUserId: req.user.id,
+    action,
+    target: `${grant.scope}:${anonymousUserRef(grant.targetUserId)}${grant.targetResourceId ? `:${anonymousRoomRef(grant.targetResourceId)}` : ''}`,
+    payloadDiff: {
+      scope: grant.scope,
+      reasonCode: grant.reasonCode,
+      expiresAt: grant.expiresAt,
+      ...extra,
+    },
+    ipAddress: req.ip,
+  });
+}
+
+function activeBreakGlassGrant(req, scope) {
+  try {
+    return findActiveBreakGlassGrant({ store: db, grantId: req.params.grantId, actorUserId: req.user.id, scope });
+  } catch (error) {
+    if (error instanceof BreakGlassError) {
+      recordAdminAudit({
+        actorUserId: req.user.id,
+        action: 'admin.break_glass_access_denied',
+        target: `${scope}:grant`,
+        payloadDiff: { scope, errorCode: error.code },
+        ipAddress: req.ip,
+      });
+    }
+    throw error;
+  }
+}
+
 app.get('/api/admin/mfa/status', requireAuth, requirePrivilegedUser, (req, res) => {
   return res.json({ mfa: adminMfaState(req) });
 });
@@ -5210,11 +5267,11 @@ app.get('/api/admin/users', requireAuth, requireCapability('users.view'), (req, 
   const userId = String(req.query.userId || '').trim().slice(0, 160);
   const pattern = `%${query.q.replace(/[%_]/g, '\\$&')}%`;
   const rows = db.prepare(`
-    SELECT id, email, full_name, role, email_verified_at, created_at
+    SELECT id, role, email_verified_at, created_at
     FROM users
     WHERE deleted_at IS NULL AND role != 'admin'
       AND (? = '' OR id = ?)
-      AND (? = '' OR email LIKE ? ESCAPE '\\' OR full_name LIKE ? ESCAPE '\\')
+      AND (? = '' OR id LIKE ? ESCAPE '\\' OR role LIKE ? ESCAPE '\\')
     ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
   `).all(userId, userId, query.q, pattern, pattern, query.limit + 1, query.cursor);
   const page = adminListPage(rows, query);
@@ -5234,8 +5291,7 @@ app.get('/api/admin/users', requireAuth, requireCapability('users.view'), (req, 
     `).get(user.id, user.id, user.id, user.id, now());
     return {
       id: user.id,
-      email: user.email,
-      fullName: user.full_name || '',
+      userRef: anonymousUserRef(user.id),
       emailVerified: Boolean(user.email_verified_at),
       credits: wallet.balances.total,
       plan: subscription?.plan_key === 'pro' ? 'Max' : subscription ? 'Pro' : hasPaidCredit ? 'Satuan' : 'Gratis',
@@ -5311,7 +5367,7 @@ app.get('/api/admin/users/:id/rooms', requireAuth, requireCapability('users.view
   const user = db.prepare("SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND role != 'admin'").get(req.params.id);
   if (!user) throw new HttpError(404, 'User tidak ditemukan.', 'ADMIN_USER_NOT_FOUND');
   const rooms = db.prepare(`
-    SELECT session.id, session.title, session.document_id, session.updated_at,
+    SELECT session.id, session.document_id, session.updated_at,
       COUNT(DISTINCT message.id) AS message_count,
       COALESCE((
         SELECT SUM(usage.total_tokens)
@@ -5330,12 +5386,123 @@ app.get('/api/admin/users/:id/rooms', requireAuth, requireCapability('users.view
     LIMIT 100
   `).all(user.id).map((room) => ({
     id: room.id,
-    title: room.title,
+    roomRef: anonymousRoomRef(room.id),
     messageCount: Number(room.message_count || 0),
     totalTokens: Number(room.total_tokens || 0),
     updatedAt: room.updated_at,
   }));
   res.json({ rooms });
+});
+
+app.post('/api/admin/users/:id/pii-access', requireAuth, requireCsrf, requireCapability('users.pii.reveal'), requireRecentAdminMfa, adminMutationLimiter, (req, res) => {
+  const input = adminBreakGlassSchema.parse(req.body || {});
+  const user = db.prepare("SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND role != 'admin'").get(req.params.id);
+  if (!user) throw new HttpError(404, 'User tidak ditemukan.', 'ADMIN_USER_NOT_FOUND');
+  const grant = createBreakGlassGrant({
+    store: db,
+    actorUserId: req.user.id,
+    targetUserId: user.id,
+    scope: 'pii',
+    reasonCode: input.reasonCode,
+    reasonNote: input.reasonNote,
+    durationMinutes: input.durationMinutes,
+  });
+  auditBreakGlass(req, 'admin.pii_access_granted', grant, { reasonNote: input.reasonNote });
+  return res.status(201).json({ access: publicBreakGlassAccess(grant) });
+});
+
+app.get('/api/admin/break-glass/:grantId/pii', requireAuth, requireCapability('users.pii.reveal'), requireRecentAdminMfa, (req, res) => {
+  const grant = activeBreakGlassGrant(req, 'pii');
+  const user = db.prepare("SELECT id, email, full_name FROM users WHERE id = ? AND deleted_at IS NULL AND role != 'admin'").get(grant.targetUserId);
+  if (!user) throw new HttpError(404, 'User tidak ditemukan.', 'ADMIN_USER_NOT_FOUND');
+  auditBreakGlass(req, 'admin.pii_accessed', grant);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    pii: { userRef: anonymousUserRef(user.id), email: user.email, fullName: user.full_name || '' },
+    expiresAt: grant.expiresAt,
+  });
+});
+
+app.post('/api/admin/users/:id/rooms/:roomId/content-access', requireAuth, requireCsrf, requireCapability('users.content.reveal'), requireRecentAdminMfa, adminMutationLimiter, (req, res) => {
+  const input = adminBreakGlassSchema.parse(req.body || {});
+  const room = db.prepare(`
+    SELECT id, owner_user_id FROM chat_sessions
+    WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL
+  `).get(req.params.roomId, req.params.id);
+  if (!room) throw new HttpError(404, 'Ruang percakapan tidak ditemukan.', 'ADMIN_ROOM_NOT_FOUND');
+  const grant = createBreakGlassGrant({
+    store: db,
+    actorUserId: req.user.id,
+    targetUserId: room.owner_user_id,
+    targetResourceId: room.id,
+    scope: 'content',
+    reasonCode: input.reasonCode,
+    reasonNote: input.reasonNote,
+    durationMinutes: input.durationMinutes,
+  });
+  auditBreakGlass(req, 'admin.content_access_granted', grant, { reasonNote: input.reasonNote });
+  return res.status(201).json({ access: publicBreakGlassAccess(grant) });
+});
+
+app.get('/api/admin/break-glass/:grantId/content', requireAuth, requireCapability('users.content.reveal'), requireRecentAdminMfa, (req, res) => {
+  const grant = activeBreakGlassGrant(req, 'content');
+  const room = db.prepare(`
+    SELECT id, owner_user_id, title, created_at, updated_at FROM chat_sessions
+    WHERE id = ? AND owner_user_id = ? AND archived_at IS NULL
+  `).get(grant.targetResourceId, grant.targetUserId);
+  if (!room) throw new HttpError(404, 'Ruang percakapan tidak ditemukan.', 'ADMIN_ROOM_NOT_FOUND');
+  const messages = db.prepare(`
+    SELECT id, role, content, created_at FROM chat_messages
+    WHERE session_id = ? AND owner_user_id = ? ORDER BY created_at ASC LIMIT 200
+  `).all(room.id, room.owner_user_id).map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    createdAt: message.created_at,
+  }));
+  const attachments = db.prepare(`
+    SELECT id, kind, original_name, mime_type, size_bytes, created_at FROM chat_attachments
+    WHERE session_id = ? AND owner_user_id = ? AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 100
+  `).all(room.id, room.owner_user_id).map((attachment) => ({
+    id: attachment.id,
+    kind: attachment.kind,
+    originalName: attachment.original_name,
+    mimeType: attachment.mime_type,
+    sizeBytes: Number(attachment.size_bytes || 0),
+    createdAt: attachment.created_at,
+  }));
+  auditBreakGlass(req, 'admin.content_accessed', grant, { messageCount: messages.length, attachmentCount: attachments.length });
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    content: {
+      roomRef: anonymousRoomRef(room.id),
+      title: room.title,
+      messages,
+      attachments,
+      createdAt: room.created_at,
+      updatedAt: room.updated_at,
+    },
+    expiresAt: grant.expiresAt,
+  });
+});
+
+app.delete('/api/admin/break-glass/:grantId', requireAuth, requireCsrf, requirePrivilegedUser, requireRecentAdminMfa, adminMutationLimiter, (req, res) => {
+  const grantRow = db.prepare('SELECT * FROM admin_break_glass_grants WHERE id = ? AND actor_user_id = ?').get(req.params.grantId, req.user.id);
+  if (!grantRow) throw new HttpError(404, 'Break-glass grant tidak ditemukan.', 'BREAK_GLASS_GRANT_NOT_FOUND');
+  const requiredCapability = grantRow.scope === 'pii' ? 'users.pii.reveal' : 'users.content.reveal';
+  if (!hasCapability(req.user, requiredCapability)) throw new HttpError(403, 'Akses tidak tersedia untuk tugas admin ini.', 'ADMIN_CAPABILITY_REQUIRED');
+  const revoked = revokeBreakGlassGrant({ store: db, grantId: req.params.grantId, actorUserId: req.user.id });
+  if (!revoked) throw new HttpError(409, 'Break-glass grant sudah tidak aktif.', 'BREAK_GLASS_GRANT_INACTIVE');
+  const grant = {
+    id: grantRow.id,
+    scope: grantRow.scope,
+    targetUserId: grantRow.target_user_id,
+    targetResourceId: grantRow.target_resource_id || null,
+    reasonCode: grantRow.reason_code,
+    expiresAt: grantRow.expires_at,
+  };
+  auditBreakGlass(req, 'admin.break_glass_revoked', grant);
+  return res.status(204).end();
 });
 
 app.get('/api/admin/users/:id/restrictions', requireAuth, requireCapability('users.restrict'), (req, res) => {
@@ -5428,7 +5595,7 @@ app.post('/api/admin/users/:id/restrictions', requireAuth, requireCsrf, requireC
     kind: 'account_restricted',
     severity: 'warning',
     userId: user.id,
-    summary: `Akses ${user.email} dibatasi oleh admin.`,
+    summary: `Akses ${anonymousUserRef(user.id)} dibatasi oleh admin.`,
   });
   res.status(201).json({
     restrictions: db.prepare(`SELECT * FROM access_restrictions WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids).map(exposeRestriction),
@@ -5449,21 +5616,19 @@ app.get('/api/admin/appeals', requireAuth, requireCapability('appeals.review'), 
   const query = parseAdminListQuery(req.query, { statuses: ['open', 'approved', 'rejected', 'all'], defaultStatus: 'open', defaultLimit: 25 });
   const pattern = `%${query.q.replace(/[%_]/g, '\\$&')}%`;
   const rows = db.prepare(`
-    SELECT appeal.*, user.email, user.full_name
+    SELECT appeal.*
     FROM account_appeals appeal
-    LEFT JOIN users user ON user.id = appeal.user_id
     WHERE (? = 'all' OR appeal.status = ?)
-      AND (? = '' OR user.email LIKE ? ESCAPE '\\' OR user.full_name LIKE ? ESCAPE '\\' OR appeal.message LIKE ? ESCAPE '\\')
+      AND (? = '' OR appeal.message LIKE ? ESCAPE '\\')
     ORDER BY CASE appeal.status WHEN 'open' THEN 0 ELSE 1 END, appeal.created_at DESC, appeal.id DESC
     LIMIT ? OFFSET ?
-  `).all(query.status, query.status, query.q, pattern, pattern, pattern, query.limit + 1, query.cursor);
+  `).all(query.status, query.status, query.q, pattern, query.limit + 1, query.cursor);
   const page = adminListPage(rows, query);
   const appeals = page.items.map((appeal) => ({
     id: appeal.id,
     userId: appeal.user_id || null,
-    userEmail: appeal.email || '',
-    userName: appeal.full_name || '',
-    message: appeal.message,
+    userRef: anonymousUserRef(appeal.user_id || appeal.id),
+    message: redactEmailAddresses(appeal.message),
     status: appeal.status,
     adminReply: appeal.admin_reply || '',
     createdAt: appeal.created_at,
@@ -5761,26 +5926,24 @@ app.get('/api/admin/alerts', requireAuth, requireCapability('incidents.manage'),
   const query = parseAdminListQuery(req.query, { statuses: ['open', 'resolved', 'all'], defaultStatus: 'open', defaultLimit: 25 });
   const pattern = `%${query.q.replace(/[%_]/g, '\\$&')}%`;
   const rows = db.prepare(`
-    SELECT alert.*, user.email, user.full_name
+    SELECT alert.*
     FROM admin_alerts alert
-    LEFT JOIN users user ON user.id = alert.user_id
     WHERE (? = 'all' OR alert.status = ?)
-      AND (? = '' OR alert.summary LIKE ? ESCAPE '\\' OR alert.kind LIKE ? ESCAPE '\\' OR alert.error_code LIKE ? ESCAPE '\\' OR user.email LIKE ? ESCAPE '\\')
+      AND (? = '' OR alert.summary LIKE ? ESCAPE '\\' OR alert.kind LIKE ? ESCAPE '\\' OR alert.error_code LIKE ? ESCAPE '\\')
     ORDER BY CASE alert.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
       alert.created_at DESC, alert.id DESC
     LIMIT ? OFFSET ?
-  `).all(query.status, query.status, query.q, pattern, pattern, pattern, pattern, query.limit + 1, query.cursor);
+  `).all(query.status, query.status, query.q, pattern, pattern, pattern, query.limit + 1, query.cursor);
   const page = adminListPage(rows, query);
   const alerts = page.items.map((alert) => ({
     id: alert.id,
     kind: alert.kind,
     severity: alert.severity,
     userId: alert.user_id || null,
-    userEmail: alert.email || '',
-    userName: alert.full_name || '',
+    userRef: alert.user_id ? anonymousUserRef(alert.user_id) : null,
     documentId: alert.document_id || null,
     jobId: alert.job_id || null,
-    summary: alert.summary,
+    summary: redactEmailAddresses(alert.summary),
     errorCode: alert.error_code || '',
     status: alert.status,
     createdAt: alert.created_at,
@@ -5880,40 +6043,36 @@ app.get('/api/admin/ai/usage', requireAuth, requireCapability('ai.health.view'),
     GROUP BY substr(created_at, 1, 10) ORDER BY day ASC
   `).all(since, userFilter, userFilter);
   const byUser = db.prepare(`
-    SELECT usage.user_id, user.email, user.full_name,
+    SELECT usage.user_id,
       COUNT(*) AS calls,
       COALESCE(SUM(usage.total_tokens), 0) AS total_tokens,
       SUM(CASE WHEN usage.status = 'error' THEN 1 ELSE 0 END) AS errors,
       COALESCE(ROUND(AVG(usage.latency_ms)), 0) AS average_latency_ms
     FROM ai_usage_events usage
-    LEFT JOIN users user ON user.id = usage.user_id
     WHERE usage.created_at >= ? AND usage.user_id IS NOT NULL
       AND (? = '' OR usage.user_id = ?)
-    GROUP BY usage.user_id, user.email, user.full_name
+    GROUP BY usage.user_id
     ORDER BY calls DESC LIMIT 100
   `).all(since, userFilter, userFilter).map((row) => ({
     userId: row.user_id,
-    email: row.email || '',
-    fullName: row.full_name || '',
+    userRef: anonymousUserRef(row.user_id),
     calls: Number(row.calls || 0),
     totalTokens: Number(row.total_tokens || 0),
     errors: Number(row.errors || 0),
     averageLatencyMs: Number(row.average_latency_ms || 0),
   }));
   const recent = db.prepare(`
-    SELECT usage.id, usage.user_id, user.email, user.full_name,
+    SELECT usage.id, usage.user_id,
       usage.purpose, usage.mode, usage.provider, usage.model, usage.status,
       usage.input_tokens, usage.output_tokens, usage.reasoning_tokens, usage.total_tokens,
       usage.latency_ms, usage.error_code, usage.fallback_count, usage.fallback_reason, usage.created_at
     FROM ai_usage_events usage
-    LEFT JOIN users user ON user.id = usage.user_id
     WHERE usage.created_at >= ? AND (? = '' OR usage.user_id = ?)
     ORDER BY usage.created_at DESC LIMIT 200
   `).all(since, userFilter, userFilter).map((row) => ({
     id: row.id,
     userId: row.user_id || null,
-    email: row.email || '',
-    fullName: row.full_name || '',
+    userRef: row.user_id ? anonymousUserRef(row.user_id) : null,
     purpose: row.purpose,
     mode: row.mode,
     provider: row.provider,

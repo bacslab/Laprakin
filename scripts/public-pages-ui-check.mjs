@@ -131,8 +131,29 @@ try {
   await page.waitForURL('**/auth?next=*');
   assert.match(new URL(page.url()).searchParams.get('next') || '', /^\/checkout\?plan=monthly$/);
   await page.getByRole('heading', { name: 'Log in', exact: true }).waitFor();
+  const authTypography = await page.locator('.auth-card').evaluate((card) => {
+    const style = (selector) => getComputedStyle(card.querySelector(selector));
+    return {
+      heading: parseFloat(style('h1').fontSize),
+      description: parseFloat(style('.auth-card-heading > p').fontSize),
+      label: parseFloat(style('.auth-form label').fontSize),
+      input: parseFloat(style('.auth-form input').fontSize),
+      submit: parseFloat(style('.auth-submit').fontSize),
+    };
+  });
+  assert.ok(authTypography.heading >= 20 && authTypography.heading <= 22, `Auth heading scale drifted: ${JSON.stringify(authTypography)}`);
+  assert.ok(authTypography.description >= 10 && authTypography.description <= 12, `Auth description scale drifted: ${JSON.stringify(authTypography)}`);
+  assert.ok(authTypography.label >= 9.5 && authTypography.label <= 11, `Auth label scale drifted: ${JSON.stringify(authTypography)}`);
+  assert.ok(authTypography.input >= 10.5 && authTypography.input <= 12, `Auth input scale drifted: ${JSON.stringify(authTypography)}`);
+  assert.ok(authTypography.submit >= 10.5 && authTypography.submit <= 12, `Auth submit scale drifted: ${JSON.stringify(authTypography)}`);
+  await assertNoHorizontalOverflow(page, 'Auth desktop');
+  await page.screenshot({ path: path.join(screenshotDir, 'auth-desktop.png'), fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${webBase}/auth`, { waitUntil: 'networkidle' });
+  await page.getByRole('heading', { name: 'Log in', exact: true }).waitFor();
+  await assertNoHorizontalOverflow(page, 'Auth mobile');
+  await page.screenshot({ path: path.join(screenshotDir, 'auth-mobile.png'), fullPage: true });
   await page.goto(`${webBase}/pricing`, { waitUntil: 'networkidle' });
   await page.getByRole('heading', { name: 'Choose the plan that fits.', exact: true }).waitFor();
   assert.equal(await page.locator('.pricing-compact-grid').evaluate((element) => getComputedStyle(element).gridTemplateColumns), '362px');
