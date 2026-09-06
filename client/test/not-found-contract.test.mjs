@@ -10,7 +10,10 @@ const [component, main, styles] = await Promise.all([
 
 test('unknown routes render the themed recovery page instead of redirecting home', () => {
   assert.match(main, /<Route path="\*" element={<NotFoundPage \/>} \/>/);
-  assert.match(main, /if \(\!\['\/app', '\/app\/projects', '\/app\/documents'\]\.includes\(path\)\) return <NotFoundPage \/>/);
+  assert.match(main, /KNOWN_APP_PATHS/);
+  assert.match(main, /'\/app\/support'/);
+  assert.match(main, /'\/app\/feedback'/);
+  assert.match(main, /'\/app\/profile'/);
   assert.match(component, /Muat ulang/);
   assert.match(component, /Kembali ke beranda/);
   assert.match(styles, /\.not-found-page\.theme-dark/);

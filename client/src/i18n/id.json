@@ -572,8 +572,6 @@
       "aiConsentAllow": "Tinjau dan izinkan",
       "aiConsentSaving": "Menyimpan...",
       "documentType": "Pilih jenis dokumen",
-      "hintEnter": "Enter untuk kirim · Shift + Enter untuk baris baru · file hanya terlihat di akunmu",
-      "hintShortcut": "Ctrl atau ⌘ + Enter untuk kirim · Enter untuk baris baru · file hanya terlihat di akunmu",
       "disclaimer": "Laprakin dapat membuat kesalahan, periksa kembali hasil yang dibuat",
       "dataClasses": {
         "chat_content": "isi percakapan",

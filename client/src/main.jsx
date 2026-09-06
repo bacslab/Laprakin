@@ -224,7 +224,8 @@ function LegalPage({ type }) {
   </div>;
 }
 
-function ProtectedApp() { const { loading, user } = useApp(); const location = useLocation(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role === 'admin') return <Navigate to="/admin" replace />; const path = location.pathname.replace(/\/+$/, '') || '/app'; if (!['/app', '/app/projects', '/app/documents'].includes(path)) return <NotFoundPage />; return <WorkspaceBoundary><LegacyWorkspace /></WorkspaceBoundary>; }
+const KNOWN_APP_PATHS = new Set(['/app', '/app/projects', '/app/documents', '/app/support', '/app/feedback', '/app/profile']);
+function ProtectedApp() { const { loading, user } = useApp(); const location = useLocation(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role === 'admin') return <Navigate to="/admin" replace />; const path = location.pathname.replace(/\/+$/, '') || '/app'; if (!KNOWN_APP_PATHS.has(path)) return <NotFoundPage />; return <WorkspaceBoundary><LegacyWorkspace /></WorkspaceBoundary>; }
 
 function ProtectedBilling() {
   const { loading, user } = useApp();

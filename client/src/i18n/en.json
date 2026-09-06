@@ -572,8 +572,6 @@
       "aiConsentAllow": "Review and allow",
       "aiConsentSaving": "Saving...",
       "documentType": "Choose document type",
-      "hintEnter": "Enter to send · Shift + Enter for a new line · files are visible only in your account",
-      "hintShortcut": "Ctrl or ⌘ + Enter to send · Enter for a new line · files are visible only in your account",
       "disclaimer": "Laprakin can make mistakes, so please review the generated result",
       "dataClasses": {
         "chat_content": "conversation content",

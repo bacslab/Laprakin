@@ -95,14 +95,14 @@ function StepCard({ index, active, t }) {
 export default function LandingView({
   navigate, media, pageRef, statementRef, howViewportRef, howTrackRef,
   stepDragging, step, onMouseDown, onTouchStart, onStepChange,
-  openFaq, setOpenFaq, goTo,
+  openFaq, setOpenFaq, goTo, theme = 'dark',
 }) {
   const { t } = useI18n();
   const statementCopy = t('landing.statement');
   const statementLines = STATEMENT_LINE_KEYS.map((key) => t(key));
   const statementWords = statementCopy.split(' ');
 
-  return <div ref={pageRef} className="fg-page">
+  return <div ref={pageRef} className="fg-page" data-theme={theme}>
     <header className="fg-navbar">
       <button type="button" className="fg-brand-button" data-cursor="TOP" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><LogoLockup beta={t('landing.beta')} /></button>
       <nav aria-label={t('landing.navLabel')}>

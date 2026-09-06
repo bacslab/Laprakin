@@ -8,7 +8,7 @@ import LandingView, { STEPS } from './pages/Landing/LandingView';
 gsap.registerPlugin(ScrollTrigger);
 
 
-export default function LandingPage({ navigate }) {
+export default function LandingPage({ navigate, theme = 'dark' }) {
   const [content, setContent] = useState({ media: {}, copy: {} });
   const [step, setStep] = useState(0);
   const [stepDragging, setStepDragging] = useState(false);
@@ -337,6 +337,7 @@ export default function LandingPage({ navigate }) {
   }, []);
 
   return <LandingView
+    theme={theme}
     navigate={navigate}
     media={media}
     pageRef={pageRef}

@@ -322,3 +322,88 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
   .fg-feature-row article{grid-template-rows:auto auto}
   .fg-feature-copy{min-height:0;padding:22px 28px 26px}
 }
+
+/* The dark reference remains the default, while the landing surface follows
+ * the same resolved theme as the rest of the app when the user chooses light
+ * or system mode. Keep the accents unchanged and only invert the canvas,
+ * copy, cards, and separators so the visual hierarchy stays familiar. */
+.fg-page.theme-light,
+.fg-page[data-theme="light"] {
+  --fg-bg:#f7f7f4;
+  --fg-panel:#fff;
+  --fg-card:#fff;
+  --fg-card-soft:#efefeb;
+  --fg-text:#1f211e;
+  --fg-muted:#6f716c;
+  --fg-border:color-mix(in srgb,#2d302b 36%,transparent);
+  --fg-border-strong:color-mix(in srgb,#2d302b 46%,transparent);
+}
+html:has(.fg-page.theme-light),
+html:has(.fg-page[data-theme="light"]),
+body:has(.fg-page.theme-light),
+body:has(.fg-page[data-theme="light"]),
+#root:has(.fg-page.theme-light),
+#root:has(.fg-page[data-theme="light"]) { background:var(--fg-bg); color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-navbar button,
+.fg-page[data-theme="light"] .fg-navbar nav button,
+.fg-page[data-theme="light"] .fg-workspace-link { color:var(--fg-muted); }
+.fg-page[data-theme="light"] .fg-navbar nav button:hover,
+.fg-page[data-theme="light"] .fg-workspace-link:hover { color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-logo-lockup small { border-color:var(--fg-border); background:var(--fg-card-soft); color:var(--fg-muted); }
+.fg-page[data-theme="light"] .fg-login-button { border-color:var(--fg-border)!important; background:var(--fg-card)!important; color:var(--fg-text)!important; }
+.fg-page[data-theme="light"] .fg-login-button:hover { background:var(--fg-card-soft)!important; color:var(--fg-text)!important; }
+.fg-page[data-theme="light"] .fg-hero-copy p,
+.fg-page[data-theme="light"] .fg-section-title p,
+.fg-page[data-theme="light"] .fg-feature-copy p,
+.fg-page[data-theme="light"] .fg-footer-intro p { color:var(--fg-muted); }
+.fg-page[data-theme="light"] .fg-video-frame { border-color:var(--fg-border); background:#e9e9e4; }
+.fg-page[data-theme="light"] .fg-hero-hill:before,
+.fg-page[data-theme="light"] .fg-footer-hills:before { box-shadow:inset 0 2000px rgba(247,247,244,.54),inset 0 -189px 50.8px rgba(247,247,244,.28); }
+.fg-page[data-theme="light"] .fg-hero-hill:after,
+.fg-page[data-theme="light"] .fg-footer-hills:after { background:linear-gradient(180deg,rgba(247,247,244,0) 20.418%,var(--fg-bg) 66.441%); }
+.fg-page[data-theme="light"] .fg-step-card { border-color:var(--fg-border); background:rgba(255,255,255,.92); color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-step-card.is-active { border-color:var(--fg-border-strong); background:var(--fg-card); box-shadow:0 24px 64px rgba(31,33,30,.12); }
+.fg-page[data-theme="light"] .fg-step-copy p,
+.fg-page[data-theme="light"] .fg-source-workbench-head p,
+.fg-page[data-theme="light"] .fg-source-workbench-foot p { color:var(--fg-muted); }
+.fg-page[data-theme="light"] .fg-step-controls button { border-color:var(--fg-border); background:var(--fg-card); color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-step-controls button:hover { background:var(--fg-card-soft); color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-step-controls span { color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-source-workbench,
+.fg-page[data-theme="light"] .fg-source-grid article,
+.fg-page[data-theme="light"] .fg-feature-row article,
+.fg-page[data-theme="light"] .fg-faq-list article { border-color:var(--fg-border); background:var(--fg-card); color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-source-workbench-head,
+.fg-page[data-theme="light"] .fg-source-workbench-foot { border-color:var(--fg-border); }
+.fg-page[data-theme="light"] .fg-source-stack,
+.fg-page[data-theme="light"] .fg-source-thread,
+.fg-page[data-theme="light"] .fg-feature-media,
+.fg-page[data-theme="light"] .fg-feature-row .fg-media-placeholder { background:#ecece7; }
+.fg-page[data-theme="light"] .fg-source-stack { border-color:var(--fg-border); }
+.fg-page[data-theme="light"] .fg-source-stack:before { background:#d7d8d2; box-shadow:5px 0 0 #f4f4f0; }
+.fg-page[data-theme="light"] .fg-source-stack-label,
+.fg-page[data-theme="light"] .fg-source-thread>span,
+.fg-page[data-theme="light"] .fg-source-tab small { color:#7a7d76; }
+.fg-page[data-theme="light"] .fg-source-sheet,
+.fg-page[data-theme="light"] .fg-source-tab { border-color:var(--fg-border); background:#fff; color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-source-sheet-top,
+.fg-page[data-theme="light"] .fg-source-sheet-file { border-color:var(--fg-border); color:var(--fg-muted); }
+.fg-page[data-theme="light"] .fg-source-sheet-preview { border-color:var(--fg-border); background:#f0f0eb; }
+.fg-page[data-theme="light"] .fg-source-sheet-preview i { background:#d1d3cc; }
+.fg-page[data-theme="light"] .fg-source-report { box-shadow:-10px 13px 0 #d9dad4; }
+.fg-page[data-theme="light"] .fg-compare-video { background:#e7e8e3; box-shadow:0 24px 60px rgba(31,33,30,.12); }
+.fg-page[data-theme="light"] .fg-play-placeholder { border-color:var(--fg-border); background:#fff; color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-feature-copy h3,
+.fg-page[data-theme="light"] .fg-faq-list button,
+.fg-page[data-theme="light"] .fg-source-copy h3 { color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-faq-list article:hover { border-color:var(--fg-border-strong); background:var(--fg-card-soft); }
+.fg-page[data-theme="light"] .fg-faq-list button:hover { background:var(--fg-card-soft); }
+.fg-page[data-theme="light"] .fg-faq-list button svg { color:var(--fg-muted); }
+.fg-page[data-theme="light"] .fg-faq-answer p { color:var(--fg-muted); }
+.fg-page[data-theme="light"] .fg-footer-card { border-color:var(--fg-border); background:rgba(255,255,255,.54); }
+.fg-page[data-theme="light"] .fg-footer-content-layer { color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-footer-links b { color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-footer-links button,
+.fg-page[data-theme="light"] .fg-footer-links span { color:var(--fg-muted); }
+.fg-page[data-theme="light"] .fg-footer-links button:hover { color:var(--fg-text); }
+.fg-page[data-theme="light"] .fg-logo-lockup.is-footer small { border-color:var(--fg-border); background:var(--fg-card-soft); color:var(--fg-text); }

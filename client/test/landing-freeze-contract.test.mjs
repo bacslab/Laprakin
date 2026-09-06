@@ -6,6 +6,8 @@ const tokens = readFileSync('client/src/styles/tokens.css', 'utf8');
 const landing = readFileSync('client/src/styles/landing.css', 'utf8');
 const landingBase = readFileSync('client/src/landing.css', 'utf8');
 const landingView = readFileSync('client/src/pages/Landing/LandingView.jsx', 'utf8');
+const landingRoute = readFileSync('client/src/pages/Landing/LandingPage.jsx', 'utf8');
+const landingRuntime = readFileSync('client/src/Landing.jsx', 'utf8');
 
 test('landing owns accent tokens instead of reading the shared user accent', () => {
   assert.match(tokens, /--landing-accent:\s*#c2ff33/i);
@@ -26,4 +28,13 @@ test('landing feature cards use the restored product images and quiet section li
   assert.match(landingBase, /--fg-border: color-mix\(in srgb, #e7e0d8 36%, transparent\)/);
   assert.match(landingBase, /\.fg-page \.fg-section-title p \{ margin-top: 22px; text-align: center; \}/);
   assert.match(landingBase, /\.fg-feature-media img/);
+});
+
+test('landing follows the resolved dark, light, or system theme', () => {
+  assert.match(landingRoute, /useResolvedTheme/);
+  assert.match(landingRoute, /resolvedTheme/);
+  assert.match(landingRoute, /theme=\{resolvedTheme\}/);
+  assert.match(landingRuntime, /theme = 'dark'/);
+  assert.match(landingRuntime, /theme=\{theme\}/);
+  assert.match(landingBase, /\.fg-page\.theme-light/);
 });
