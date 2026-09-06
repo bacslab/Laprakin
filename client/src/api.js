@@ -53,6 +53,7 @@ export async function api(path, options = {}) {
     form = false,
     headers: extraHeaders = {},
     requestId = body?.requestId,
+    signal,
     includeCsrf = !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()),
   } = options;
 
@@ -68,6 +69,7 @@ export async function api(path, options = {}) {
       credentials: 'include',
       headers,
       body: body ? (form ? body : JSON.stringify(body)) : undefined,
+      signal,
     });
   } catch (netErr) {
     throw new Error(friendlyClientErrorMessage(netErr));

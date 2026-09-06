@@ -11,6 +11,7 @@ import { resolveTheme, useResolvedTheme } from '../../lib/theme';
 import { useApp } from '../../state/ui-context';
 import { useI18n } from '../../i18n/context';
 import AdminLegacyRoutes from './AdminLegacyRoutes';
+import AdminGlobalSearch from './AdminGlobalSearch';
 import AdminAiWorkspace from './ai/AdminAiWorkspace';
 
 export default function LegacyAdminWorkspace() {
@@ -62,7 +63,7 @@ export default function LegacyAdminWorkspace() {
       <div className="admin-sidebar-foot"><div><span>{(user.email || 'A').slice(0, 1).toUpperCase()}</span><small>{user.email}</small></div><button onClick={async () => { await api('/auth/logout', { method: 'POST', body: {} }); await refreshSession(); navigate('/'); }}><LogOut size={15}/>{t('admin.console.logout')}</button></div>
     </aside>
     <main className="admin-main">
-      <header className="admin-header"><div><p>{t('admin.console.adminConsole')}</p><h1>{tabs.find(([key]) => key === tab)?.[1]}</h1></div><div className="admin-header-actions"><button className="admin-theme-toggle" onClick={() => setAdminTheme((value) => value === 'dark' ? 'light' : 'dark')} title={t('admin.console.adminTheme')} aria-label={t('admin.console.adminTheme')}>{adminTheme === 'dark' ? <Sun size={15}/> : <Moon size={15}/>}</button></div></header>
+      <header className="admin-header"><div><p>{t('admin.console.adminConsole')}</p><h1>{tabs.find(([key]) => key === tab)?.[1]}</h1></div><div className="admin-header-actions"><AdminGlobalSearch t={t} navigate={navigate}/><button className="admin-theme-toggle" onClick={() => setAdminTheme((value) => value === 'dark' ? 'light' : 'dark')} title={t('admin.console.adminTheme')} aria-label={t('admin.console.adminTheme')}>{adminTheme === 'dark' ? <Sun size={15}/> : <Moon size={15}/>}</button></div></header>
       {isAi ? <AdminAiWorkspace embedded /> : <AdminLegacyRoutes tab={tab} setNotice={setNotice}/>}
     </main>
   </div>;

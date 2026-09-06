@@ -59,6 +59,7 @@ export function createAdminAiClient(request) {
     routing: (revisionId = '') => request(`/admin/ai/routing${buildAdminAiQuery({ revisionId })}`),
     updateRouting: (body) => mutation('/admin/ai/routing', 'PUT', body),
     health: (days = 7) => request(`/admin/ai/health${buildAdminAiQuery({ days })}`),
+    usage: (filters) => request(`/admin/ai/usage${buildAdminAiQuery(filters)}`),
     testRevision: (revisionId) => mutation('/admin/ai/health/test', 'POST', { revisionId }),
     canary: (revisionId) => mutation('/admin/ai/health/canary', 'POST', { revisionId }),
     openCircuit: (body) => mutation('/admin/ai/health/circuit/open', 'POST', body),

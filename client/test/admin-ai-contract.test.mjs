@@ -143,6 +143,15 @@ test('legacy admin tabs use paths instead of volatile component state', () => {
   assert.doesNotMatch(legacy, /useState\(['"]overview['"]\)/);
 });
 
+test('embedded AI controls stay inside the single admin shell with deliberate spacing', async () => {
+  assert.match(aiWorkspace, /!embedded && <div className="admin-ai-topbar"/);
+  assert.doesNotMatch(aiWorkspace, /admin-ai-embedded-nav/);
+  const styles = await read('../src/styles/admin.css');
+  assert.match(styles, /--aai-gap-section:\s*24px/);
+  assert.match(styles, /--aai-gap-control:\s*12px/);
+  assert.match(styles, /\.admin-ai-embedded \.admin-ai-page\s*\{[^}]*gap:\s*var\(--aai-gap-section\)/);
+});
+
 test('every Admin AI module uses keyed Indonesian and English copy', () => {
   const moduleSources = [aiWorkspace, routes, providers, providerDetail, models, routing, health, changes, shared];
   for (const source of moduleSources) assert.match(source, /useI18n|useAdminAiCopy/);

@@ -44,8 +44,8 @@ export default function AdminAiWorkspace({ embedded = false }) {
       <div className="admin-ai-sidebar-foot"><span>{(user?.email || 'A').slice(0, 1).toUpperCase()}</span><div><b>{user?.email}</b><small>{capabilitiesResource.data?.role || user?.role}</small></div><button type="button" onClick={logout} aria-label={t('common.logout')}><LogOut size={15} /></button></div>
     </aside>}
     <main className="admin-ai-main">
-      <div className="admin-ai-topbar"><div><span className="admin-ai-environment">{embedded ? t('common.controlPlane') : t('common.productionControls')}</span><b>{embedded ? 'AI & Login' : t('common.configuration')}</b></div><button type="button" className="admin-ai-theme" onClick={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')} aria-label={t('common.changeTheme')}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</button></div>
-      {embedded && <nav className="admin-ai-embedded-nav" aria-label={t('common.navigation')}>
+      {!embedded && <div className="admin-ai-topbar"><div><span className="admin-ai-environment">{t('common.productionControls')}</span><b>{t('common.configuration')}</b></div><button type="button" className="admin-ai-theme" onClick={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')} aria-label={t('common.changeTheme')}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</button></div>}
+      {embedded && <nav className="admin-ai-section-nav" aria-label={t('common.navigation')}>
         {NAV_ITEMS.map(([key, path, Icon]) => <Link key={key} to={path} className={location.pathname.startsWith(path) ? 'active' : ''}><Icon size={14} /><span>{t(`nav.${key}`)}</span></Link>)}
       </nav>}
       <AdminResource resource={capabilitiesResource} label={t('common.permissions')}>{(data) => <AdminAiProvider value={{ client, capabilities: data.capabilities || [], affordances: adminAiAffordances(data.capabilities || []) }}><AdminAiRoutes /></AdminAiProvider>}</AdminResource>

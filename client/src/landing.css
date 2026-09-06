@@ -308,13 +308,18 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
 
 /* Keep separators quiet so copy and controls carry the visual hierarchy. */
 .fg-page {
-  --fg-border: color-mix(in srgb, #e7e0d8 36%, transparent);
-  --fg-border-strong: color-mix(in srgb, #e7e0d8 46%, transparent);
+  --fg-border: color-mix(in srgb, #e7e0d8 26%, transparent);
+  --fg-border-strong: color-mix(in srgb, #e7e0d8 38%, transparent);
+  --fg-step-title-size: clamp(20px, 2.4vw, 27px);
+  --fg-step-title-line: 1.18;
 }
 .fg-page :is(.fg-video-frame,.fg-section-title>span,.fg-source-workbench,.fg-feature-row article,.fg-faq-list article,.fg-source-grid article,.fg-source-icon,.fg-source-sections,.fg-source-sections li,.fg-step-controls button) { border-color: var(--fg-border); }
 .fg-page .fg-section-title p { margin-top: 22px; text-align: center; }
-.fg-page .fg-feature-copy { text-align: center; }
-.fg-page .fg-feature-copy p { margin-top: 12px; text-align: center; }
+.fg-page .fg-hero-copy p { text-align: center; margin-inline: auto; max-width: 600px; }
+.fg-page .fg-feature-copy { text-align: left; align-items: flex-start; }
+.fg-page .fg-step-copy h3,
+.fg-page .fg-feature-copy h3 { font-size: var(--fg-step-title-size); line-height: var(--fg-step-title-line); }
+.fg-page .fg-feature-copy p { margin-top: 15px; text-align: left; }
 .fg-feature-media { position: relative; width: 100%; aspect-ratio: 3/2; overflow: hidden; background: #1c1c1b; }
 .fg-feature-media img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center top; }
 
@@ -335,8 +340,8 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
   --fg-card-soft:#efefeb;
   --fg-text:#1f211e;
   --fg-muted:#6f716c;
-  --fg-border:color-mix(in srgb,#2d302b 36%,transparent);
-  --fg-border-strong:color-mix(in srgb,#2d302b 46%,transparent);
+  --fg-border:color-mix(in srgb,#2d302b 24%,transparent);
+  --fg-border-strong:color-mix(in srgb,#2d302b 36%,transparent);
 }
 html:has(.fg-page.theme-light),
 html:has(.fg-page[data-theme="light"]),

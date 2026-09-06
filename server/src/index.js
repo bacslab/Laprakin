@@ -36,6 +36,8 @@ import { getMessageReactionAnalytics, removeMessageReaction, setMessageReaction 
 import { listAdminAudit, recordAdminAudit } from './admin-audit.js';
 import { BreakGlassError, createBreakGlassGrant, findActiveBreakGlassGrant, revokeBreakGlassGrant } from './admin-break-glass.js';
 import { adminListPage, parseAdminListQuery } from './admin-list-query.js';
+import { buildAdminMonitoringWhere } from './admin-monitoring.js';
+import { ADMIN_SEARCH_FEATURES, normalizeAdminSearchQuery, rankAdminSearchResults } from './admin-search.js';
 import { registerAdminAiRoutes } from './admin-ai-routes.js';
 import { capabilitiesForUser, hasCapability, isPrivilegedUser, requireCapability } from './admin-capabilities.js';
 import { createTotpSecret, getAdminMfaStatus, verifyTotpCode, adminMfaRequired } from './mfa.js';
@@ -6007,14 +6009,50 @@ app.get('/api/admin/overview', requireAuth, requireCapability('audit.view'), (re
   res.json({ stats, storageBytes: Number(storage?.bytes || 0), dailyActivity, events, jobs });
 });
 
+app.get('/api/admin/search', requireAuth, requirePrivilegedUser, (req, res, next) => {
+  try {
+    const query = normalizeAdminSearchQuery(req.query);
+    if (!query.q) return res.json({ query, results: [] });
+    const candidates = [];
+    const can = (capability) => hasCapability(req.user, capability);
+    if (query.kind === 'all' || query.kind === 'features') {
+      ADMIN_SEARCH_FEATURES.filter((item) => !item.capability || can(item.capability)).forEach((item) => candidates.push(item));
+    }
+    if ((query.kind === 'all' || query.kind === 'ai') && can('ai.health.view')) {
+      db.prepare(`SELECT provider, model, route_id, COUNT(*) AS calls FROM ai_usage_events WHERE provider IS NOT NULL OR model IS NOT NULL OR route_id IS NOT NULL GROUP BY provider, model, route_id ORDER BY calls DESC LIMIT 200`).all().forEach((row) => {
+        const provider = row.provider || 'Unknown provider';
+        const model = row.model || 'Unknown model';
+        const route = row.route_id || 'default';
+        candidates.push({ id: `ai-${provider}-${model}-${route}`, kind: 'ai', title: model, subtitle: `${provider} · ${route} · ${Number(row.calls || 0).toLocaleString('en-US')} calls`, path: '/admin/ai/health', searchText: `${provider} ${model} ${route} ai health usage` });
+      });
+    }
+    if ((query.kind === 'all' || query.kind === 'users') && can('users.view')) {
+      db.prepare(`SELECT id, role, plan, created_at FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 300`).all().forEach((row) => {
+        const userRef = anonymousUserRef(row.id);
+        candidates.push({ id: `user-${row.id}`, kind: 'users', title: userRef, subtitle: `${row.role || 'user'} · ${row.plan || 'free'}`, path: `/admin/users/${encodeURIComponent(row.id)}`, searchText: `${userRef} ${row.id} ${row.role || ''} ${row.plan || ''}` });
+      });
+    }
+    if ((query.kind === 'all' || query.kind === 'alerts') && can('incidents.manage')) {
+      db.prepare(`SELECT id, kind, severity, summary, status, created_at FROM admin_alerts ORDER BY created_at DESC LIMIT 200`).all().forEach((row) => {
+        const summary = redactEmailAddresses(row.summary || row.kind || 'Operational alert');
+        candidates.push({ id: `alert-${row.id}`, kind: 'alerts', title: summary, subtitle: `${row.severity || 'info'} · ${row.status || 'open'}`, path: '/admin/alerts', searchText: `${row.kind || ''} ${row.severity || ''} ${row.summary || ''} ${row.status || ''}` });
+      });
+    }
+    if ((query.kind === 'all' || query.kind === 'audit') && can('audit.view')) {
+      db.prepare(`SELECT id, action, target_type, target_id, actor_user_id, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 300`).all().forEach((row) => {
+        const actorRef = row.actor_user_id ? anonymousUserRef(row.actor_user_id) : 'System';
+        candidates.push({ id: `audit-${row.id}`, kind: 'audit', title: row.action || 'Audit event', subtitle: `${row.target_type || 'system'} · ${actorRef}`, path: '/admin/audit', searchText: `${row.action || ''} ${row.target_type || ''} ${row.target_id || ''} ${actorRef}` });
+      });
+    }
+    const results = rankAdminSearchResults(candidates, query.q, query.limit).map(({ searchText, capability, score, ...result }) => ({ ...result, score }));
+    return res.json({ query, results });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.get('/api/admin/ai/usage', requireAuth, requireCapability('ai.health.view'), (req, res) => {
-  const query = z.object({
-    days: z.coerce.number().int().min(1).max(90).catch(30),
-    userId: z.string().trim().max(80).catch(''),
-  }).parse(req.query);
-  const days = query.days;
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  const userFilter = query.userId || '';
+  const { query, since, sql: whereSql, params: whereParams } = buildAdminMonitoringWhere(req.query);
   const totals = db.prepare(`
     SELECT COUNT(*) AS calls,
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful,
@@ -6025,23 +6063,25 @@ app.get('/api/admin/ai/usage', requireAuth, requireCapability('ai.health.view'),
       COALESCE(SUM(total_tokens), 0) AS total_tokens,
       COALESCE(SUM(fallback_count), 0) AS fallback_count,
       COALESCE(ROUND(AVG(latency_ms)), 0) AS average_latency_ms
-    FROM ai_usage_events WHERE created_at >= ? AND (? = '' OR user_id = ?)
-  `).get(since, userFilter, userFilter);
+    FROM ai_usage_events usage WHERE ${whereSql}
+  `).get(...whereParams);
   const breakdown = db.prepare(`
-    SELECT purpose, mode, model, status, COUNT(*) AS calls,
+    SELECT purpose, mode, provider, model, route_id, status, COUNT(*) AS calls,
       COALESCE(SUM(total_tokens), 0) AS total_tokens,
       COALESCE(ROUND(AVG(latency_ms)), 0) AS average_latency_ms
-    FROM ai_usage_events WHERE created_at >= ? AND (? = '' OR user_id = ?)
-    GROUP BY purpose, mode, model, status
-    ORDER BY calls DESC, purpose ASC
-  `).all(since, userFilter, userFilter);
+    FROM ai_usage_events usage WHERE ${whereSql}
+    GROUP BY purpose, mode, provider, model, route_id, status
+    ORDER BY calls DESC, purpose ASC, model ASC
+  `).all(...whereParams);
   const daily = db.prepare(`
     SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS calls,
       COALESCE(SUM(total_tokens), 0) AS total_tokens,
-      SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errors
-    FROM ai_usage_events WHERE created_at >= ? AND (? = '' OR user_id = ?)
+      SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful,
+      SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errors,
+      COALESCE(ROUND(AVG(latency_ms)), 0) AS average_latency_ms
+    FROM ai_usage_events usage WHERE ${whereSql}
     GROUP BY substr(created_at, 1, 10) ORDER BY day ASC
-  `).all(since, userFilter, userFilter);
+  `).all(...whereParams);
   const byUser = db.prepare(`
     SELECT usage.user_id,
       COUNT(*) AS calls,
@@ -6049,11 +6089,10 @@ app.get('/api/admin/ai/usage', requireAuth, requireCapability('ai.health.view'),
       SUM(CASE WHEN usage.status = 'error' THEN 1 ELSE 0 END) AS errors,
       COALESCE(ROUND(AVG(usage.latency_ms)), 0) AS average_latency_ms
     FROM ai_usage_events usage
-    WHERE usage.created_at >= ? AND usage.user_id IS NOT NULL
-      AND (? = '' OR usage.user_id = ?)
+    WHERE ${whereSql} AND usage.user_id IS NOT NULL
     GROUP BY usage.user_id
     ORDER BY calls DESC LIMIT 100
-  `).all(since, userFilter, userFilter).map((row) => ({
+  `).all(...whereParams).map((row) => ({
     userId: row.user_id,
     userRef: anonymousUserRef(row.user_id),
     calls: Number(row.calls || 0),
@@ -6064,12 +6103,13 @@ app.get('/api/admin/ai/usage', requireAuth, requireCapability('ai.health.view'),
   const recent = db.prepare(`
     SELECT usage.id, usage.user_id,
       usage.purpose, usage.mode, usage.provider, usage.model, usage.status,
+      usage.route_id,
       usage.input_tokens, usage.output_tokens, usage.reasoning_tokens, usage.total_tokens,
       usage.latency_ms, usage.error_code, usage.fallback_count, usage.fallback_reason, usage.created_at
     FROM ai_usage_events usage
-    WHERE usage.created_at >= ? AND (? = '' OR usage.user_id = ?)
+    WHERE ${whereSql}
     ORDER BY usage.created_at DESC LIMIT 200
-  `).all(since, userFilter, userFilter).map((row) => ({
+  `).all(...whereParams).map((row) => ({
     id: row.id,
     userId: row.user_id || null,
     userRef: row.user_id ? anonymousUserRef(row.user_id) : null,
@@ -6077,6 +6117,7 @@ app.get('/api/admin/ai/usage', requireAuth, requireCapability('ai.health.view'),
     mode: row.mode,
     provider: row.provider,
     model: row.model,
+    route: row.route_id || '',
     status: row.status,
     inputTokens: Number(row.input_tokens || 0),
     outputTokens: Number(row.output_tokens || 0),
@@ -6088,7 +6129,13 @@ app.get('/api/admin/ai/usage', requireAuth, requireCapability('ai.health.view'),
     fallbackReason: row.fallback_reason || '',
     createdAt: row.created_at,
   }));
-  res.json({ days, since, userId: userFilter || null, totals, breakdown, daily, byUser, recent });
+  const options = {
+    providers: db.prepare("SELECT DISTINCT provider FROM ai_usage_events WHERE created_at >= ? AND provider IS NOT NULL AND provider <> '' ORDER BY provider ASC").all(since).map((row) => row.provider),
+    models: db.prepare("SELECT DISTINCT model FROM ai_usage_events WHERE created_at >= ? AND model IS NOT NULL AND model <> '' ORDER BY model ASC").all(since).map((row) => row.model),
+    routes: db.prepare("SELECT DISTINCT route_id FROM ai_usage_events WHERE created_at >= ? AND route_id IS NOT NULL AND route_id <> '' ORDER BY route_id ASC").all(since).map((row) => row.route_id),
+    statuses: ['success', 'error', 'pending', 'timeout'],
+  };
+  res.json({ days: query.days, since, userId: query.userId || null, filters: query, options, totals, breakdown, daily, byUser, recent });
 });
 
 app.get('/api/admin/ai/reactions', requireAuth, requireCapability('ai.health.view'), (req, res) => {
