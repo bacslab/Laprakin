@@ -308,13 +308,13 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
 
 /* Keep separators quiet so copy and controls carry the visual hierarchy. */
 .fg-page {
-  --fg-border: color-mix(in srgb, #e7e0d8 26%, transparent);
-  --fg-border-strong: color-mix(in srgb, #e7e0d8 38%, transparent);
+  --fg-border: color-mix(in srgb, #e7e0d8 16%, transparent);
+  --fg-border-strong: color-mix(in srgb, #e7e0d8 28%, transparent);
   --fg-step-title-size: clamp(20px, 2.4vw, 27px);
   --fg-step-title-line: 1.18;
 }
 .fg-page :is(.fg-video-frame,.fg-section-title>span,.fg-source-workbench,.fg-feature-row article,.fg-faq-list article,.fg-source-grid article,.fg-source-icon,.fg-source-sections,.fg-source-sections li,.fg-step-controls button) { border-color: var(--fg-border); }
-.fg-page .fg-section-title p { margin-top: 22px; text-align: center; }
+.fg-page .fg-section-title p { margin-top: 30px; text-align: center; }
 .fg-page .fg-hero-copy p { text-align: center; margin-inline: auto; max-width: 600px; }
 .fg-page .fg-feature-copy { text-align: left; align-items: flex-start; }
 .fg-page .fg-step-copy h3,

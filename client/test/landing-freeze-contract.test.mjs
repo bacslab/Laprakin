@@ -25,8 +25,8 @@ test('both landing CTAs use the real variable font and matching inherited weight
 
 test('landing feature cards use the restored product images and quiet section lines', () => {
   for (let index = 1; index <= 4; index += 1) assert.match(landingView, new RegExp(`/landing/fitur/Fitur ${index}\\.png`));
-  assert.match(landingBase, /--fg-border: color-mix\(in srgb, #e7e0d8 26%, transparent\)/);
-  assert.match(landingBase, /\.fg-page \.fg-section-title p \{ margin-top: 22px; text-align: center; \}/);
+  assert.match(landingBase, /--fg-border: color-mix\(in srgb, #e7e0d8 16%, transparent\)/);
+  assert.match(landingBase, /\.fg-page \.fg-section-title p \{ margin-top: 30px; text-align: center; \}/);
   assert.match(landingBase, /\.fg-feature-media img/);
 });
 
@@ -34,7 +34,7 @@ test('landing hero copy and feature cards keep the requested alignment and rhyth
   assert.match(landingBase, /\.fg-page \.fg-hero-copy p\s*\{[^}]*text-align:\s*center;[^}]*margin-inline:\s*auto;/);
   assert.match(landingBase, /\.fg-page \.fg-feature-copy\s*\{[^}]*text-align:\s*left;/);
   assert.match(landingBase, /\.fg-page \.fg-feature-copy h3\s*\{[^}]*font-size:\s*var\(--fg-step-title-size/);
-  assert.match(landingBase, /--fg-border:\s*color-mix\(in srgb, #e7e0d8 26%, transparent\)/);
+  assert.match(landingBase, /--fg-border:\s*color-mix\(in srgb, #e7e0d8 16%, transparent\)/);
 });
 
 test('landing follows the resolved dark, light, or system theme', () => {
