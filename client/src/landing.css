@@ -325,7 +325,7 @@ html:has(.fg-page),body:has(.fg-page),#root:has(.fg-page){overflow-x:clip;backgr
 
 @media(max-width:700px){
   .fg-feature-row article{grid-template-rows:auto auto}
-  .fg-feature-copy{min-height:0;padding:22px 28px 26px}
+  .fg-feature-copy{min-height:0;padding:30px 28px 30px}
 }
 
 /* The dark reference remains the default, while the landing surface follows

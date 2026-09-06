@@ -1962,7 +1962,7 @@ body[data-laprakin-theme="dark"] .google-button { background:#2a2a28; color:#f2e
   gap:5px;
   border:1px solid var(--workspace-line);
   border-radius:8px;
-  padding:0 8px;
+  padding:0 11px;
   background:var(--workspace-card);
   color:var(--workspace-text);
   font-size:.61rem;
