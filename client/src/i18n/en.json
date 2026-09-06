@@ -800,6 +800,13 @@
       "copyMessageNotice": "Your message was copied.",
       "copyMessageFailed": "Your message could not be copied.",
       "version": "Version {{current}}/{{total}}",
+      "versionHistory": "View version history",
+      "currentVersion": "Current version",
+      "versionOf": "Version {{current}} of {{total}}",
+      "previousVersion": "Previous version",
+      "nextVersion": "Next version",
+      "closeVersionPicker": "Close version picker",
+      "returnCurrentVersion": "Return to current version",
       "editInput": "Edit message content",
       "cancelEdit": "Cancel changes",
       "saveEdit": "Save and regenerate"

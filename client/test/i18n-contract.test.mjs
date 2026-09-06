@@ -128,8 +128,9 @@ test('workspace tutorial and composer consume keyed locale copy', () => {
   assert.match(tutorialSource, /workspace\.tutorial\.steps\.0\.title/);
   assert.match(composerSource, /workspace\.composer\.placeholders\.centered/);
   assert.match(composerSource, /workspace\.aiMode\.thinking\.description/);
-  assert.match(composerSource, /workspace\.composer\.hintEnter/);
-  assert.match(composerSource, /workspace\.composer\.hintShortcut/);
+  assert.match(composerSource, /workspace\.composer\.disclaimer/);
+  assert.doesNotMatch(composerSource, /workspace\.composer\.hintEnter/);
+  assert.doesNotMatch(composerSource, /workspace\.composer\.hintShortcut/);
   assert.match(composerSource, /localizeAiDataClasses/);
   assert.doesNotMatch(tutorialSource, /Ceritakan tugasmu|Tutup tutorial|Mulai chat/);
   assert.doesNotMatch(composerSource, /Tulis tugasmu, tempel link|Deteksi otomatis|Tambahkan bahan/);

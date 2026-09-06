@@ -23,7 +23,7 @@ const [adminWorkspace, aiWorkspace, routes, providers, providerDetail, models, r
 
 const adminAi = await import('../src/lib/admin-ai.js').catch(() => ({}));
 
-test('admin AI routes resolve stable deep links without mounting the legacy workspace', () => {
+test('admin AI routes resolve stable deep links inside the legacy workspace shell', () => {
   assert.equal(typeof adminAi.resolveAdminAiRoute, 'function');
   assert.deepEqual(adminAi.resolveAdminAiRoute('/admin/ai/providers'), { module: 'providers', providerId: '' });
   assert.deepEqual(adminAi.resolveAdminAiRoute('/admin/ai/providers/nararouter'), { module: 'provider', providerId: 'nararouter' });
@@ -31,15 +31,17 @@ test('admin AI routes resolve stable deep links without mounting the legacy work
   assert.deepEqual(adminAi.resolveAdminAiRoute('/admin/ai/routing'), { module: 'routing', providerId: '' });
   assert.deepEqual(adminAi.resolveAdminAiRoute('/admin/ai/health'), { module: 'health', providerId: '' });
   assert.deepEqual(adminAi.resolveAdminAiRoute('/admin/ai/changes'), { module: 'changes', providerId: '' });
-  assert.match(adminWorkspace, /pathname\.startsWith\('\/admin\/ai'/);
-  assert.match(adminWorkspace, /AdminAiWorkspace/);
+  assert.doesNotMatch(adminWorkspace, /pathname\.startsWith\('\/admin\/ai'/);
+  assert.doesNotMatch(adminWorkspace, /AdminAiWorkspace/);
   assert.match(adminWorkspace, /LegacyWorkspace/);
+  assert.match(legacy, /AdminAiWorkspace embedded/);
 });
 
-test('AI modules are split at the route boundary and own independent resource states', () => {
+test('AI modules load statically so production deep links cannot lose a chunk', () => {
   for (const file of ['ProvidersModule', 'ProviderDetailModule', 'ModelsModule', 'RoutingModule', 'HealthModule', 'ChangesModule']) {
-    assert.match(routes, new RegExp(`loadPage\\(\\(\\) => import\\('\\.\\/${file}'\\)\\)`));
+    assert.match(routes, new RegExp(`import ${file} from '\\./${file}'`));
   }
+  assert.doesNotMatch(routes, /loadPage\(|import\(/);
   assert.match(shared, /export function useAdminResource/);
   assert.match(shared, /lastUpdated/);
   assert.match(shared, /retry/);

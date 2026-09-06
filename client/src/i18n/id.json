@@ -800,6 +800,13 @@
       "copyMessageNotice": "Pesanmu disalin.",
       "copyMessageFailed": "Pesanmu belum dapat disalin.",
       "version": "Versi {{current}}/{{total}}",
+      "versionHistory": "Lihat riwayat versi",
+      "currentVersion": "Versi saat ini",
+      "versionOf": "Versi {{current}} dari {{total}}",
+      "previousVersion": "Versi sebelumnya",
+      "nextVersion": "Versi berikutnya",
+      "closeVersionPicker": "Tutup pemilih versi",
+      "returnCurrentVersion": "Kembali ke versi saat ini",
       "editInput": "Ubah isi pesan",
       "cancelEdit": "Batalkan perubahan",
       "saveEdit": "Simpan dan buat ulang"

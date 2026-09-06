@@ -20,13 +20,14 @@ test('active Admin route exposes local loading, failure, freshness, and retry st
   assert.match(shared, /onClick=\{resource\.reload\}/);
 });
 
-test('every legacy Admin section resolves through a lazy route boundary', () => {
+test('every legacy Admin section resolves through a static route boundary', () => {
   assert.match(source, /<AdminLegacyRoutes/);
   assert.doesNotMatch(source, /tab === 'overview'/);
-  assert.match(routes, /lazy\(\(\) => import\('\.\/legacy\/OverviewRoute'\)\)/);
-  assert.match(routes, /lazy\(\(\) => import\('\.\/legacy\/CmsRoute'\)\)/);
+  assert.match(routes, /import OverviewRoute from '\.\/legacy\/OverviewRoute'/);
+  assert.match(routes, /import CmsRoute from '\.\/legacy\/CmsRoute'/);
   assert.match(routes, /class AdminLegacyRouteErrorBoundary/);
   for (const key of ['overview', 'credits', 'pricing', 'alerts', 'integrations', 'updates', 'broadcasts', 'feedback', 'users', 'appeals', 'risk', 'cms', 'audit', 'retention']) {
-    assert.match(routes, new RegExp(`\\b${key}:`), `Missing lazy route: ${key}`);
+    assert.match(routes, new RegExp(`\\b${key}:`), `Missing static route: ${key}`);
   }
+  assert.doesNotMatch(routes, /lazy\(|import\(/);
 });

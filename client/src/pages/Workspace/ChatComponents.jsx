@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Check, CheckCircle2, CodeXml, Copy, FileText, LoaderCircle, Pencil, RefreshCw, Share2, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, CodeXml, Copy, FileText, History, LoaderCircle, Pencil, RefreshCw, Share2, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { useI18n } from '../../i18n/context';
 import { useApp } from '../../state/ui-context';
@@ -102,7 +102,7 @@ export function InlineUserMessageEditor({ message, onSubmit, onCancel, busy = fa
   </form>;
 }
 
-export function UserMessageActions({ message, onEdit, busy = false }) {
+export function UserMessageActions({ message, onEdit, onOpenVersionPicker, busy = false }) {
   const { t, language } = useI18n();
   const { setNotice } = useApp();
   const [copied, setCopied] = useState(false);
@@ -126,12 +126,50 @@ export function UserMessageActions({ message, onEdit, busy = false }) {
   };
   const timestamp = new Date(message.created_at || message.createdAt || Date.now()).toLocaleTimeString(language === 'en' ? 'en-US' : 'id-ID', { hour: '2-digit', minute: '2-digit' });
   return <footer className="message-actions message-actions-user" aria-label={t('workspace.messageActions.userLabel')}>
+    {message.revisionInfo && onOpenVersionPicker && <button type="button" onClick={() => onOpenVersionPicker(message)} disabled={busy} aria-label={t('workspace.messageActions.versionHistory')} title={t('workspace.messageActions.versionHistory')}><History size={14} /></button>}
     <button type="button" onClick={copy} disabled={busy} aria-label={t('workspace.messageActions.copyMessage')} title={t('workspace.messageActions.copyMessage')}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
     <button type="button" onClick={share} disabled={busy} aria-label={t('workspace.messageActions.shareMessage')} title={t('workspace.messageActions.shareMessage')}><Share2 size={14} /></button>
     <button type="button" onClick={() => onEdit?.(message)} disabled={busy} aria-label={t('workspace.messageActions.edit')} title={t('workspace.messageActions.edit')}><Pencil size={14} /></button>
-    {message.revisionInfo && <span className="message-version-badge" aria-label={t('workspace.messageActions.version', message.revisionInfo)}>{t('workspace.messageActions.version', message.revisionInfo)}</span>}
     <time dateTime={message.created_at || message.createdAt}>{timestamp}</time>
   </footer>;
+}
+
+export function VersionPickerModal({ group, onClose }) {
+  const { t, language } = useI18n();
+  const [selectedIndex, setSelectedIndex] = useState(group?.currentIndex || 0);
+  useEffect(() => {
+    setSelectedIndex(group?.currentIndex || 0);
+  }, [group?.currentIndex, group?.total]);
+  useEffect(() => {
+    if (!group) return undefined;
+    const onKeyDown = (event) => { if (event.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [group, onClose]);
+  if (!group?.versions?.length) return null;
+  const selected = group.versions[selectedIndex] || group.versions[group.currentIndex] || group.versions[0];
+  const isCurrent = selectedIndex === group.currentIndex;
+  const formatTime = (value) => new Date(value || Date.now()).toLocaleTimeString(language === 'en' ? 'en-US' : 'id-ID', { hour: '2-digit', minute: '2-digit' });
+  return <div className="version-picker-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
+    <section className="version-picker" role="dialog" aria-modal="true" aria-labelledby="version-picker-title">
+      <header className="version-picker-head">
+        <div className="version-picker-nav">
+          <button type="button" onClick={() => setSelectedIndex((value) => Math.max(0, value - 1))} disabled={selectedIndex === 0} aria-label={t('workspace.messageActions.previousVersion')}><ArrowLeft size={16} /></button>
+          <span id="version-picker-title">{isCurrent ? t('workspace.messageActions.currentVersion') : t('workspace.messageActions.versionOf', { current: selectedIndex + 1, total: group.total })}</span>
+          <button type="button" onClick={() => setSelectedIndex((value) => Math.min(group.total - 1, value + 1))} disabled={selectedIndex === group.total - 1} aria-label={t('workspace.messageActions.nextVersion')}><ArrowRight size={16} /></button>
+        </div>
+        <button type="button" className="version-picker-close" onClick={onClose} aria-label={t('workspace.messageActions.closeVersionPicker')}><X size={17} /></button>
+      </header>
+      <div className="version-picker-body">
+        <article className="version-picker-message user"><MessageContent content={selected.user.content} /><time>{formatTime(selected.user.created_at || selected.user.createdAt)}</time></article>
+        {selected.assistant && <article className="version-picker-message assistant"><MessageContent content={selected.assistant.content} /><time>{formatTime(selected.assistant.created_at || selected.assistant.createdAt)}</time></article>}
+      </div>
+      <footer className="version-picker-foot">
+        <span>{t('workspace.messageActions.versionOf', { current: selectedIndex + 1, total: group.total })}</span>
+        <button type="button" className="version-picker-return" onClick={onClose}>{isCurrent ? t('workspace.messageActions.closeVersionPicker') : t('workspace.messageActions.returnCurrentVersion')}</button>
+      </footer>
+    </section>
+  </div>;
 }
 
 export function ChatBriefPanel({ config, updateConfig, workflow, busy, onSubmit }) {

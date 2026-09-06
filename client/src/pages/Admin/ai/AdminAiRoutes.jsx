@@ -1,15 +1,12 @@
-import { Suspense } from 'react';
 import { Navigate, useLocation } from '../../../router';
-import { loadPage } from '../../../lib/load-page';
 import { resolveAdminAiRoute } from '../../../lib/admin-ai';
 import { useAdminAiCopy } from './shared';
-
-const ProvidersModule = loadPage(() => import('./ProvidersModule'));
-const ProviderDetailModule = loadPage(() => import('./ProviderDetailModule'));
-const ModelsModule = loadPage(() => import('./ModelsModule'));
-const RoutingModule = loadPage(() => import('./RoutingModule'));
-const HealthModule = loadPage(() => import('./HealthModule'));
-const ChangesModule = loadPage(() => import('./ChangesModule'));
+import ProvidersModule from './ProvidersModule';
+import ProviderDetailModule from './ProviderDetailModule';
+import ModelsModule from './ModelsModule';
+import RoutingModule from './RoutingModule';
+import HealthModule from './HealthModule';
+import ChangesModule from './ChangesModule';
 
 export default function AdminAiRoutes() {
   const t = useAdminAiCopy();
@@ -22,5 +19,5 @@ export default function AdminAiRoutes() {
         : route.module === 'health' ? <HealthModule />
           : route.module === 'changes' ? <ChangesModule preview canary activate rollback emergencyDisable />
             : <ProvidersModule />;
-  return <Suspense fallback={<div className="admin-ai-resource-state" role="status">{t('common.loadingModule')}</div>}><div className="admin-ai-page">{module}</div></Suspense>;
+  return <div className="admin-ai-page">{module}</div>;
 }

@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { ArrowLeft, Globe2, UploadCloud } from 'lucide-react';
-import { collapseMessageRevisions, getRegenerationTarget } from '../../lib/chat-message-actions';
+import { collapseMessageRevisions, getMessageRevisionGroup, getRegenerationTarget } from '../../lib/chat-message-actions';
 import { userGreetingName } from '../../lib/user';
 import { useI18n } from '../../i18n/context';
 import { SourceBar } from './AttachmentComponents';
 import AttachmentPreviewModal from './AttachmentPreview';
 import Composer from './Composer';
 import { ThinkingRail, WorkPlanRail, WorkflowPanel } from './WorkspaceWorkflow';
-import { AssistantMessageActions, ChatBriefPanel, DocumentCard, DocumentQuiz, InlineContext, InlineUserMessageEditor, MessageContent, UserMessageActions } from './ChatComponents';
+import { AssistantMessageActions, ChatBriefPanel, DocumentCard, DocumentQuiz, InlineContext, InlineUserMessageEditor, MessageContent, UserMessageActions, VersionPickerModal } from './ChatComponents';
 
 export default function ChatSurface({ active, messages, attachments, documentState, workflow, activeJob, user, input, setInput, busy, attachmentKind, setAttachmentKind, uploadRef, send, upload, createDocument, onWorkflowAction, contextOpen, setContextOpen, config, updateConfig, pendingFiles, onPasteImages, onAddPendingFiles, onRemovePending, aiMode, setAiMode, aiModeAccess, aiConsentData, onEnableExternalAi, onUpgrade, enterToSend = true, onOpenDocument, quizMode = false, onCloseQuiz, onStartQuiz, onSubmitQuiz, editingMessage, onEditMessage, onEditSubmit, onCancelEdit, onRevise, onMessageReaction }) {
   const { t } = useI18n();
   const blankChat = !active || (!messages.length && !attachments.length && !active.document_id);
   const [previewFile, setPreviewFile] = useState(null);
+  const [revisionGroup, setRevisionGroup] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const greetingName = userGreetingName(user);
   const greetingClass = greetingName.length > 17 ? 'greeting-name-very-long' : greetingName.length > 12 ? 'greeting-name-long' : '';
@@ -80,7 +81,7 @@ export default function ChatSurface({ active, messages, attachments, documentSta
             ? <InlineUserMessageEditor message={message} busy={busy} onCancel={onCancelEdit} onSubmit={onEditSubmit} />
             : <div><MessageContent content={message.content}/>{message.meta?.links?.length ? <div className="link-row">{message.meta.links.map((link) => <a key={link} href={link} target="_blank" rel="noreferrer"><Globe2 size={12} />{new URL(link).hostname}</a>)}</div> : null}</div>}
         </article>
-        {message.role === 'user' && <UserMessageActions message={message} onEdit={onEditMessage} busy={busy} />}
+        {message.role === 'user' && <UserMessageActions message={message} onEdit={onEditMessage} onOpenVersionPicker={(target) => setRevisionGroup(getMessageRevisionGroup(messages, target.id))} busy={busy} />}
         {message.role === 'assistant' && <AssistantMessageActions
           message={message}
           busy={busy}
@@ -101,6 +102,7 @@ export default function ChatSurface({ active, messages, attachments, documentSta
       {busy && !active?.document_id && !['queued', 'running', 'retry_queued'].includes(activeJob?.status) && <ThinkingRail />}
     </div>}</div>
     {!quizMode && <Composer input={input} setInput={setInput} busy={busy} attachmentKind={attachmentKind} setAttachmentKind={setAttachmentKind} uploadRef={uploadRef} send={send} upload={upload} centered={blankChat} pendingFiles={pendingFiles} onPasteImages={onPasteImages} onRemovePending={onRemovePending} aiMode={aiMode} setAiMode={setAiMode} aiModeAccess={aiModeAccess} aiConsentData={aiConsentData} onEnableExternalAi={onEnableExternalAi} onUpgrade={onUpgrade} enterToSend={enterToSend} />}
+    {revisionGroup && <VersionPickerModal group={revisionGroup} onClose={() => setRevisionGroup(null)} />}
     {previewFile && <AttachmentPreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />}
   </div>;
 }

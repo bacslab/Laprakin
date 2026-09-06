@@ -89,23 +89,10 @@ function compareRevisionVersions(left, right) {
   return 0;
 }
 
-/**
- * Return only the active branch of a conversation.
- *
- * The API intentionally keeps each edited user message as a lightweight
- * version record while removing the old answer branch. The view should not
- * render that source record as a second bubble, otherwise an edit looks like
- * a duplicate message. This helper collapses each linear revision chain to
- * its newest user message and the answer immediately following it.
- */
-export function collapseMessageRevisions(messages) {
-  if (!Array.isArray(messages)) return [];
-
+function buildRevisionGroups(messages) {
   const items = messages.filter(Boolean);
   const users = items.filter((message) => message.role === 'user' && message.id);
   const userById = new Map(users.map((message) => [message.id, message]));
-  const groups = new Map();
-
   const rootFor = (message) => {
     let current = message;
     const seen = new Set([message.id]);
@@ -117,13 +104,29 @@ export function collapseMessageRevisions(messages) {
       current = parent;
     }
   };
-
+  const groups = new Map();
   users.forEach((message, index) => {
     const rootId = rootFor(message);
     const versions = groups.get(rootId) || [];
-    versions.push({ message, index });
+    versions.push({ message, index: items.indexOf(message) });
     groups.set(rootId, versions);
   });
+  groups.forEach((versions) => versions.sort(compareRevisionVersions));
+  return { items, groups };
+}
+
+/**
+ * Return only the active branch of a conversation.
+ *
+ * The API intentionally keeps each edited user message as a lightweight
+ * version record while removing the old answer branch. The view should not
+ * render that source record as a second bubble, otherwise an edit looks like
+ * a duplicate message. This helper collapses each linear revision chain to
+ * its newest user message and the answer immediately following it.
+ */
+export function collapseMessageRevisions(messages) {
+  if (!Array.isArray(messages)) return [];
+  const { items, groups } = buildRevisionGroups(messages);
 
   const activeUserIds = new Set();
   const versionInfoById = new Map();
@@ -153,4 +156,36 @@ export function collapseMessageRevisions(messages) {
     visible.push(message);
   });
   return visible;
+}
+
+/**
+ * Return every version in the chain for the version picker, pairing each
+ * user prompt with the assistant answer that followed it in the transcript.
+ */
+export function getMessageRevisionGroup(messages, messageId) {
+  if (!Array.isArray(messages)) return null;
+  const id = String(messageId || '').trim();
+  if (!id) return null;
+  const { items, groups } = buildRevisionGroups(messages);
+  let selected = null;
+  let selectedGroup = null;
+  groups.forEach((versions) => {
+    const match = versions.find(({ message }) => message.id === id);
+    if (match) { selected = match; selectedGroup = versions; }
+  });
+  if (!selected || !selectedGroup || selectedGroup.length < 2) return null;
+  const versions = selectedGroup.map(({ message }) => {
+    const index = items.findIndex((item) => item?.id === message.id);
+    let assistant = null;
+    for (let cursor = index + 1; cursor < items.length; cursor += 1) {
+      if (items[cursor]?.role === 'user') break;
+      if (items[cursor]?.role === 'assistant') { assistant = items[cursor]; break; }
+    }
+    return { user: message, assistant };
+  });
+  return {
+    currentIndex: versions.findIndex(({ user }) => user.id === id),
+    total: versions.length,
+    versions,
+  };
 }

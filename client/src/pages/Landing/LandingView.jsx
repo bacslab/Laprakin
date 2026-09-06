@@ -36,6 +36,12 @@ const FEATURES = [
   ['landing.features.personalize.title', 'landing.features.personalize.description'],
 ];
 const FEATURE_ROWS = Array.from({ length: Math.ceil(FEATURES.length / 2) }, (_, index) => FEATURES.slice(index * 2, index * 2 + 2));
+const FEATURE_IMAGES = [
+  '/landing/fitur/Fitur 1.png',
+  '/landing/fitur/Fitur 2.png',
+  '/landing/fitur/Fitur 3.png',
+  '/landing/fitur/Fitur 4.png',
+];
 
 const FAQS = [
   ['landing.faq.what.question', 'landing.faq.what.answer'],
@@ -201,12 +207,12 @@ export default function LandingView({
           <p>{t('landing.featuresDescription')}</p>
         </SectionTitle>
         <div className="fg-features-stack">
-          {FEATURE_ROWS.map((row) => <div className="fg-feature-row" key={row[0][0]}>
-            {row.map(([titleKey, textKey]) => {
+          {FEATURE_ROWS.map((row, rowIndex) => <div className="fg-feature-row" key={row[0][0]}>
+            {row.map(([titleKey, textKey], columnIndex) => {
               const title = t(titleKey);
               return <article key={titleKey}>
               <div className="fg-feature-copy"><h3>{title}</h3><p>{t(textKey)}</p></div>
-              <MediaPlaceholder label={t('landing.featurePlaceholder')} unavailable={t('landing.mediaUnavailable')} />
+              <div className="fg-feature-media"><img src={FEATURE_IMAGES[rowIndex * 2 + columnIndex]} alt={title} /></div>
               </article>;
             })}
           </div>)}

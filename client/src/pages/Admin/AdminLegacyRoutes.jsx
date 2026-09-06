@@ -1,23 +1,38 @@
-import { Component, lazy, Suspense } from 'react';
-import { AlertTriangle, LoaderCircle } from 'lucide-react';
+import { Component } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { useI18n } from '../../i18n/context';
 
+import OverviewRoute from './legacy/OverviewRoute';
+import CreditsRoute from './legacy/CreditsRoute';
+import PricingRoute from './legacy/PricingRoute';
+import AlertsRoute from './legacy/AlertsRoute';
+import IntegrationsRoute from './legacy/IntegrationsRoute';
+import UpdatesRoute from './legacy/UpdatesRoute';
+import BroadcastsRoute from './legacy/BroadcastsRoute';
+import FeedbackRoute from './legacy/FeedbackRoute';
+import UsersRoute from './legacy/UsersRoute';
+import AppealsRoute from './legacy/AppealsRoute';
+import RiskRoute from './legacy/RiskRoute';
+import CmsRoute from './legacy/CmsRoute';
+import AuditRoute from './legacy/AuditRoute';
+import RetentionRoute from './legacy/RetentionRoute';
+
 const LEGACY_ROUTES = Object.freeze({
-  overview: lazy(() => import('./legacy/OverviewRoute')),
-  credits: lazy(() => import('./legacy/CreditsRoute')),
-  pricing: lazy(() => import('./legacy/PricingRoute')),
-  alerts: lazy(() => import('./legacy/AlertsRoute')),
-  integrations: lazy(() => import('./legacy/IntegrationsRoute')),
-  updates: lazy(() => import('./legacy/UpdatesRoute')),
-  broadcasts: lazy(() => import('./legacy/BroadcastsRoute')),
-  feedback: lazy(() => import('./legacy/FeedbackRoute')),
-  users: lazy(() => import('./legacy/UsersRoute')),
-  appeals: lazy(() => import('./legacy/AppealsRoute')),
-  risk: lazy(() => import('./legacy/RiskRoute')),
-  cms: lazy(() => import('./legacy/CmsRoute')),
-  audit: lazy(() => import('./legacy/AuditRoute')),
-  retention: lazy(() => import('./legacy/RetentionRoute')),
+  overview: OverviewRoute,
+  credits: CreditsRoute,
+  pricing: PricingRoute,
+  alerts: AlertsRoute,
+  integrations: IntegrationsRoute,
+  updates: UpdatesRoute,
+  broadcasts: BroadcastsRoute,
+  feedback: FeedbackRoute,
+  users: UsersRoute,
+  appeals: AppealsRoute,
+  risk: RiskRoute,
+  cms: CmsRoute,
+  audit: AuditRoute,
+  retention: RetentionRoute,
 });
 
 export class AdminLegacyRouteErrorBoundary extends Component {
@@ -43,14 +58,9 @@ function RouteRenderError({ error, retry }) {
   return <div className="admin-loading-state" role="alert"><AlertTriangle size={20}/><b>{t('admin.console.renderFailed')}</b><span>{error.message || String(error)}</span><Button variant="secondary" onClick={retry}>{t('admin.console.retry')}</Button></div>;
 }
 
-function RouteFallback() {
-  const { t } = useI18n();
-  return <div className="admin-loading-state" role="status" aria-live="polite"><LoaderCircle className="spin" size={20}/><b>{t('admin.console.loadingTitle')}</b></div>;
-}
-
 export default function AdminLegacyRoutes({ tab, setNotice }) {
   const Route = LEGACY_ROUTES[tab] || LEGACY_ROUTES.overview;
   return <AdminLegacyRouteErrorBoundary routeKey={tab} renderError={(error, retry) => <RouteRenderError error={error} retry={retry}/> }>
-    <Suspense fallback={<RouteFallback/>}><Route setNotice={setNotice}/></Suspense>
+    <Route setNotice={setNotice}/>
   </AdminLegacyRouteErrorBoundary>;
 }

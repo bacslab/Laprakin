@@ -35,12 +35,13 @@ import { createTranslator } from './i18n';
 import { AppDialog } from './components/Dialog';
 import BillingPage from './pages/Billing/BillingPage';
 import { workspaceAccents } from './data/workspace';
+import NotFoundPage from './components/NotFoundPage';
+import AdminWorkspace from './pages/Admin/AdminWorkspace';
+import AdminMfaGate from './pages/Admin/AdminMfaGate';
+import LegacyAdminWorkspace from './pages/Admin/LegacyAdminWorkspace';
 
 const LandingRoutePage = loadPage(() => import('./pages/Landing/LandingPage'));
 const AuthPageModule = loadPage(() => import('./pages/Auth/AuthPage'));
-const AdminWorkspaceBoundary = loadPage(() => import('./pages/Admin/AdminWorkspace'));
-const AdminMfaGate = loadPage(() => import('./pages/Admin/AdminMfaGate'));
-const LegacyAdminWorkspace = loadPage(() => import('./pages/Admin/LegacyAdminWorkspace'));
 const LegacyWorkspace = loadPage(() => import('./pages/Workspace/LegacyWorkspace'));
 const WorkspaceBoundary = loadPage(() => import('./pages/Workspace/Workspace'));
 const StatusPage = loadPage(() => import('./pages/Status/StatusPage'));
@@ -157,7 +158,7 @@ function AppProvider({ children }) {
 
 function App() {
   const location = useLocation();
-  return <AppErrorBoundary resetKey={location.pathname}><AppProvider><I18nRuntime><Suspense fallback={<LoadingScreen />}><div className="route-transition"><Routes><Route path="/" element={<LandingRoutePage />} /><Route path="/status" element={<StatusPage />} /><Route path="/auth" element={<AuthPageModule />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/pricing" element={<PricingPage />} /><Route path="/checkout" element={<PricingPage />} /><Route path="/billing" element={<PricingRedirect />} /><Route path="/app/billing" element={<PricingRedirect />} /><Route path="/admin/*" element={<ProtectedAdmin />} /><Route path="/app/*" element={<ProtectedApp />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></div></Suspense></I18nRuntime></AppProvider></AppErrorBoundary>;
+  return <AppErrorBoundary resetKey={location.pathname}><AppProvider><I18nRuntime><Suspense fallback={<LoadingScreen />}><div className="route-transition"><Routes><Route path="/" element={<LandingRoutePage />} /><Route path="/status" element={<StatusPage />} /><Route path="/auth" element={<AuthPageModule />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/pricing" element={<PricingPage />} /><Route path="/checkout" element={<PricingPage />} /><Route path="/billing" element={<PricingRedirect />} /><Route path="/app/billing" element={<PricingRedirect />} /><Route path="/admin/*" element={<ProtectedAdmin />} /><Route path="/app/*" element={<ProtectedApp />} /><Route path="*" element={<NotFoundPage />} /></Routes></div></Suspense></I18nRuntime></AppProvider></AppErrorBoundary>;
 }
 
 const legalContent = {
@@ -223,7 +224,7 @@ function LegalPage({ type }) {
   </div>;
 }
 
-function ProtectedApp() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role === 'admin') return <Navigate to="/admin" replace />; return <WorkspaceBoundary><LegacyWorkspace /></WorkspaceBoundary>; }
+function ProtectedApp() { const { loading, user } = useApp(); const location = useLocation(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (user.role === 'admin') return <Navigate to="/admin" replace />; const path = location.pathname.replace(/\/+$/, '') || '/app'; if (!['/app', '/app/projects', '/app/documents'].includes(path)) return <NotFoundPage />; return <WorkspaceBoundary><LegacyWorkspace /></WorkspaceBoundary>; }
 
 function ProtectedBilling() {
   const { loading, user } = useApp();
@@ -236,7 +237,7 @@ function ProtectedBilling() {
 function PricingRedirect() { const location = useLocation(); return <Navigate to={`/pricing${location.search || ''}`} replace />; }
 
 const PRIVILEGED_ADMIN_ROLES = new Set(['owner', 'admin', 'ai_admin', 'support_admin', 'billing_admin', 'content_admin', 'content_forensics_admin', 'privacy_admin', 'security_admin', 'auditor']);
-function ProtectedAdmin() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (!PRIVILEGED_ADMIN_ROLES.has(user.role)) return <Navigate to="/app" replace />; return <AdminWorkspaceBoundary AdminMfaGate={AdminMfaGate} LegacyWorkspace={LegacyAdminWorkspace} />; }
+function ProtectedAdmin() { const { loading, user } = useApp(); if (loading) return <LoadingScreen />; if (!user) return <Navigate to="/auth" replace />; if (!PRIVILEGED_ADMIN_ROLES.has(user.role)) return <Navigate to="/app" replace />; return <AdminWorkspace AdminMfaGate={AdminMfaGate} LegacyWorkspace={LegacyAdminWorkspace} />; }
 
 
 createRoot(document.getElementById('root')).render(<BrowserRouter><App /></BrowserRouter>);

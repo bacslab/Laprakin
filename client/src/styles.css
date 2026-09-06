@@ -5987,6 +5987,17 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
 .app-dialog:not(.is-danger) .app-dialog-confirm { border-color:var(--app-accent,#c2ff33); background:var(--app-accent,#c2ff33); }
 .identity-intake-follow-up { margin-top:5px!important; }
 
+.not-found-page { min-height:100dvh; display:grid; place-items:center; padding:28px; background:var(--workspace-bg,#f5f5f2); color:var(--workspace-text,#20201e); }
+.not-found-page.theme-dark { --workspace-bg:#171716; --workspace-panel:#222220; --workspace-card:#292927; --workspace-line:#41413d; --workspace-text:#f1f1ec; --workspace-muted:#aaa9a0; }
+.not-found-card { width:min(520px,100%); display:grid; justify-items:center; gap:12px; padding:42px 30px; border:1px solid var(--workspace-line,#d8d8d2); border-radius:22px; background:var(--workspace-panel,#fff); box-shadow:0 20px 60px rgba(31,31,30,.1); text-align:center; }
+.not-found-mark { width:38px; height:38px; margin-bottom:4px; }
+.not-found-eyebrow { color:var(--workspace-muted,#777); font:700 .58rem/1.2 'DM Mono',monospace; letter-spacing:.12em; }
+.not-found-card h1 { max-width:420px; margin:0; font-size:clamp(1.45rem,4vw,2.05rem); letter-spacing:-.04em; }
+.not-found-card p { max-width:390px; margin:0; color:var(--workspace-muted,#777); font-size:.78rem; line-height:1.6; }
+.not-found-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:10px; }
+.not-found-actions button,.not-found-actions a { min-height:34px; display:inline-flex; align-items:center; gap:7px; border:1px solid var(--workspace-line,#d8d8d2); border-radius:9px; padding:0 12px; background:var(--workspace-card,#fff); color:var(--workspace-text,#20201e); font:700 .66rem/1 inherit; text-decoration:none; }
+.not-found-actions button:hover,.not-found-actions a:hover { background:var(--workspace-hover,#efefea); }
+
 /* Natural document actions: lime is reserved for primary status, not navigation. */
 .workspace .library-list article>button,
 .workspace .library-list article>button svg { color:var(--workspace-text)!important; }
@@ -7247,18 +7258,49 @@ Ditaruh di akhir berkas agar menang atas 59 aturan .quiz- sebelumnya. */
   padding:0;
 }
 .workspace .message-version-badge {
-  display:inline-flex;
-  align-items:center;
-  min-height:25px;
-  margin-left:2px;
-  border:1px solid var(--workspace-line);
-  border-radius:999px;
-  padding:0 8px;
-  color:var(--workspace-muted);
-  font-size:.54rem;
-  font-weight:800;
-  white-space:nowrap;
+  display:none;
 }
+
+.version-picker-backdrop {
+  position:fixed;
+  inset:0;
+  z-index:80;
+  display:grid;
+  place-items:center;
+  padding:24px;
+  background:rgba(0,0,0,.68);
+  backdrop-filter:blur(8px);
+}
+.version-picker {
+  width:min(760px,100%);
+  max-height:min(820px,calc(100dvh - 48px));
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  overflow:hidden;
+  border:1px solid color-mix(in srgb,var(--workspace-line) 80%,transparent);
+  border-radius:18px;
+  background:var(--workspace-panel);
+  color:var(--workspace-text);
+  box-shadow:0 28px 90px rgba(0,0,0,.4);
+}
+.version-picker-head,
+.version-picker-foot { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 18px; border-color:var(--workspace-line); }
+.version-picker-head { border-bottom:1px solid var(--workspace-line); }
+.version-picker-foot { border-top:1px solid var(--workspace-line); color:var(--workspace-muted); font-size:.62rem; }
+.version-picker-nav { display:flex; align-items:center; justify-content:center; gap:12px; flex:1; font-size:.68rem; font-weight:800; }
+.version-picker-nav button,
+.version-picker-close { width:30px; height:30px; display:grid; place-items:center; border:1px solid var(--workspace-line); border-radius:8px; padding:0; background:transparent; color:var(--workspace-muted); }
+.version-picker-nav button:hover:not(:disabled),
+.version-picker-close:hover { background:var(--workspace-hover); color:var(--workspace-text); }
+.version-picker-nav button:disabled { opacity:.35; cursor:not-allowed; }
+.version-picker-body { overflow:auto; display:grid; gap:14px; padding:22px; background:color-mix(in srgb,var(--workspace-bg) 75%,transparent); }
+.version-picker-message { max-width:88%; display:grid; gap:8px; padding:14px 16px; border:1px solid var(--workspace-line); border-radius:12px; font-size:.72rem; line-height:1.58; }
+.version-picker-message.user { justify-self:end; background:color-mix(in srgb,var(--workspace-accent) 14%,var(--workspace-card)); }
+.version-picker-message.assistant { justify-self:start; background:var(--workspace-card); }
+.version-picker-message .message-content p { margin:0; }
+.version-picker-message time { color:var(--workspace-muted); font-size:.55rem; }
+.version-picker-return { min-height:30px; border:1px solid var(--workspace-line); border-radius:8px; padding:0 11px; background:var(--workspace-card); color:var(--workspace-text); font-size:.62rem; font-weight:800; }
+.version-picker-return:hover { background:var(--workspace-hover); }
 @media (hover:none){
   .workspace .message-turn > .message-actions {
     opacity:1;

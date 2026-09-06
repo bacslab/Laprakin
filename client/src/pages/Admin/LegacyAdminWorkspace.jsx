@@ -5,11 +5,13 @@ import {
 } from 'lucide-react';
 import { api } from '../../api';
 import { BrandMark } from '../../components/BrandMark';
-import { legacyAdminPath, legacyAdminTab } from '../../lib/admin-ai';
+import NotFoundPage from '../../components/NotFoundPage';
+import { ADMIN_AI_PATHS, legacyAdminPath, legacyAdminTab } from '../../lib/admin-ai';
 import { resolveTheme, useResolvedTheme } from '../../lib/theme';
 import { useApp } from '../../state/ui-context';
 import { useI18n } from '../../i18n/context';
 import AdminLegacyRoutes from './AdminLegacyRoutes';
+import AdminAiWorkspace from './ai/AdminAiWorkspace';
 
 export default function LegacyAdminWorkspace() {
   const { user, refreshSession, setNotice, prefs, setPrefs } = useApp();
@@ -36,7 +38,13 @@ export default function LegacyAdminWorkspace() {
     ['retention', t('admin.console.tabs.retention'), FileCog],
   ];
   const requestedTab = legacyAdminTab(location.pathname);
-  const tab = tabs.some(([key]) => key === requestedTab && key !== 'ai') ? requestedTab : 'overview';
+  const normalizedPath = location.pathname.replace(/\/+$/, '') || '/admin';
+  const isAi = normalizedPath === '/admin/ai'
+    || Object.values(ADMIN_AI_PATHS).includes(normalizedPath)
+    || normalizedPath.startsWith(`${ADMIN_AI_PATHS.providers}/`);
+  const isKnownLegacy = normalizedPath === '/admin' || tabs.some(([key]) => key !== 'ai' && legacyAdminPath(key) === normalizedPath);
+  if (!isAi && !isKnownLegacy) return <NotFoundPage title="Halaman admin tidak ditemukan." description="Menu admin ini tidak tersedia atau alamatnya sudah berubah." />;
+  const tab = isAi ? 'ai' : requestedTab;
   const tabGroups = [
     [t('admin.console.groups.operations'), ['overview', 'ai', 'credits', 'pricing', 'alerts', 'integrations']],
     [t('admin.console.groups.content'), ['updates', 'broadcasts', 'feedback', 'cms']],
@@ -55,7 +63,7 @@ export default function LegacyAdminWorkspace() {
     </aside>
     <main className="admin-main">
       <header className="admin-header"><div><p>{t('admin.console.adminConsole')}</p><h1>{tabs.find(([key]) => key === tab)?.[1]}</h1></div><div className="admin-header-actions"><button className="admin-theme-toggle" onClick={() => setAdminTheme((value) => value === 'dark' ? 'light' : 'dark')} title={t('admin.console.adminTheme')} aria-label={t('admin.console.adminTheme')}>{adminTheme === 'dark' ? <Sun size={15}/> : <Moon size={15}/>}</button></div></header>
-      <AdminLegacyRoutes tab={tab} setNotice={setNotice}/>
+      {isAi ? <AdminAiWorkspace embedded /> : <AdminLegacyRoutes tab={tab} setNotice={setNotice}/>}
     </main>
   </div>;
 }

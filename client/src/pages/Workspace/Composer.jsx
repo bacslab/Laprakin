@@ -102,6 +102,6 @@ export default function Composer({ input, setInput, busy, attachmentKind, setAtt
       </div>
     </form>
     {centered ? <div className="composer-shortcuts" aria-label={t('workspace.composer.documentType')}>{shortcutItems.map((item) => { const Icon = item.icon; return <button key={item.key} type="button" className="composer-shortcut" onClick={() => setInput(item.prompt)}><Icon size={14} /><span>{item.label}</span></button>; })}</div> : null}
-    {!centered ? <><small>{t(enterToSend ? 'workspace.composer.hintEnter' : 'workspace.composer.hintShortcut')}</small><small className="composer-disclaimer">{t('workspace.composer.disclaimer')}</small></> : null}
+    {!centered ? <small className="composer-disclaimer">{t('workspace.composer.disclaimer')}</small> : null}
   </div>;
 }

@@ -25,7 +25,9 @@ test('user message editing stays inline and supports copying the sent message', 
 
 test('message actions appear on hover or keyboard focus while attachments stay on their existing path', () => {
   assert.match(surface, /collapseMessageRevisions/);
-  assert.match(components, /message-version-badge/);
+  assert.match(components, /versionHistory/);
+  assert.match(surface, /VersionPickerModal/);
+  assert.doesNotMatch(components, /message-version-badge/);
   assert.match(styles, /message-turn:hover\s*>\s*\.message-actions/);
   assert.match(styles, /message-turn:focus-within\s*>\s*\.message-actions/);
   assert.match(surface, /<SourceBar compact attachments=/);
@@ -34,6 +36,8 @@ test('message actions appear on hover or keyboard focus while attachments stay o
 
 test('main composer exposes the requested non-technical disclaimer', () => {
   assert.match(composer, /workspace\.composer\.disclaimer/);
+  assert.doesNotMatch(composer, /workspace\.composer\.hintEnter/);
+  assert.doesNotMatch(composer, /workspace\.composer\.hintShortcut/);
   assert.match(id, /Laprakin dapat membuat kesalahan, periksa kembali hasil yang dibuat/);
   assert.match(en, /Laprakin can make mistakes, so please review the generated result/);
 });
