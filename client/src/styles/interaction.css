@@ -1,0 +1,36 @@
+/* Interaction policy: product chrome is passive; only live chat copy is selectable. */
+.fg-page,
+.fg-page * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.fg-page img,
+.fg-page video {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+.workspace,
+.workspace * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.workspace .message-content,
+.workspace .message-content * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.workspace .composer textarea,
+.workspace .message-inline-editor textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.workspace img,
+.workspace video {
+  -webkit-user-drag: none;
+  user-drag: none;
+}

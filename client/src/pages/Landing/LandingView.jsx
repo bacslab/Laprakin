@@ -54,7 +54,7 @@ const FAQS = [
 
 function LogoLockup({ footer = false, beta }) {
   return <div className={`fg-logo-lockup ${footer ? 'is-footer' : ''}`}>
-    <img src={footer ? '/landing/footer-logo-mark.svg' : '/landing/logo-mark.png'} alt="" />
+    <img src={footer ? '/landing/footer-logo-mark.svg' : '/landing/logo-mark.png'} alt="" draggable={false} />
     <b>laprakin</b>
     <small>{beta}</small>
   </div>;
@@ -83,7 +83,7 @@ function StepCard({ index, active, t }) {
   const title = t(titleKey);
   return <article className={`fg-step-card ${active ? 'is-active' : ''}`} data-step-card={index} aria-hidden={!active}>
     <div className="fg-step-media">
-      <img src={HOW_TO_IMAGES[index]} alt={t('landing.stepAlt', { title })} />
+      <img src={HOW_TO_IMAGES[index]} alt={t('landing.stepAlt', { title })} draggable={false} />
     </div>
     <div className="fg-step-copy">
       <h3>{title}</h3>
@@ -118,7 +118,7 @@ export default function LandingView({
 
     <main>
       <section className="fg-hero">
-        <div className="fg-hero-hill" data-node-id="110:228" aria-hidden="true"><img src="/landing/hills-110-228.png" alt="" /></div>
+        <div className="fg-hero-hill" data-node-id="110:228" aria-hidden="true"><img src="/landing/hills-110-228.png" alt="" draggable={false} /></div>
         <div className="fg-hero-content">
           <div className="fg-hero-copy">
             <h1>{t('landing.heroTitleLead')}<br />{t('landing.heroTitleReport')} <span>{t('landing.heroTitleAccent')}</span></h1>
@@ -212,7 +212,7 @@ export default function LandingView({
               const title = t(titleKey);
               return <article key={titleKey}>
               <div className="fg-feature-copy"><h3>{title}</h3><p>{t(textKey)}</p></div>
-              <div className="fg-feature-media"><img src={FEATURE_IMAGES[rowIndex * 2 + columnIndex]} alt={title} /></div>
+              <div className="fg-feature-media"><img src={FEATURE_IMAGES[rowIndex * 2 + columnIndex]} alt={title} draggable={false} /></div>
               </article>;
             })}
           </div>)}
@@ -234,7 +234,7 @@ export default function LandingView({
       </section>
 
       <section className="fg-final-cta" data-node-id="92:344">
-        <img className="fg-final-glossy-mark" src="/landing/logo-mark-glossy.png" alt="" data-node-id="92:350" data-aos="zoom-in" />
+        <img className="fg-final-glossy-mark" src="/landing/logo-mark-glossy.png" alt="" draggable={false} data-node-id="92:350" data-aos="zoom-in" />
         <div className="fg-final-copy" data-node-id="92:345" data-aos="fade-up">
           <p>{t('landing.finalCta')} <strong>{t('landing.finalCtaBrand')}</strong> {t('landing.finalCtaAfter')}</p>
           <GradientButton onClick={() => navigate('/auth')}>{t('landing.tryNow')}</GradientButton>
@@ -246,7 +246,7 @@ export default function LandingView({
     <footer className="fg-footer" data-node-id="109:227">
       <div className="fg-footer-card" data-node-id="92:334" />
       <div className="fg-footer-hills" data-node-id="110:228" aria-hidden="true">
-        <img src="/landing/hills-110-228.png" alt="" />
+        <img src="/landing/hills-110-228.png" alt="" draggable={false} />
       </div>
       <div className="fg-footer-content-layer">
         <div className="fg-footer-intro" data-aos="fade-right">

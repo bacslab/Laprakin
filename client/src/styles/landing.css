@@ -42,3 +42,24 @@
     font-weight: inherit;
   }
 }
+
+/* The shared reset is intentionally unlayered, so keep layout-critical landing
+ * copy margins unlayered as well. Otherwise `p { margin: 0 }` wins over the
+ * centered hero paragraph and shifts the text block left. */
+.fg-page .fg-hero-copy p {
+  margin: 22px auto 0;
+  text-align: center;
+}
+
+.fg-page .fg-section-title p {
+  margin: 30px auto 0;
+  text-align: center;
+}
+
+.fg-page .fg-step-copy p {
+  margin: 15px 0 0;
+}
+
+.fg-page .fg-feature-copy p {
+  margin: 15px 0 0;
+}
