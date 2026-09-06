@@ -18,3 +18,11 @@ test('monitoring uses responsive area and line charts with operational filters',
   assert.match(charts, /role="img"/);
   assert.doesNotMatch(overview, /activity-bars/);
 });
+
+test('monitoring is a spacious standalone dashboard with operational detail', () => {
+  assert.match(overview, /admin-monitoring-dashboard/);
+  assert.match(overview, /admin-monitoring-hero/);
+  assert.match(overview, /admin-monitoring-kpis/);
+  assert.match(overview, /admin-monitoring-table/);
+  assert.doesNotMatch(overview, /admin-content/);
+});

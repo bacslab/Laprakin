@@ -1154,6 +1154,7 @@
         "processing": "Processing…",
         "apply": "Apply",
         "all": "All",
+        "previous": "Load previous",
         "next": "Load more",
         "reason": "Reason for change",
         "draft": "New draft",

@@ -6027,9 +6027,10 @@ app.get('/api/admin/search', requireAuth, requirePrivilegedUser, (req, res, next
       });
     }
     if ((query.kind === 'all' || query.kind === 'users') && can('users.view')) {
-      db.prepare(`SELECT id, role, plan, created_at FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 300`).all().forEach((row) => {
+      db.prepare(`SELECT id, role, full_name, created_at FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 300`).all().forEach((row) => {
         const userRef = anonymousUserRef(row.id);
-        candidates.push({ id: `user-${row.id}`, kind: 'users', title: userRef, subtitle: `${row.role || 'user'} · ${row.plan || 'free'}`, path: `/admin/users/${encodeURIComponent(row.id)}`, searchText: `${userRef} ${row.id} ${row.role || ''} ${row.plan || ''}` });
+        const displayName = String(row.full_name || '').trim();
+        candidates.push({ id: `user-${row.id}`, kind: 'users', title: userRef, subtitle: `${row.role || 'user'}${displayName ? ` · ${displayName}` : ''}`, path: `/admin/users/${encodeURIComponent(row.id)}`, searchText: `${userRef} ${row.id} ${row.role || ''} ${displayName}` });
       });
     }
     if ((query.kind === 'all' || query.kind === 'alerts') && can('incidents.manage')) {

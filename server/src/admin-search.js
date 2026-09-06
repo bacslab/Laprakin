@@ -2,7 +2,7 @@ const SEARCH_KINDS = new Set(['all', 'features', 'ai', 'users', 'alerts', 'audit
 
 export const ADMIN_SEARCH_FEATURES = Object.freeze([
   { id: 'feature-monitoring', kind: 'features', title: 'Monitoring', subtitle: 'Operational overview and interactive AI telemetry', path: '/admin', capability: 'audit.view', searchText: 'monitoring overview telemetry activity' },
-  { id: 'feature-ai', kind: 'features', title: 'AI control plane', subtitle: 'Providers, models, routing, health, and change history', path: '/admin/ai/providers', capability: 'ai.providers.view', searchText: 'ai control plane providers models routing health changes' },
+  { id: 'feature-ai', kind: 'features', title: 'Kontrol AI', subtitle: 'Providers, models, routing, health, and change history', path: '/admin/ai/providers', capability: 'ai.providers.view', searchText: 'kontrol ai control plane providers models routing health changes' },
   { id: 'feature-alerts', kind: 'features', title: 'Realtime errors', subtitle: 'Operational errors and incident status', path: '/admin/alerts', capability: 'incidents.manage', searchText: 'alerts realtime errors incidents' },
   { id: 'feature-users', kind: 'features', title: 'User access', subtitle: 'Accounts, restrictions, and privacy-safe references', path: '/admin/users', capability: 'users.view', searchText: 'users access accounts restrictions' },
   { id: 'feature-audit', kind: 'features', title: 'Audit log', subtitle: 'Immutable administrative activity trail', path: '/admin/audit', capability: 'audit.view', searchText: 'audit log activity trail security' },

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
@@ -33,4 +35,11 @@ test('admin search ranking is deterministic, deduplicated, and capped', () => {
   ], 'routing', 2);
   assert.deepEqual(rows.map((item) => item.id), ['a', 'b']);
   assert.equal(rows.every((item) => Number.isFinite(item.score)), true);
+});
+
+test('admin search user query only selects columns present in the users schema', async () => {
+  const source = await readFile(path.join(process.cwd(), 'server/src/index.js'), 'utf8');
+  const endpoint = source.slice(source.indexOf("app.get('/api/admin/search'"), source.indexOf("app.get('/api/admin/ai/usage'"));
+  assert.match(endpoint, /SELECT id, role, full_name, created_at FROM users/);
+  assert.doesNotMatch(endpoint, /SELECT id, role, plan, created_at FROM users/);
 });

@@ -1,5 +1,6 @@
 import { UiProvider } from '../../state/ui-context';
 import '../../styles/admin.css';
+import '../../styles/admin-overhaul.css';
 
 export function AdminWorkspace({ AdminMfaGate, LegacyWorkspace, children, render }) {
   const content = LegacyWorkspace ? <LegacyWorkspace /> : render ? render() : children || null;

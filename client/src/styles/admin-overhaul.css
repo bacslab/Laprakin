@@ -1,0 +1,202 @@
+/* Admin console visual system: roomy, legible, and theme-safe. */
+.admin-workspace {
+  --admin-bg: #f5f6f3;
+  --admin-panel: #ffffff;
+  --admin-card: #ffffff;
+  --admin-line: #e2e6de;
+  --admin-text: #1d241e;
+  --admin-muted: #6e776f;
+  --admin-hover: #edf1eb;
+  --admin-selected: #e1eadb;
+  --admin-accent: #78aa2d;
+  --admin-chart-positive: #87bb39;
+  --admin-chart-negative: #e07a6d;
+  --admin-chart-blue: #648fd7;
+  --admin-chart-violet: #9b7dcc;
+  grid-template-columns: 252px minmax(0, 1fr);
+  font-size: 15px;
+}
+.admin-workspace.theme-dark {
+  --admin-bg: #171a18;
+  --admin-panel: #202521;
+  --admin-card: #272d28;
+  --admin-line: #39433a;
+  --admin-text: #f0f4ed;
+  --admin-muted: #aab5a7;
+  --admin-hover: #2c352d;
+  --admin-selected: #354632;
+  --admin-accent: #b7ec63;
+  --admin-chart-positive: #b7ec63;
+  --admin-chart-negative: #ff9e8e;
+  --admin-chart-blue: #8eb7ff;
+  --admin-chart-violet: #d0aaff;
+}
+.admin-sidebar { width: 252px; padding: 20px 14px; gap: 8px; }
+.admin-brand { gap: 12px; padding: 6px 10px 20px; min-height: 58px; }
+.admin-brand .brand-mark { width: 32px; height: 32px; }
+.admin-brand b { font-size: 1rem; letter-spacing: -.02em; }
+.admin-brand small { margin-top: 3px; font-size: .7rem; }
+.admin-sidebar nav { gap: 16px; margin-top: 16px; }
+.admin-nav-group { gap: 4px; }
+.admin-nav-group > small { padding: 0 10px 6px; font-size: .65rem; letter-spacing: .1em; }
+.admin-sidebar nav button { height: 42px; gap: 11px; border-radius: 10px; padding: 0 11px; font-size: .86rem; font-weight: 650; }
+.admin-sidebar nav button svg { width: 18px; height: 18px; }
+.admin-sidebar-foot { gap: 10px; padding: 16px 8px 0; }
+.admin-sidebar-foot > div span { width: 30px; height: 30px; border-radius: 9px; font-size: .78rem; }
+.admin-sidebar-foot > div small { font-size: .7rem; }
+.admin-sidebar-foot > button { height: 36px; gap: 8px; padding: 0 8px; font-size: .78rem; }
+.admin-main { font-size: 15px; }
+.admin-header { min-height: 82px; padding: 18px clamp(28px, 4vw, 60px); }
+.admin-header p { font-size: .7rem; letter-spacing: .11em; }
+.admin-header h1 { margin-top: 5px; font-size: 1.45rem; letter-spacing: -.035em; }
+.admin-header-actions { gap: 12px; }
+.admin-theme-toggle { width: 40px; min-width: 40px; height: 40px; border-radius: 10px; }
+.admin-content { width: min(1400px, 100%); padding: 32px clamp(28px, 4vw, 64px) 60px; }
+.admin-route-status { width: min(1400px, calc(100% - 80px)); margin: 18px auto -8px; font-size: .78rem; }
+.admin-route-status button { min-height: 38px; font-size: .78rem; }
+.admin-workspace button, .admin-workspace input, .admin-workspace textarea, .admin-workspace select { font-size: .88rem; }
+.admin-list-pagination { gap: 12px; }
+.admin-list-pagination button { width: 38px; height: 38px; display: grid; place-items: center; padding: 0; }
+.admin-list-pagination span { min-width: 22px; text-align: center; font-size: .86rem; font-weight: 700; }
+
+/* Monitoring dashboard */
+.admin-monitoring-dashboard { width: min(1440px, 100%); margin: 0 auto; padding: 34px clamp(28px, 4vw, 64px) 72px; display: grid; gap: 28px; }
+.admin-monitoring-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; padding-bottom: 4px; }
+.admin-monitoring-hero-copy { display: grid; gap: 9px; }
+.admin-monitoring-eyebrow, .admin-monitoring-section-kicker { display: inline-flex; align-items: center; gap: 8px; color: var(--admin-accent); font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.admin-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--admin-chart-positive); box-shadow: 0 0 0 4px color-mix(in srgb, var(--admin-chart-positive) 18%, transparent); }
+.admin-monitoring-hero h2 { margin: 0; font-size: clamp(1.8rem, 3vw, 2.45rem); line-height: 1.1; letter-spacing: -.055em; }
+.admin-monitoring-hero p { max-width: 670px; margin: 0; color: var(--admin-muted); font-size: .95rem; line-height: 1.65; }
+.admin-monitoring-hero-meta { display: grid; gap: 7px; justify-items: end; color: var(--admin-muted); text-align: right; }
+.admin-monitoring-hero-meta span { display: inline-flex; align-items: center; gap: 8px; color: var(--admin-text); font-size: .82rem; font-weight: 700; }
+.admin-monitoring-hero-meta svg { color: var(--admin-accent); }
+.admin-monitoring-hero-meta small { font-size: .75rem; }
+.admin-monitoring-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.admin-monitoring-kpi { min-height: 142px; display: grid; align-content: space-between; gap: 10px; padding: 19px 20px; border: 1px solid var(--admin-line); border-radius: 16px; background: var(--admin-card); box-shadow: 0 8px 24px rgba(25, 31, 24, .05); }
+.admin-monitoring-kpi-top { display: flex; align-items: center; justify-content: space-between; color: var(--admin-muted); font-size: .79rem; font-weight: 700; }
+.admin-monitoring-kpi-top svg { color: var(--admin-accent); }
+.admin-monitoring-kpi strong { font-size: clamp(1.7rem, 2.5vw, 2.25rem); letter-spacing: -.06em; }
+.admin-monitoring-kpi small { display: inline-flex; align-items: center; gap: 5px; color: var(--admin-muted); font-size: .72rem; }
+.admin-monitoring-kpi.is-violet { border-top: 3px solid #9b7dcc; }
+.admin-monitoring-kpi.is-blue { border-top: 3px solid #648fd7; }
+.admin-monitoring-kpi.is-lime { border-top: 3px solid var(--admin-chart-positive); }
+.admin-monitoring-kpi.is-orange { border-top: 3px solid #dd9161; }
+.admin-monitoring-analytics { display: grid; gap: 18px; }
+.admin-monitoring-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.admin-monitoring-toolbar h3, .admin-monitoring-section-head h3 { margin: 5px 0 0; font-size: 1.2rem; letter-spacing: -.035em; }
+.admin-monitoring-toolbar p { margin: 5px 0 0; color: var(--admin-muted); font-size: .82rem; }
+.admin-monitoring-toolbar-summary { display: grid; grid-template-columns: repeat(4, minmax(90px, 1fr)); gap: 22px; }
+.admin-monitoring-toolbar-summary span { display: grid; gap: 3px; }
+.admin-monitoring-toolbar-summary b { font-size: 1.05rem; }
+.admin-monitoring-toolbar-summary small { color: var(--admin-muted); font-size: .7rem; }
+.admin-monitoring-filters { display: grid; grid-template-columns: minmax(170px, 1.3fr) repeat(5, minmax(110px, 1fr)); align-items: end; gap: 12px; padding: 16px; border: 1px solid var(--admin-line); border-radius: 14px; background: var(--admin-panel); }
+.admin-monitoring-filters-title { display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--admin-text); font-size: .8rem; font-weight: 750; }
+.admin-monitoring-filters-title svg { color: var(--admin-accent); }
+.admin-monitoring-filters label { display: grid; gap: 6px; color: var(--admin-muted); font-size: .7rem; font-weight: 750; }
+.admin-monitoring-filters select { min-height: 44px; border: 1px solid var(--admin-line); border-radius: 9px; padding: 0 11px; background: var(--admin-card); color: var(--admin-text); }
+.admin-monitoring-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.admin-monitoring-chart-panel, .admin-monitoring-table { min-width: 0; border: 1px solid var(--admin-line); border-radius: 16px; background: var(--admin-card); box-shadow: 0 8px 24px rgba(25, 31, 24, .04); }
+.admin-monitoring-chart-panel { padding: 20px 20px 12px; }
+.admin-monitoring-chart-panel header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 12px; }
+.admin-monitoring-chart-panel header span, .admin-monitoring-section-head > div > span { color: var(--admin-muted); font-size: .67rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.admin-monitoring-chart-panel h4 { margin: 5px 0 0; font-size: 1rem; }
+.admin-monitoring-chart-panel header > svg { color: var(--admin-accent); }
+.admin-chart { min-height: 286px; }
+.admin-chart-empty { min-height: 286px; display: grid; place-content: center; justify-items: center; gap: 8px; color: var(--admin-muted); text-align: center; }
+.admin-chart-empty svg { color: var(--admin-accent); }
+.admin-chart-empty b { color: var(--admin-text); font-size: .84rem; }
+.admin-chart-empty span { font-size: .76rem; }
+.admin-monitoring-table { padding: 20px; }
+.admin-monitoring-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--admin-line); }
+.admin-monitoring-section-head > small { color: var(--admin-muted); font-size: .75rem; }
+.admin-monitoring-table-scroll { overflow-x: auto; }
+.admin-monitoring-table table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.admin-monitoring-table th { padding: 14px 10px; color: var(--admin-muted); font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-align: left; text-transform: uppercase; }
+.admin-monitoring-table td { padding: 14px 10px; border-top: 1px solid var(--admin-line); color: var(--admin-text); white-space: nowrap; }
+.admin-monitoring-table td:first-child { min-width: 230px; white-space: normal; }
+.admin-monitoring-table td b, .admin-monitoring-table td small { display: block; }
+.admin-monitoring-table td small { margin-top: 4px; color: var(--admin-muted); font-size: .72rem; }
+.admin-monitoring-status-pill { display: inline-flex; padding: 4px 8px; border-radius: 99px; background: var(--admin-hover); color: var(--admin-muted); font-size: .68rem; font-weight: 750; text-transform: capitalize; }
+.admin-monitoring-status-pill.is-success { background: color-mix(in srgb, var(--admin-chart-positive) 18%, transparent); color: color-mix(in srgb, var(--admin-chart-positive) 75%, var(--admin-text)); }
+.admin-monitoring-status-pill.is-error { background: color-mix(in srgb, var(--admin-chart-negative) 18%, transparent); color: var(--admin-chart-negative); }
+.admin-monitoring-bottom-grid { display: grid; grid-template-columns: 1.4fr .8fr; gap: 18px; }
+.admin-monitoring-job-list { display: grid; }
+.admin-monitoring-job-list article { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 0; border-bottom: 1px solid var(--admin-line); }
+.admin-monitoring-job-list article:last-child { border-bottom: 0; }
+.admin-monitoring-job-status { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.admin-monitoring-job-status > div { min-width: 0; }
+.admin-monitoring-job-status b, .admin-monitoring-job-status small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-monitoring-job-status b { font-size: .82rem; }
+.admin-monitoring-job-status small { margin-top: 3px; color: var(--admin-muted); font-size: .74rem; }
+.status-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: var(--admin-muted); }
+.status-dot.status-completed, .status-dot.status-success { background: var(--admin-chart-positive); }
+.status-dot.status-failed, .status-dot.status-error { background: var(--admin-chart-negative); }
+.admin-monitoring-job-list time { color: var(--admin-muted); font-size: .7rem; text-transform: capitalize; }
+.admin-monitoring-health-score { color: var(--admin-chart-positive); font-size: 1.8rem; letter-spacing: -.06em; }
+.admin-monitoring-health-track { height: 12px; margin: 28px 0 14px; overflow: hidden; border-radius: 99px; background: var(--admin-hover); }
+.admin-monitoring-health-track span { display: block; height: 100%; border-radius: inherit; background: var(--admin-chart-positive); transition: width .3s ease; }
+.admin-monitoring-health-foot { display: flex; justify-content: space-between; gap: 12px; color: var(--admin-muted); font-size: .75rem; }
+.admin-monitoring-muted { color: var(--admin-muted); font-size: .8rem; }
+.admin-monitoring-empty { display: grid; justify-items: center; gap: 8px; padding: 64px 20px; border: 1px dashed var(--admin-line); border-radius: 16px; text-align: center; }
+.admin-monitoring-empty svg { color: var(--admin-accent); }
+.admin-monitoring-empty h3 { margin: 4px 0 0; font-size: 1.1rem; }
+.admin-monitoring-empty p { max-width: 500px; margin: 0; color: var(--admin-muted); font-size: .84rem; }
+
+/* Unified AI control plane spacing and typography. */
+.admin-ai-shell { --text-xs: .78rem; --text-sm: .88rem; --text-md: .95rem; --text-lg: 1.2rem; --text-xl: 1.7rem; --aai-gap-control: 14px; --aai-gap-section: 28px; font-size: var(--text-md); }
+.admin-ai-embedded .admin-ai-main { padding: 0; }
+.admin-ai-embedded .admin-ai-section-nav { gap: 10px; margin: 0 clamp(28px, 4vw, 64px); padding: 22px 0 16px; border-bottom: 1px solid var(--aai-line); }
+.admin-ai-section-nav a { min-height: 40px; gap: 8px; border-radius: 10px; padding: 0 14px; font-size: .83rem; }
+.admin-ai-embedded .admin-ai-page { width: min(1400px, 100%); gap: 22px; padding: 30px clamp(28px, 4vw, 64px) 72px; }
+.admin-ai-page-intro { align-items: flex-end; padding-bottom: 20px; }
+.admin-ai-page-intro h1 { font-size: clamp(1.55rem, 2.5vw, 2rem); }
+.admin-ai-page-intro > div:first-child > span { max-width: 760px; font-size: .9rem; }
+.admin-ai-page-actions { gap: 12px; }
+.admin-ai-primary-action, .admin-ai-emergency, .admin-ai-filterbar button, .admin-ai-form-actions button, .admin-ai-pagination button, .admin-ai-action-buttons button, .admin-ai-change-actions button { min-height: 42px; border-radius: 10px; padding: 0 14px; font-size: .82rem; }
+.admin-ai-filterbar { gap: 14px; padding: 18px; border-radius: 14px; }
+.admin-ai-shell :where(input, textarea, select) { min-height: 44px; border-radius: 9px; padding: 9px 12px; }
+.admin-ai-editor, .admin-ai-panel, .admin-ai-action-panel, .admin-ai-route-card, .admin-ai-savebar, .admin-ai-change-detail { gap: 14px; border-radius: 14px; padding: 22px; }
+.admin-ai-card-list { gap: 14px; }
+.admin-ai-card { min-height: 116px; border-radius: 14px; padding: 18px; }
+.admin-ai-table-wrap { border-radius: 14px; }
+.admin-ai-table th, .admin-ai-table td { padding: 15px 14px; font-size: .8rem; }
+.admin-ai-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 8px; }
+.admin-ai-pagination button { width: 42px; min-width: 42px; padding: 0; }
+.admin-ai-pagination span { min-width: 24px; text-align: center; font-weight: 700; }
+
+/* CMS surfaces use the same tokens in both themes. */
+.admin-workspace .cms-copy-section, .admin-workspace .cms-media-card, .admin-workspace .cms-media-preview { background: var(--admin-card); border-color: var(--admin-line); color: var(--admin-text); }
+.admin-workspace.theme-dark .cms-copy-section, .admin-workspace.theme-dark .cms-media-card, .admin-workspace.theme-dark .cms-media-preview { background: var(--admin-card); color: var(--admin-text); }
+.admin-workspace .toggle-control { background: var(--admin-card); border-color: var(--admin-line); color: var(--admin-text); }
+.admin-workspace .toggle-control:hover { background: var(--admin-hover); color: var(--admin-text); }
+.admin-workspace .toggle-control small { color: var(--admin-muted); }
+.admin-workspace .cms-form label, .admin-workspace .cms-media-card label { color: var(--admin-muted); font-size: .78rem; }
+
+@media (max-width: 1080px) {
+  .admin-monitoring-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-monitoring-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .admin-monitoring-filters-title { grid-column: 1 / -1; }
+  .admin-monitoring-bottom-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 820px) {
+  .admin-monitoring-dashboard { padding-inline: 22px; }
+  .admin-monitoring-hero, .admin-monitoring-toolbar { align-items: flex-start; flex-direction: column; }
+  .admin-monitoring-hero-meta { justify-items: start; text-align: left; }
+  .admin-monitoring-toolbar-summary { width: 100%; grid-template-columns: repeat(4, 1fr); }
+  .admin-monitoring-chart-grid { grid-template-columns: 1fr; }
+  .admin-ai-embedded .admin-ai-section-nav { margin-inline: 22px; }
+  .admin-ai-embedded .admin-ai-page { padding-inline: 22px; }
+}
+@media (max-width: 620px) {
+  .admin-monitoring-dashboard { gap: 22px; padding: 24px 16px 48px; }
+  .admin-monitoring-kpis { grid-template-columns: 1fr; }
+  .admin-monitoring-kpi { min-height: 126px; }
+  .admin-monitoring-toolbar-summary { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .admin-monitoring-filters { grid-template-columns: 1fr; }
+  .admin-monitoring-filters-title { grid-column: auto; }
+  .admin-monitoring-table { padding: 16px; }
+  .admin-ai-embedded .admin-ai-section-nav { margin-inline: 16px; overflow-x: auto; flex-wrap: nowrap; }
+  .admin-ai-embedded .admin-ai-page { padding: 24px 16px 48px; }
+  .admin-ai-page-intro { align-items: stretch; flex-direction: column; }
+  .admin-ai-page-actions { justify-content: space-between; }
+}

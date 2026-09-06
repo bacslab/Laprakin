@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { KeyRound, Plus, ServerCog } from 'lucide-react';
 import { Link, useLocation, useNavigate } from '../../../router';
 import { ADMIN_AI_PATHS } from '../../../lib/admin-ai';
-import { AdminResource, EmptyState, PageIntro, StatusPill, useAdminAi, useAdminAiCopy, useAdminResource } from './shared';
+import { AdminAiPagination, AdminResource, EmptyState, PageIntro, StatusPill, useAdminAi, useAdminAiCopy, useAdminResource } from './shared';
 
 const INITIAL_PROVIDER = { providerId: '', displayName: '', adapterType: 'openai-compatible', baseUrl: '', enabled: true, priority: 100, requestTimeoutMs: 45000, rpmLimit: 8, concurrencyLimit: 2, retryCount: 2, circuitFailureThreshold: 4, circuitCooldownMs: 30000 };
 
@@ -30,6 +30,13 @@ export default function ProvidersModule() {
   };
   const nextPage = () => {
     const next = { ...applied, cursor: resource.data?.nextCursor || '' };
+    setFilters(next); setApplied(next);
+    const query = new URLSearchParams(Object.entries(next).filter(([, value]) => value !== '').map(([key, value]) => [key, String(value)]));
+    navigate(`${ADMIN_AI_PATHS.providers}?${query}`);
+  };
+  const previousPage = () => {
+    const current = Number.parseInt(applied.cursor || '0', 10) || 0;
+    const next = { ...applied, cursor: String(Math.max(0, current - Number(applied.limit || 25))) };
     setFilters(next); setApplied(next);
     const query = new URLSearchParams(Object.entries(next).filter(([, value]) => value !== '').map(([key, value]) => [key, String(value)]));
     navigate(`${ADMIN_AI_PATHS.providers}?${query}`);
@@ -68,6 +75,6 @@ export default function ProvidersModule() {
       <button type="submit">{t('common.apply')}</button>
     </form>
     <AdminResource resource={resource} label={t('providers.loadLabel')}>{(data) => data.providers?.length ? <div className="admin-ai-card-list">{data.providers.map((item) => <Link className="admin-ai-card" to={`${ADMIN_AI_PATHS.providers}/${encodeURIComponent(item.providerId)}${data.revisionId ? `?revisionId=${encodeURIComponent(data.revisionId)}` : ''}`} key={item.providerId}><div className="admin-ai-card-icon"><ServerCog size={17} /></div><div className="admin-ai-card-copy"><div><b>{item.displayName}</b><code>{item.providerId}</code></div><span>{item.baseUrl}</span><small><KeyRound size={12} /> {item.credential?.configured ? t('providers.credentialConfigured', { lastFour: item.credential.lastFour || '' }) : t('providers.credentialMissing')}</small><small>{t('providers.operationalSummary', { models: item.modelCount || 0, routes: item.routesUsing?.length || 0 })}</small></div><div className="admin-ai-card-aside"><StatusPill value={item.state || (item.enabled ? 'active' : 'disabled')} /><span>{t('providers.priorityValue', { priority: item.priority })}</span><span>{item.lastSuccessfulCall ? t('providers.lastSuccessAt', { time: new Date(item.lastSuccessfulCall).toLocaleString() }) : t('providers.noSuccess')}</span></div></Link>)}</div> : <EmptyState title={t('providers.emptyTitle')} description={t('providers.emptyDescription')} />}</AdminResource>
-    {resource.data?.nextCursor && <div className="admin-ai-pagination"><button type="button" onClick={nextPage}>{t('common.next')}</button></div>}
+    <AdminAiPagination cursor={applied.cursor} nextCursor={resource.data?.nextCursor} onNext={nextPage} onPrevious={previousPage} limit={Number(applied.limit || 25)} />
   </>;
 }

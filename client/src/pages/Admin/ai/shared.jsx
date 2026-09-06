@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock3, LoaderCircle, RefreshCw, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Clock3, LoaderCircle, RefreshCw, X } from 'lucide-react';
 import { useI18n } from '../../../i18n/context';
 
 const AdminAiContext = createContext(null);
@@ -69,6 +69,13 @@ export function EmptyState({ title, description }) {
 export function PageIntro({ eyebrow, title, description, actions, resource }) {
   const t = useAdminAiCopy();
   return <header className="admin-ai-page-intro"><div><p>{eyebrow || t('common.controlPlane')}</p><h1>{title}</h1><span>{description}</span></div><div className="admin-ai-page-actions">{resource && <ResourceMeta resource={resource} />}{actions}</div></header>;
+}
+
+export function AdminAiPagination({ cursor = '', nextCursor = '', onNext, onPrevious, limit = 25 }) {
+  const t = useAdminAiCopy();
+  const offset = Number.parseInt(cursor || '0', 10) || 0;
+  const page = Math.floor(offset / limit) + 1;
+  return <div className="admin-ai-pagination" aria-label="Pagination"><button type="button" aria-label={t('common.previous')} title={t('common.previous')} disabled={offset <= 0} onClick={onPrevious}><ArrowLeft size={16} /></button><span>{page}</span><button type="button" aria-label={t('common.next')} title={t('common.next')} disabled={!nextCursor} onClick={onNext}><ArrowRight size={16} /></button></div>;
 }
 
 export function ConfirmationDialog({ open, title, description, expected, confirmLabel, busy, extra = null, onCancel, onConfirm }) {
