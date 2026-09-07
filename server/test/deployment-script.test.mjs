@@ -23,6 +23,11 @@ test('production environment template promotes the requested admin identity', as
   assert.match(source, /^ADMIN_EMAIL=hilmimubarok2006@gmail\.com$/m);
 });
 
+test('Docker production build gives Vite enough heap on the small production VM', async () => {
+  const source = await readFile(new URL('../../Dockerfile', import.meta.url), 'utf8');
+  assert.match(source, /NODE_OPTIONS=--max-old-space-size=640 npm run build/);
+});
+
 test('SPA fallback uses an Express 5-compatible wildcard route', async () => {
   const source = await readFile(new URL('../src/index.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /app\.get\('\*'/);

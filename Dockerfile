@@ -8,7 +8,9 @@ COPY server/package.json ./server/package.json
 RUN npm ci
 
 COPY . .
-RUN npm run build
+# The production VM has a small memory footprint; give Vite a bounded heap and
+# let the host's configured swap absorb the peak during the client transform.
+RUN NODE_OPTIONS=--max-old-space-size=640 npm run build
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
