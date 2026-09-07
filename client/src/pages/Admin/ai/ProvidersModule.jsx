@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { KeyRound, Plus, ServerCog } from 'lucide-react';
+import CustomSelect from '../../../components/CustomSelect';
 import { Link, useLocation, useNavigate } from '../../../router';
 import { ADMIN_AI_PATHS } from '../../../lib/admin-ai';
 import { AdminAiPagination, AdminResource, EmptyState, PageIntro, StatusPill, useAdminAi, useAdminAiCopy, useAdminResource } from './shared';
@@ -12,7 +13,7 @@ export default function ProvidersModule() {
   const location = useLocation();
   const navigate = useNavigate();
   const url = new URLSearchParams(location.search);
-  const [filters, setFilters] = useState({ q: url.get('q') || '', state: url.get('state') || '', cursor: url.get('cursor') || '', limit: 25 });
+  const [filters, setFilters] = useState({ state: url.get('state') || '', cursor: url.get('cursor') || '', limit: 25 });
   const [applied, setApplied] = useState(filters);
   const [showCreate, setShowCreate] = useState(false);
   const [provider, setProvider] = useState(INITIAL_PROVIDER);
@@ -70,8 +71,7 @@ export default function ProvidersModule() {
       <div className="admin-ai-form-actions"><button type="button" onClick={() => setShowCreate(false)}>{t('common.cancel')}</button><button className="admin-ai-primary-action" type="submit" disabled={saving || reason.trim().length < 8}>{saving ? t('common.saving') : t('providers.saveDraft')}</button></div>
     </form>}
     <form className="admin-ai-filterbar" onSubmit={applyFilters}>
-      <label><span>{t('providers.search')}</span><input aria-label={t('providers.search')} value={filters.q} onChange={(event) => setFilters((value) => ({ ...value, q: event.target.value }))} placeholder={t('providers.searchPlaceholder')} /></label>
-      <label><span>{t('providers.status')}</span><select aria-label={t('providers.status')} value={filters.state} onChange={(event) => setFilters((value) => ({ ...value, state: event.target.value }))}><option value="">{t('common.all')}</option><option value="active">{t('providers.active')}</option><option value="draft">{t('common.status.draft')}</option><option value="disabled">{t('providers.disabled')}</option></select></label>
+      <label><span>{t('providers.status')}</span><CustomSelect ariaLabel={t('providers.status')} value={filters.state} onChange={(state) => setFilters((value) => ({ ...value, state }))} options={[{ value: '', label: t('common.all') }, { value: 'active', label: t('providers.active') }, { value: 'draft', label: t('common.status.draft') }, { value: 'disabled', label: t('providers.disabled') }]} /></label>
       <button type="submit">{t('common.apply')}</button>
     </form>
     <AdminResource resource={resource} label={t('providers.loadLabel')}>{(data) => data.providers?.length ? <div className="admin-ai-card-list">{data.providers.map((item) => <Link className="admin-ai-card" to={`${ADMIN_AI_PATHS.providers}/${encodeURIComponent(item.providerId)}${data.revisionId ? `?revisionId=${encodeURIComponent(data.revisionId)}` : ''}`} key={item.providerId}><div className="admin-ai-card-icon"><ServerCog size={17} /></div><div className="admin-ai-card-copy"><div><b>{item.displayName}</b><code>{item.providerId}</code></div><span>{item.baseUrl}</span><small><KeyRound size={12} /> {item.credential?.configured ? t('providers.credentialConfigured', { lastFour: item.credential.lastFour || '' }) : t('providers.credentialMissing')}</small><small>{t('providers.operationalSummary', { models: item.modelCount || 0, routes: item.routesUsing?.length || 0 })}</small></div><div className="admin-ai-card-aside"><StatusPill value={item.state || (item.enabled ? 'active' : 'disabled')} /><span>{t('providers.priorityValue', { priority: item.priority })}</span><span>{item.lastSuccessfulCall ? t('providers.lastSuccessAt', { time: new Date(item.lastSuccessfulCall).toLocaleString() }) : t('providers.noSuccess')}</span></div></Link>)}</div> : <EmptyState title={t('providers.emptyTitle')} description={t('providers.emptyDescription')} />}</AdminResource>

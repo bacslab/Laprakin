@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, LoaderCircle, RefreshCw } from 'lucide-react';
 import { Button } from '../../../components/Button';
+import CustomSelect from '../../../components/CustomSelect';
 import { formatDate } from '../../../lib/formatters';
 import { useI18n } from '../../../i18n/context';
 
@@ -50,8 +51,7 @@ export function AdminListControls({ query, setQuery, pageInfo, statuses = [], ex
   const { t } = useI18n();
   const cursor = Number.parseInt(query.cursor || '0', 10) || 0;
   return <div className="admin-list-controls">
-    <label>{t('admin.console.list.search')}<input aria-label={t('admin.console.list.search')} type="search" value={query.q} onChange={(event) => setQuery({ q: event.target.value }, { replace: true })} placeholder={t('admin.console.list.searchPlaceholder')}/></label>
-    {statuses.length > 0 && <label>{t('admin.console.list.status')}<select aria-label={t('admin.console.list.status')} value={query.status} onChange={(event) => setQuery({ status: event.target.value })}>{statuses.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></label>}
+    {statuses.length > 0 && <label>{t('admin.console.list.status')}<CustomSelect ariaLabel={t('admin.console.list.status')} value={query.status} onChange={(status) => setQuery({ status })} options={statuses.map(({ value, label }) => ({ value, label }))}/></label>}
     {extra}
     <div className="admin-list-pagination"><button type="button" aria-label={t('admin.console.list.previous')} title={t('admin.console.list.previous')} disabled={cursor <= 0} onClick={() => setQuery({ cursor: String(Math.max(0, cursor - query.limit)) })}><ArrowLeft size={16} /></button><span aria-label={t('admin.console.list.page', { page: Math.floor(cursor / query.limit) + 1 })}>{Math.floor(cursor / query.limit) + 1}</span><button type="button" aria-label={t('admin.console.list.next')} title={t('admin.console.list.next')} disabled={!pageInfo?.nextCursor} onClick={() => setQuery({ cursor: pageInfo.nextCursor })}><ArrowRight size={16} /></button></div>
   </div>;

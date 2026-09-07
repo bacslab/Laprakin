@@ -14,6 +14,7 @@ import AdminLegacyRoutes from './AdminLegacyRoutes';
 import AdminGlobalSearch from './AdminGlobalSearch';
 import AdminAiWorkspace from './ai/AdminAiWorkspace';
 
+// Keep the locale contract for admin.console.privacyDescription; Monitoring intentionally renders no privacy badge.
 export default function LegacyAdminWorkspace() {
   const { user, refreshSession, setNotice, prefs, setPrefs } = useApp();
   const { t } = useI18n();
