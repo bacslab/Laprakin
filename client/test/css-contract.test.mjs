@@ -66,3 +66,11 @@ test('admin stylesheet owns the admin loading state', () => {
   assert.match(adminCss, /\.admin-loading-state span/);
   assert.doesNotMatch(compatibilityCss, /\.admin-loading-state\s*\{/);
 });
+
+test('document shell keeps a visible loading surface before the app bundle mounts', () => {
+  const html = readFileSync('client/index.html', 'utf8');
+
+  assert.match(html, /id="boot-screen"/);
+  assert.match(html, /#boot-screen[^{]*\{[^}]*background:\s*#0f0f0f/s);
+  assert.match(html, /Menyiapkan Laprakin/);
+});

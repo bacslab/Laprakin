@@ -11,9 +11,36 @@
       content="Platform untuk menyusun laporan praktikum dari bahan yang kamu punya."
     />
     <title>Laprakin | Susun laprak secepat chat</title>
+    <style>
+      html, body { min-height: 100%; margin: 0; background: #0f0f0f; }
+      #root { min-height: 100dvh; }
+      #boot-screen {
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        align-content: center;
+        gap: 10px;
+        background: #0f0f0f;
+        color: #b9c3b7;
+        font: 500 13px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      #boot-screen::before {
+        content: "";
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(195, 246, 61, .25);
+        border-top-color: #c3f63d;
+        border-radius: 50%;
+        animation: laprakin-boot-spin .8s linear infinite;
+      }
+      @keyframes laprakin-boot-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-screen::before { animation-duration: 1.8s; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="boot-screen" role="status" aria-live="polite">Menyiapkan Laprakin...</div></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
