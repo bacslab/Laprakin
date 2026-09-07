@@ -18,6 +18,7 @@ const [overview, charts, shared, broadcasts, providers, models, changes, health,
 const credits = await read('../src/pages/Admin/legacy/CreditsRoute.jsx');
 const pricing = await read('../src/pages/Admin/AdminPricingPanel.jsx');
 const alerts = await read('../src/pages/Admin/legacy/AlertsRoute.jsx');
+const integrations = await read('../src/pages/Admin/AdminLegacyContentPanels.jsx');
 
 test('monitoring stays focused and uses flat, restrained surfaces', () => {
   assert.doesNotMatch(overview, /Privacy-first monitoring|privacyDescription/i);
@@ -72,4 +73,12 @@ test('Error realtime keeps alert rows and actions readable at the Monitoring sca
   assert.match(styles, /\.admin-alerts-page \.admin-alert-list\s*>\s*article[^\{]*\{[^}]*padding:\s*16px\s+0/s);
   assert.match(styles, /\.admin-alerts-page \.admin-alert-list b[^\{]*\{[^}]*font-size:\s*\.9rem/s);
   assert.match(styles, /\.admin-alerts-page \.admin-alert-list \.admin-actions button[^\{]*\{[^}]*min-height:\s*40px/s);
+});
+
+test('AI dan Login keeps integration metrics and usage rows at the Monitoring scale', () => {
+  assert.match(integrations, /admin-integrations-page/);
+  assert.match(styles, /\.admin-integrations-page\s*>\s*\.admin-content[^\{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-integrations-page \.admin-metric-grid article[^\{]*\{[^}]*min-height:\s*118px/s);
+  assert.match(styles, /\.admin-integrations-page \.admin-list\s*>\s*article[^\{]*\{[^}]*padding:\s*16px\s+0/s);
+  assert.match(styles, /\.admin-integrations-page \.admin-panel-head\s*>\s*\.button[^\{]*\{[^}]*min-height:\s*44px/s);
 });

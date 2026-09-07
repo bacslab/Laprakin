@@ -442,3 +442,29 @@
   padding: 0 12px;
   font-size: .82rem;
 }
+
+/* Fourth legacy page pass: give AI and Login operational metrics the same weight. */
+.admin-integrations-page > .admin-content { padding-top: 22px; }
+.admin-integrations-page .admin-privacy-note {
+  gap: 12px;
+  padding: 18px;
+}
+.admin-integrations-page .admin-privacy-note b { font-size: .86rem; }
+.admin-integrations-page .admin-privacy-note span { margin-top: 4px; font-size: .76rem; line-height: 1.5; }
+.admin-integrations-page .admin-metric-grid { gap: 16px; margin-top: 18px; }
+.admin-integrations-page .admin-metric-grid article {
+  min-height: 118px;
+  gap: 8px 12px;
+  padding: 18px 20px;
+}
+.admin-integrations-page .admin-metric-grid span { font-size: .8rem; }
+.admin-integrations-page .admin-metric-grid b { font-size: 1.35rem; }
+.admin-integrations-page .admin-grid { gap: 18px; margin-top: 18px; }
+.admin-integrations-page .admin-panel-head > .button { min-height: 44px; border-radius: 10px; padding: 0 14px; font-size: .84rem; }
+.admin-integrations-page .admin-list > article {
+  gap: 18px;
+  padding: 16px 0;
+}
+.admin-integrations-page .admin-list b { font-size: .9rem; }
+.admin-integrations-page .admin-list small { margin-top: 5px; font-size: .76rem; }
+.admin-integrations-page .admin-list > article > span { font-size: .8rem; }
