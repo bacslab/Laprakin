@@ -532,3 +532,17 @@
 .admin-broadcast-page .admin-email-preview p { font-size: .82rem; line-height: 1.65; }
 .admin-broadcast-page .admin-email-preview > span { margin-top: 18px; border-radius: 9px; padding: 11px 16px; font-size: .76rem; }
 .admin-broadcast-page > .admin-grid > div > .admin-panel { min-height: 120px; }
+
+.admin-feedback-page { padding-top: 22px; }
+.admin-feedback-page > .admin-panel { gap: 18px; }
+.admin-feedback-page .feedback-admin-list > article { align-items: flex-start; gap: 24px; padding: 20px 0; }
+.admin-feedback-page .feedback-admin-body { display: grid; gap: 10px; }
+.admin-feedback-page .feedback-admin-body b { font-size: .92rem; }
+.admin-feedback-page .feedback-admin-body > div:first-child small { margin-top: 5px; font-size: .76rem; }
+.admin-feedback-page .feedback-admin-body p { margin-top: 0; font-size: .86rem; line-height: 1.6; }
+.admin-feedback-page .admin-reply { padding: 8px 10px; font-size: .76rem; line-height: 1.5; }
+.admin-feedback-page .admin-inline { gap: 12px; margin-top: 4px; }
+.admin-feedback-page .admin-inline input { min-height: 44px; border-radius: 10px; padding: 10px 12px; font-size: .86rem; }
+.admin-feedback-page .admin-inline .button { min-height: 44px; border-radius: 10px; padding: 0 16px; font-size: .85rem; }
+.admin-feedback-page .admin-actions { min-width: 160px; }
+.admin-feedback-page .admin-actions .select-trigger { min-height: 44px; border-radius: 10px; font-size: .84rem; }

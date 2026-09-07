@@ -103,3 +103,12 @@ test('Email user keeps the broadcast form and preview at the Monitoring scale', 
   assert.match(styles, /\.admin-broadcast-page \.admin-broadcast-form textarea[^{]*\{[^}]*min-height:\s*140px/s);
   assert.match(styles, /\.admin-broadcast-page \.admin-email-preview[^{]*\{[^}]*min-height:\s*360px/s);
 });
+
+test('Feedback keeps reply controls and status actions at the Monitoring scale', () => {
+  assert.match(integrations, /admin-feedback-page/);
+  assert.match(styles, /\.admin-feedback-page[^{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-feedback-page \.feedback-admin-list\s*>\s*article[^{]*\{[^}]*padding:\s*20px\s+0/s);
+  assert.match(styles, /\.admin-feedback-page \.admin-inline input[^{]*\{[^}]*min-height:\s*44px/s);
+  assert.match(styles, /\.admin-feedback-page \.admin-inline \.button[^{]*\{[^}]*min-height:\s*44px/s);
+  assert.match(styles, /\.admin-feedback-page \.admin-actions \.select-trigger[^{]*\{[^}]*min-height:\s*44px/s);
+});
