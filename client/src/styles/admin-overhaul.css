@@ -634,3 +634,9 @@
 .admin-risk-page .admin-risk-actions { gap: 8px; }
 .admin-risk-page .admin-risk-actions > span { font-size: .8rem; }
 .admin-risk-page .admin-risk-actions button { min-height: 40px; border-radius: 9px; padding: 0 12px; font-size: .8rem; }
+
+.admin-audit-page { padding-top: 22px; }
+.admin-audit-page > .admin-panel { gap: 18px; }
+.admin-audit-page .admin-list > article { gap: 18px; padding: 16px 0; }
+.admin-audit-page .admin-list b { overflow-wrap: anywhere; font-size: .9rem; }
+.admin-audit-page .admin-list small { margin-top: 5px; font-size: .76rem; }
