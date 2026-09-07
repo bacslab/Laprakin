@@ -576,3 +576,39 @@
 .admin-cms-page .cms-testimonials > article small,
 .admin-cms-page .cms-testimonials > article p { font-size: .76rem; line-height: 1.55; }
 .admin-cms-page > .admin-panel > .cms-form > .button { min-height: 44px; border-radius: 10px; padding: 0 16px; font-size: .85rem; }
+
+.admin-access-page { padding-top: 22px; }
+.admin-access-page.admin-access-layout { gap: 18px; }
+.admin-access-page .admin-user-picker { top: 102px; }
+.admin-access-page .admin-user-picker .admin-list > button { gap: 10px; padding: 14px 8px; }
+.admin-access-page .admin-user-picker button b { font-size: .9rem; }
+.admin-access-page .admin-user-picker button small,
+.admin-access-page .admin-user-picker button > span { font-size: .76rem; }
+.admin-access-page .admin-access-detail { gap: 18px; }
+.admin-access-page .admin-access-detail > .admin-panel { gap: 18px; }
+.admin-access-page .admin-plan-control { gap: 14px; padding-top: 18px; }
+.admin-access-page .admin-plan-control label { gap: 7px; font-size: .8rem; }
+.admin-access-page .admin-plan-control input { min-height: 44px; border-radius: 10px; padding: 10px 12px; font-size: .86rem; }
+.admin-access-page .admin-plan-control > .button { min-height: 44px; border-radius: 10px; padding: 0 14px; font-size: .85rem; }
+.admin-access-page .admin-restriction-form { gap: 14px; padding-top: 18px; }
+.admin-access-page .admin-restriction-form label { gap: 7px; font-size: .8rem; }
+.admin-access-page .admin-restriction-form input,
+.admin-access-page .admin-restriction-form textarea { min-height: 44px; border-radius: 10px; padding: 10px 12px; font-size: .86rem; }
+.admin-access-page .admin-restriction-form textarea { min-height: 120px; line-height: 1.55; }
+.admin-access-page .admin-restriction-form .admin-permanent-check { min-height: 44px; gap: 9px; font-size: .76rem; }
+.admin-access-page .admin-restriction-form > .button { min-height: 44px; border-radius: 10px; padding: 0 14px; font-size: .85rem; }
+.admin-access-page .admin-break-glass-form { gap: 14px; }
+.admin-access-page .admin-break-glass-form label { gap: 7px; font-size: .8rem; }
+.admin-access-page .admin-break-glass-form input,
+.admin-access-page .admin-break-glass-form textarea { min-height: 44px; border-radius: 10px; padding: 10px 12px; font-size: .86rem; }
+.admin-access-page .admin-break-glass-form textarea { min-height: 120px; line-height: 1.55; }
+.admin-access-page .admin-break-glass-form > .button { min-height: 44px; border-radius: 10px; padding: 0 14px; font-size: .85rem; }
+.admin-access-page .admin-sensitive-reveal { gap: 16px; margin-top: 16px; border-radius: 10px; padding: 16px; }
+.admin-access-page .admin-sensitive-reveal span,
+.admin-access-page .admin-sensitive-reveal small { font-size: .76rem; }
+.admin-access-page .admin-sensitive-reveal button { min-height: 40px; border-radius: 9px; padding: 0 12px; font-size: .76rem; }
+.admin-access-page .admin-list > article { gap: 18px; padding: 16px 0; }
+.admin-access-page .admin-list b { font-size: .9rem; }
+.admin-access-page .admin-list small { font-size: .76rem; }
+.admin-access-page .admin-actions { min-width: 160px; }
+.admin-access-page .admin-actions button { min-height: 40px; border-radius: 9px; padding: 0 12px; font-size: .78rem; }

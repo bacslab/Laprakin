@@ -21,6 +21,7 @@ const alerts = await read('../src/pages/Admin/legacy/AlertsRoute.jsx');
 const integrations = await read('../src/pages/Admin/AdminLegacyContentPanels.jsx');
 const updates = await read('../src/FeatureUpdates.jsx');
 const broadcastPanel = await read('../src/pages/Admin/AdminBroadcastPanel.jsx');
+const accessPanel = await read('../src/pages/Admin/AdminAccessPanel.jsx');
 
 test('monitoring stays focused and uses flat, restrained surfaces', () => {
   assert.doesNotMatch(overview, /Privacy-first monitoring|privacyDescription/i);
@@ -121,4 +122,14 @@ test('Landing CMS keeps copy fields and media cards at the Monitoring scale', ()
   assert.match(styles, /\.admin-cms-page \.cms-media-card[^{]*\{[^}]*min-height:\s*320px/s);
   assert.match(styles, /\.admin-cms-page \.cms-media-preview[^{]*\{[^}]*height:\s*128px/s);
   assert.match(styles, /\.admin-cms-page > \.admin-panel > \.cms-form > \.button[^{]*\{[^}]*min-height:\s*44px/s);
+});
+
+test('Akses user keeps picker rows and restriction controls at the Monitoring scale', () => {
+  assert.match(accessPanel, /admin-access-page/);
+  assert.match(styles, /\.admin-access-page[^{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-access-page \.admin-user-picker \.admin-list\s*>\s*button[^{]*\{[^}]*padding:\s*14px\s+8px/s);
+  assert.match(styles, /\.admin-access-page \.admin-restriction-form input[^{]*\{[^}]*min-height:\s*44px/s);
+  assert.match(styles, /\.admin-access-page \.admin-restriction-form textarea[^{]*\{[^}]*min-height:\s*120px/s);
+  assert.match(styles, /\.admin-access-page \.admin-plan-control > \.button[^{]*\{[^}]*min-height:\s*44px/s);
+  assert.match(styles, /\.admin-access-page \.admin-break-glass-form textarea[^{]*\{[^}]*min-height:\s*120px/s);
 });
