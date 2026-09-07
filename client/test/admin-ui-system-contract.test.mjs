@@ -22,6 +22,7 @@ const integrations = await read('../src/pages/Admin/AdminLegacyContentPanels.jsx
 const updates = await read('../src/FeatureUpdates.jsx');
 const broadcastPanel = await read('../src/pages/Admin/AdminBroadcastPanel.jsx');
 const accessPanel = await read('../src/pages/Admin/AdminAccessPanel.jsx');
+const appealsPanel = await read('../src/pages/Admin/AdminAppealsPanel.jsx');
 
 test('monitoring stays focused and uses flat, restrained surfaces', () => {
   assert.doesNotMatch(overview, /Privacy-first monitoring|privacyDescription/i);
@@ -132,4 +133,12 @@ test('Akses user keeps picker rows and restriction controls at the Monitoring sc
   assert.match(styles, /\.admin-access-page \.admin-restriction-form textarea[^{]*\{[^}]*min-height:\s*120px/s);
   assert.match(styles, /\.admin-access-page \.admin-plan-control > \.button[^{]*\{[^}]*min-height:\s*44px/s);
   assert.match(styles, /\.admin-access-page \.admin-break-glass-form textarea[^{]*\{[^}]*min-height:\s*120px/s);
+});
+
+test('Appeal keeps review text and action controls at the Monitoring scale', () => {
+  assert.match(appealsPanel, /admin-appeals-page/);
+  assert.match(styles, /\.admin-appeals-page[^{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-appeals-page \.admin-appeal-list\s*>\s*article[^{]*\{[^}]*padding:\s*20px\s+0/s);
+  assert.match(styles, /\.admin-appeals-page \.admin-appeal-copy textarea[^{]*\{[^}]*min-height:\s*112px/s);
+  assert.match(styles, /\.admin-appeals-page \.admin-actions button[^{]*\{[^}]*min-height:\s*40px/s);
 });
