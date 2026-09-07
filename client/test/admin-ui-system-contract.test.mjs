@@ -23,6 +23,7 @@ const updates = await read('../src/FeatureUpdates.jsx');
 const broadcastPanel = await read('../src/pages/Admin/AdminBroadcastPanel.jsx');
 const accessPanel = await read('../src/pages/Admin/AdminAccessPanel.jsx');
 const appealsPanel = await read('../src/pages/Admin/AdminAppealsPanel.jsx');
+const riskPanel = await read('../src/pages/Admin/AdminLegacyContentPanels.jsx');
 
 test('monitoring stays focused and uses flat, restrained surfaces', () => {
   assert.doesNotMatch(overview, /Privacy-first monitoring|privacyDescription/i);
@@ -141,4 +142,12 @@ test('Appeal keeps review text and action controls at the Monitoring scale', () 
   assert.match(styles, /\.admin-appeals-page \.admin-appeal-list\s*>\s*article[^{]*\{[^}]*padding:\s*20px\s+0/s);
   assert.match(styles, /\.admin-appeals-page \.admin-appeal-copy textarea[^{]*\{[^}]*min-height:\s*112px/s);
   assert.match(styles, /\.admin-appeals-page \.admin-actions button[^{]*\{[^}]*min-height:\s*40px/s);
+});
+
+test('Risk review keeps event rows and review actions at the Monitoring scale', () => {
+  assert.match(riskPanel, /admin-risk-page/);
+  assert.match(styles, /\.admin-risk-page[^{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-risk-page \.admin-list\s*>\s*article[^{]*\{[^}]*padding:\s*16px\s+0/s);
+  assert.match(styles, /\.admin-risk-page \.admin-list b[^{]*\{[^}]*font-size:\s*\.9rem/s);
+  assert.match(styles, /\.admin-risk-page \.admin-risk-actions button[^{]*\{[^}]*min-height:\s*40px/s);
 });
