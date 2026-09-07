@@ -20,6 +20,7 @@ const pricing = await read('../src/pages/Admin/AdminPricingPanel.jsx');
 const alerts = await read('../src/pages/Admin/legacy/AlertsRoute.jsx');
 const integrations = await read('../src/pages/Admin/AdminLegacyContentPanels.jsx');
 const updates = await read('../src/FeatureUpdates.jsx');
+const broadcastPanel = await read('../src/pages/Admin/AdminBroadcastPanel.jsx');
 
 test('monitoring stays focused and uses flat, restrained surfaces', () => {
   assert.doesNotMatch(overview, /Privacy-first monitoring|privacyDescription/i);
@@ -92,4 +93,13 @@ test('Updates keeps the editor, list, and preview at the Monitoring scale', () =
   assert.match(styles, /\.admin-updates-page \.feature-fields textarea[^\{]*\{[^}]*min-height:\s*112px/s);
   assert.match(styles, /\.admin-updates-page \.feature-update-list\s*>\s*button[^\{]*\{[^}]*padding:\s*16px\s+18px/s);
   assert.match(styles, /\.admin-updates-page \.feature-mini-preview[^\{]*\{[^}]*padding:\s*18px/s);
+});
+
+test('Email user keeps the broadcast form and preview at the Monitoring scale', () => {
+  assert.match(broadcastPanel, /admin-broadcast-page/);
+  assert.match(styles, /\.admin-broadcast-page[^{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-broadcast-page \.admin-broadcast-form > label[^{]*\{[^}]*font-size:\s*\.8rem/s);
+  assert.match(styles, /\.admin-broadcast-page \.admin-broadcast-form input[^{]*\{[^}]*min-height:\s*44px/s);
+  assert.match(styles, /\.admin-broadcast-page \.admin-broadcast-form textarea[^{]*\{[^}]*min-height:\s*140px/s);
+  assert.match(styles, /\.admin-broadcast-page \.admin-email-preview[^{]*\{[^}]*min-height:\s*360px/s);
 });
