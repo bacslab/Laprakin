@@ -208,6 +208,17 @@
 }
 .admin-route-status { width: min(var(--admin-ui-content-max), calc(100% - 80px)); }
 .admin-global-search-trigger { min-width: 220px; min-height: 40px; font-size: .82rem; }
+.admin-list-controls {
+  width: min(var(--admin-ui-content-max), calc(100% - 2 * clamp(28px, 4vw, 64px)));
+  min-height: 44px;
+  align-items: center;
+  gap: 14px;
+  margin: 8px auto;
+}
+.admin-list-controls label { gap: 7px; font-size: .78rem; }
+.admin-list-pagination { gap: 12px; }
+.admin-list-pagination button { width: 42px; height: 42px; min-height: 42px; padding: 0; border-radius: 10px; }
+.admin-list-pagination span { font-size: .9rem; }
 .admin-grid { gap: 18px; margin-top: 18px; }
 .admin-metric-grid { gap: 16px; margin-top: 18px; }
 .admin-metric-grid article {
@@ -266,6 +277,30 @@
 .admin-ai-change-detail {
   border-color: var(--admin-card-stroke);
 }
+
+/* First legacy page pass: keep Credit user aligned with Monitoring controls. */
+.admin-credits-page { padding-top: 22px; }
+.admin-credits-page .admin-grid { margin-top: 0; }
+.admin-credits-page .admin-credit-panel { gap: 14px; }
+.admin-credits-page .admin-credit-panel > label { gap: 7px; font-size: .8rem; font-weight: 700; }
+.admin-credits-page .admin-credit-panel input {
+  min-height: 44px;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: .88rem;
+}
+.admin-credits-page .admin-credit-panel .select-trigger { min-height: 44px; }
+.admin-credits-page .admin-credit-panel > .button {
+  min-height: 44px;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-size: .85rem;
+}
+.admin-credits-page .admin-grid > .admin-panel:not(.admin-credit-panel) { min-height: 100%; }
+.admin-credits-page .admin-user-list > article { gap: 18px; padding: 16px 0; }
+.admin-credits-page .admin-user-list b { font-size: .9rem; }
+.admin-credits-page .admin-user-list small { margin-top: 4px; font-size: .76rem; }
+.admin-credits-page .admin-user-list > article > span { font-size: .8rem; }
 .admin-monitoring-filters { border-color: var(--admin-card-stroke); background: var(--admin-card); }
 .admin-monitoring-table td,
 .admin-monitoring-section-head { border-color: var(--admin-card-stroke); }

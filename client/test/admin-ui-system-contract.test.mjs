@@ -15,6 +15,7 @@ const [overview, charts, shared, broadcasts, providers, models, changes, health,
   read('../src/pages/Admin/ai/RoutingModule.jsx'),
   read('../src/styles/admin-overhaul.css'),
 ]);
+const credits = await read('../src/pages/Admin/legacy/CreditsRoute.jsx');
 
 test('monitoring stays focused and uses flat, restrained surfaces', () => {
   assert.doesNotMatch(overview, /Privacy-first monitoring|privacyDescription/i);
@@ -44,4 +45,12 @@ test('legacy Admin surfaces inherit the Monitoring scale tokens', () => {
   assert.match(styles, /--admin-ui-font-size/);
   assert.match(styles, /--admin-ui-content-max/);
   assert.match(styles, /\.admin-content[^\{]*\{[^}]*font-size:\s*var\(--admin-ui-font-size\)/s);
+});
+
+test('Kredit user keeps the Monitoring component scale and page spacing', () => {
+  assert.match(credits, /admin-credits-page/);
+  assert.match(styles, /\.admin-credits-page[^\{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-credit-panel input[^\{]*\{[^}]*min-height:\s*44px/s);
+  assert.match(styles, /\.admin-credits-page \.admin-credit-panel\s*>\s*label[^\{]*\{[^}]*font-size:\s*\.8rem/s);
+  assert.match(styles, /\.admin-credits-page \.admin-user-list\s*>\s*article[^\{]*\{[^}]*padding:\s*16px\s+0/s);
 });
