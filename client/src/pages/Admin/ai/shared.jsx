@@ -71,11 +71,12 @@ export function PageIntro({ eyebrow, title, description, actions, resource }) {
   return <header className="admin-ai-page-intro"><div><p>{eyebrow || t('common.controlPlane')}</p><h1>{title}</h1><span>{description}</span></div><div className="admin-ai-page-actions">{resource && <ResourceMeta resource={resource} />}{actions}</div></header>;
 }
 
-export function AdminAiPagination({ cursor = '', nextCursor = '', onNext, onPrevious, limit = 25 }) {
+export function AdminAiPagination({ cursor = '', nextCursor = '', previousCursor = '', page: pageOverride, onNext, onPrevious, limit = 25 }) {
   const t = useAdminAiCopy();
   const offset = Number.parseInt(cursor || '0', 10) || 0;
-  const page = Math.floor(offset / limit) + 1;
-  return <div className="admin-ai-pagination" aria-label="Pagination"><button type="button" aria-label={t('common.previous')} title={t('common.previous')} disabled={offset <= 0} onClick={onPrevious}><ArrowLeft size={16} /></button><span>{page}</span><button type="button" aria-label={t('common.next')} title={t('common.next')} disabled={!nextCursor} onClick={onNext}><ArrowRight size={16} /></button></div>;
+  const page = pageOverride || Math.floor(offset / limit) + 1;
+  const canPrevious = Boolean(previousCursor) || page > 1 || offset > 0;
+  return <div className="admin-ai-pagination" aria-label="Pagination"><button type="button" aria-label={t('common.previous')} title={t('common.previous')} disabled={!canPrevious} onClick={onPrevious}><ArrowLeft size={16} /></button><span aria-label={t('common.page', { page })}>{page}</span><button type="button" aria-label={t('common.next')} title={t('common.next')} disabled={!nextCursor} onClick={onNext}><ArrowRight size={16} /></button></div>;
 }
 
 export function ConfirmationDialog({ open, title, description, expected, confirmLabel, busy, extra = null, onCancel, onConfirm }) {

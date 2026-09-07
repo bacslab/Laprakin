@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Activity, ArrowUpRight, FileText, ShieldCheck, Sparkles, Users } from 'lucide-react';
+import { Activity, ArrowUpRight, FileText, Gauge, ShieldCheck, Sparkles, Users } from 'lucide-react';
 import { api } from '../../../api';
 import { formatBytes } from '../../../lib/formatters';
 import { useI18n } from '../../../i18n/context';
@@ -30,6 +30,7 @@ export default function OverviewRoute() {
       { label: t('admin.console.metrics.activeDocuments'), value: overview.stats?.documents || 0, icon: FileText, tone: 'blue' },
       { label: t('admin.console.metrics.aiCalls'), value: totals.calls || overview.stats?.aiCalls24h || 0, icon: Sparkles, tone: 'lime' },
       { label: t('admin.console.metrics.storage'), value: formatBytes(overview.storageBytes || 0), icon: Activity, tone: 'orange' },
+      { label: t('admin.console.monitoring.successRate'), value: `${successRate}%`, icon: Gauge, tone: 'teal' },
     ];
     return <section className="admin-monitoring-dashboard">
       <header className="admin-monitoring-hero">

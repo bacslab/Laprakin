@@ -71,7 +71,7 @@
 .admin-monitoring-hero-meta span { display: inline-flex; align-items: center; gap: 8px; color: var(--admin-text); font-size: .82rem; font-weight: 700; }
 .admin-monitoring-hero-meta svg { color: var(--admin-accent); }
 .admin-monitoring-hero-meta small { font-size: .75rem; }
-.admin-monitoring-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.admin-monitoring-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
 .admin-monitoring-kpi { min-height: 142px; display: grid; align-content: space-between; gap: 10px; padding: 19px 20px; border: 1px solid var(--admin-line); border-radius: 16px; background: var(--admin-card); box-shadow: 0 8px 24px rgba(25, 31, 24, .05); }
 .admin-monitoring-kpi-top { display: flex; align-items: center; justify-content: space-between; color: var(--admin-muted); font-size: .79rem; font-weight: 700; }
 .admin-monitoring-kpi-top svg { color: var(--admin-accent); }
@@ -81,6 +81,7 @@
 .admin-monitoring-kpi.is-blue { border-top: 3px solid #648fd7; }
 .admin-monitoring-kpi.is-lime { border-top: 3px solid var(--admin-chart-positive); }
 .admin-monitoring-kpi.is-orange { border-top: 3px solid #dd9161; }
+.admin-monitoring-kpi.is-teal { border-top: 3px solid #55b9ad; }
 .admin-monitoring-analytics { display: grid; gap: 18px; }
 .admin-monitoring-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
 .admin-monitoring-toolbar h3, .admin-monitoring-section-head h3 { margin: 5px 0 0; font-size: 1.2rem; letter-spacing: -.035em; }
