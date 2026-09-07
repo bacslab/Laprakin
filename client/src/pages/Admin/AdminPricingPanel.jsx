@@ -54,7 +54,7 @@ export default function AdminPricingPanel({ setNotice, initialPricing, reloadPri
       await loadPricing(); setNotice(t('admin.console.pricing.saved'));
     } catch (error) { setNotice(error.message); } finally { setBusy(false); }
   };
-  return <section className="admin-content">
+  return <section className="admin-content admin-pricing-page">
     <div className="admin-panel admin-wide">
       <div className="admin-panel-head"><h2>{t('admin.console.pricing.planAndBenefits')}</h2><small>{t('admin.console.pricing.description')}</small></div>
       <div className="admin-pricing-grid">

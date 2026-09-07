@@ -16,6 +16,7 @@ const [overview, charts, shared, broadcasts, providers, models, changes, health,
   read('../src/styles/admin-overhaul.css'),
 ]);
 const credits = await read('../src/pages/Admin/legacy/CreditsRoute.jsx');
+const pricing = await read('../src/pages/Admin/AdminPricingPanel.jsx');
 
 test('monitoring stays focused and uses flat, restrained surfaces', () => {
   assert.doesNotMatch(overview, /Privacy-first monitoring|privacyDescription/i);
@@ -53,4 +54,13 @@ test('Kredit user keeps the Monitoring component scale and page spacing', () => 
   assert.match(styles, /\.admin-credit-panel input[^\{]*\{[^}]*min-height:\s*44px/s);
   assert.match(styles, /\.admin-credits-page \.admin-credit-panel\s*>\s*label[^\{]*\{[^}]*font-size:\s*\.8rem/s);
   assert.match(styles, /\.admin-credits-page \.admin-user-list\s*>\s*article[^\{]*\{[^}]*padding:\s*16px\s+0/s);
+});
+
+test('Harga dan diskon keeps plan editing controls at the Monitoring scale', () => {
+  assert.match(pricing, /admin-pricing-page/);
+  assert.match(styles, /\.admin-pricing-page[^\{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-pricing-page \.admin-pricing-fields[^\{]*\{[^}]*gap:\s*14px/s);
+  assert.match(styles, /\.admin-pricing-page \.admin-pricing-grid input[^\{]*\{[^}]*min-height:\s*44px/s);
+  assert.match(styles, /\.admin-pricing-page \.admin-pricing-grid textarea[^\{]*\{[^}]*min-height:\s*112px/s);
+  assert.match(styles, /\.admin-pricing-page \.admin-pricing-grid label[^\{]*\{[^}]*font-size:\s*\.8rem/s);
 });
