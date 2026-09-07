@@ -131,7 +131,7 @@ export function FeatureUpdatesAdmin({ setNotice, initialUpdates = null, reloadUp
     } catch (error) { setNotice(error.message); } finally { setBusy(false); }
   };
 
-  return <section className="admin-content feature-cms">
+  return <section className="admin-content feature-cms admin-updates-page">
     <div className="feature-cms-toolbar">
       <div><h2>{t('admin.console.updates.pageTitle')}</h2><p>{t('admin.console.updates.description')}</p></div>
       <button className="feature-primary" type="button" onClick={createUpdate} disabled={busy}><Plus size={15} />{t('admin.console.updates.create')}</button>
