@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, HelpCircle, LoaderCircle, MessageCircle, MessageSquareText, Send, X } from 'lucide-react';
+import { ArrowRight, HelpCircle, LoaderCircle, MessageCircle, MessageSquareText, Send, X } from '../icons';
 import { api } from '../api';
 import { BrandMark } from './BrandMark';
 import { IconButton } from './IconButton';

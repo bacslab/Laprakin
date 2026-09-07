@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CircleAlert, LoaderCircle, X } from 'lucide-react';
+import { CircleAlert, LoaderCircle, X } from '../../icons';
 import { renderAsync as renderDocx } from 'docx-preview';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../../api';

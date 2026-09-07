@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, CircleAlert, CreditCard, LoaderCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, CircleAlert, CreditCard, LoaderCircle, RefreshCw } from '../../icons';
 import { Link, useLocation, useNavigate } from '../../router';
 import { api } from '../../api';
 import { Button } from '../../components/Button';

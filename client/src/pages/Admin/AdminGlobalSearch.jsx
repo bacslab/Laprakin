@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Clock3, Search, X } from 'lucide-react';
+import { ArrowRight, Clock3, Search, X } from '../../icons';
 import { api } from '../../api';
 
 const RECENT_KEY = 'laprakin-admin-search-recent';

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from './router';
-import { Archive, CalendarClock, ImagePlus, LoaderCircle, Plus, Save, UploadCloud, X } from 'lucide-react';
+import { Archive, CalendarClock, ImagePlus, LoaderCircle, Plus, Save, UploadCloud, X } from './icons';
 import { api } from './api';
 import { useI18n } from './i18n/context';
 import './feature-updates.css';

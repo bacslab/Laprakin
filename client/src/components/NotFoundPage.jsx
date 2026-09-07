@@ -1,4 +1,4 @@
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from '../icons';
 import { BrandMark } from './BrandMark';
 import { Link } from '../router';
 import { useResolvedTheme } from '../lib/theme';

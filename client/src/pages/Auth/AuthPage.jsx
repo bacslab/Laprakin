@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, LoaderCircle } from '../../icons';
 import { Link, useLocation, useNavigate } from '../../router';
 import { api, setCsrfToken } from '../../api';
 import { formatDate } from '../../lib/formatters';

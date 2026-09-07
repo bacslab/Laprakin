@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Globe2, UploadCloud } from 'lucide-react';
+import { ArrowLeft, Globe2, UploadCloud } from '../../icons';
 import { collapseMessageRevisions, getMessageRevisionGroup, getRegenerationTarget } from '../../lib/chat-message-actions';
 import { userGreetingName } from '../../lib/user';
 import { useI18n } from '../../i18n/context';

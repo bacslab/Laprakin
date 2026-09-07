@@ -1218,7 +1218,7 @@
       "renderFailed": "This section encountered a display error",
       "lastUpdated": "Last updated: {{date}}",
       "retry": "Try reloading",
-      "list": { "search": "Search", "searchPlaceholder": "Search this list", "recipientSearch": "Find recipients", "status": "Status", "all": "All", "allUsers": "All users", "previous": "Previous", "next": "Next", "page": "Page {{page}}" },
+      "list": { "search": "Find user", "searchPlaceholder": "Search by user reference", "recipientSearch": "Find recipients", "noResults": "No matching users", "status": "Status", "all": "All", "allUsers": "All users", "previous": "Previous", "next": "Next", "page": "Page {{page}}" },
       "privacyTitle": "Privacy-first monitoring",
       "privacyDescription": "Operational metadata only. Chat, document, file, student ID, IP, fingerprint, prompt, and AI output contents are not shown.",
       "metrics": {

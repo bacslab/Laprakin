@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, FileImage, FileSpreadsheet, FileText, Link2, Play, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileImage, FileSpreadsheet, FileText, Link2, Play, Plus } from '../../icons';
 import { useI18n } from '../../i18n/context';
 
 const STATEMENT_LINE_KEYS = [

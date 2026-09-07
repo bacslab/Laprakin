@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ChevronRight, HelpCircle, LogOut, Megaphone, Settings2, Sliders, Sparkles, UserRound } from 'lucide-react';
+import { ChevronRight, HelpCircle, LogOut, Megaphone, Settings2, Sliders, Sparkles, UserRound } from '../../../icons';
 import { useApp } from '../../../state/ui-context';
 import { useI18n } from '../../../i18n/context';
 

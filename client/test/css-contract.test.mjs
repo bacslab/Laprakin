@@ -38,6 +38,23 @@ test('auth stylesheet owns the viewport-locked authentication section', () => {
   assert.match(css, /@media\(max-height: 720px\)/);
 });
 
+test('auth legal links use a strong lime underlined treatment', () => {
+  const css = readFileSync('client/src/styles/auth.css', 'utf8');
+
+  assert.match(css, /\.auth-legal a\s*\{[^}]*color:\s*#b7ec63[^}]*font-weight:\s*800[^}]*text-decoration:\s*underline/s);
+  assert.match(css, /\.auth-legal a:hover\s*\{[^}]*color:\s*#e2ff9b/s);
+});
+
+test('auth legal notice stays on one line without hover background or focus outline', () => {
+  const css = readFileSync('client/src/styles/auth.css', 'utf8');
+
+  assert.match(css, /\.auth-legal\s*\{[^}]*width:\s*max-content[^}]*white-space:\s*nowrap/s);
+  assert.doesNotMatch(css, /\.auth-legal\s*\{[^}]*max-width\s*:/s);
+  assert.match(css, /\.auth-legal a:hover\s*\{[^}]*text-decoration-thickness:\s*2px/s);
+  assert.doesNotMatch(css, /\.auth-legal a:hover\s*\{[^}]*background(?:-color)?\s*:/s);
+  assert.doesNotMatch(css, /\.auth-legal a:focus(?:-visible)?\s*\{[^}]*outline\s*:/s);
+});
+
 test('legacy form reset stays compatible while Auth reasserts its readable control scale', () => {
   const auth = readFileSync(new URL('../src/styles/auth.css', import.meta.url), 'utf8');
   const compatibility = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');

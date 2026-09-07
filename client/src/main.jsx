@@ -8,7 +8,7 @@ import {
   PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Save, Send, Settings2,
   ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, X,
   ChevronRight, Database, GripVertical, Keyboard, MoreHorizontal, Pin, PinOff, BellRing, Shield, Sliders, Monitor, Palette, Languages, CircleUserRound, LogOut as LogOutIcon, LayoutDashboard, Users, AlertTriangle, ClipboardList, Megaphone, RefreshCw, MessageSquareText, Activity, FileCog,
-} from 'lucide-react';
+} from './icons';
 import { api, clearCsrfToken, setCsrfToken } from './api';
 import { redirectToMidtransCheckout, validatedMidtransCheckoutUrl } from './lib/payment-redirect';
 import { useResolvedTheme } from './lib/theme';

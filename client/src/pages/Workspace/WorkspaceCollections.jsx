@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, FileText, FolderKanban, FolderOpen, MessageCircle, MoreHorizontal, Pin, PinOff, Plus, Search, Send } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileText, FolderKanban, FolderOpen, MessageCircle, MoreHorizontal, Pin, PinOff, Plus, Search, Send } from '../../icons';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
 import { formatDate } from '../../lib/formatters';

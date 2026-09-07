@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Activity, AlertTriangle, FlaskConical, Gauge, Play, Power, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, FlaskConical, Gauge, Play, Power, ShieldCheck } from '../../../icons';
 import CustomSelect from '../../../components/CustomSelect';
 import { AdminResource, ConfirmationDialog, EmptyState, PageIntro, StatusPill, useAdminAi, useAdminAiCopy, useAdminResource } from './shared';
 

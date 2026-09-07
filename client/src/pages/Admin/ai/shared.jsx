@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Clock3, LoaderCircle, RefreshCw, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, LoaderCircle, X } from '../../../icons';
 import { useI18n } from '../../../i18n/context';
+import { ADMIN_REFRESH_EVENT, ADMIN_RESOURCE_UPDATED_EVENT } from '../legacy/shared';
 
 const AdminAiContext = createContext(null);
 
@@ -26,15 +27,24 @@ export function useAdminResource(loader) {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
       const data = await loader();
-      if (mounted.current) setState({ data, loading: false, error: '', lastUpdated: new Date() });
+      if (mounted.current) {
+        const timestamp = new Date();
+        setState({ data, loading: false, error: '', lastUpdated: timestamp });
+        window.dispatchEvent(new CustomEvent(ADMIN_RESOURCE_UPDATED_EVENT, { detail: { timestamp: timestamp.getTime() } }));
+      }
     } catch (error) {
       if (mounted.current) setState((current) => ({ ...current, loading: false, error: error.message || 'Request failed.' }));
     }
   }, [loader]);
   useEffect(() => {
     mounted.current = true;
+    const handleRefresh = () => { retry(); };
+    window.addEventListener(ADMIN_REFRESH_EVENT, handleRefresh);
     retry();
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+      window.removeEventListener(ADMIN_REFRESH_EVENT, handleRefresh);
+    };
   }, [retry]);
   return { ...state, retry };
 }
@@ -42,18 +52,9 @@ export function useAdminResource(loader) {
 export function AdminResource({ resource, children, empty, label = 'data' }) {
   const t = useAdminAiCopy();
   if (resource.loading && !resource.data) return <div className="admin-ai-resource-state" role="status"><LoaderCircle className="spin" size={18} /><span>{t('common.loading', { label })}</span></div>;
-  if (resource.error && !resource.data) return <div className="admin-ai-resource-state is-error" role="alert"><AlertCircle size={18} /><b>{t('common.loadFailed')}</b><span>{resource.error}</span><button type="button" onClick={resource.retry}><RefreshCw size={14} /> {t('common.retry')}</button></div>;
+  if (resource.error && !resource.data) return <div className="admin-ai-resource-state is-error" role="alert"><AlertCircle size={18} /><b>{t('common.loadFailed')}</b><span>{resource.error}</span><button type="button" onClick={resource.retry}>{t('common.retry')}</button></div>;
   if (!resource.data) return empty || null;
   return <>{resource.error && <div className="admin-ai-inline-error" role="alert"><AlertCircle size={14} /><span>{resource.error}</span><button type="button" onClick={resource.retry}>{t('common.retry')}</button></div>}{children(resource.data)}</>;
-}
-
-export function ResourceMeta({ resource }) {
-  const t = useAdminAiCopy();
-  return <div className="admin-ai-resource-meta" role="status" aria-live="polite">
-    <Clock3 size={13} />
-    <span>{resource.lastUpdated ? t('common.updatedAt', { time: resource.lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }) : t('common.neverUpdated')}</span>
-    <button type="button" onClick={resource.retry} disabled={resource.loading} aria-label={t('common.reload')}><RefreshCw className={resource.loading ? 'spin' : ''} size={13} /></button>
-  </div>;
 }
 
 export function StatusPill({ value = 'unknown' }) {
@@ -66,9 +67,9 @@ export function EmptyState({ title, description }) {
   return <div className="admin-ai-empty"><CheckCircle2 size={20} /><b>{title}</b><span>{description}</span></div>;
 }
 
-export function PageIntro({ eyebrow, title, description, actions, resource }) {
+export function PageIntro({ eyebrow, title, description, actions }) {
   const t = useAdminAiCopy();
-  return <header className="admin-ai-page-intro"><div><p>{eyebrow || t('common.controlPlane')}</p><h1>{title}</h1><span>{description}</span></div><div className="admin-ai-page-actions">{resource && <ResourceMeta resource={resource} />}{actions}</div></header>;
+  return <header className="admin-ai-page-intro"><div><p>{eyebrow || t('common.controlPlane')}</p><h1>{title}</h1><span>{description}</span></div><div className="admin-ai-page-actions">{actions}</div></header>;
 }
 
 export function AdminAiPagination({ cursor = '', nextCursor = '', previousCursor = '', page: pageOverride, onNext, onPrevious, limit = 25 }) {
@@ -76,6 +77,7 @@ export function AdminAiPagination({ cursor = '', nextCursor = '', previousCursor
   const offset = Number.parseInt(cursor || '0', 10) || 0;
   const page = pageOverride || Math.floor(offset / limit) + 1;
   const canPrevious = Boolean(previousCursor) || page > 1 || offset > 0;
+  if (!canPrevious && !nextCursor) return null;
   return <div className="admin-ai-pagination" aria-label="Pagination"><button type="button" aria-label={t('common.previous')} title={t('common.previous')} disabled={!canPrevious} onClick={onPrevious}><ArrowLeft size={16} /></button><span aria-label={t('common.page', { page })}>{page}</span><button type="button" aria-label={t('common.next')} title={t('common.next')} disabled={!nextCursor} onClick={onNext}><ArrowRight size={16} /></button></div>;
 }
 

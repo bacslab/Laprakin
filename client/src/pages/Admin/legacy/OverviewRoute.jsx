@@ -32,13 +32,6 @@ export default function OverviewRoute() {
       { label: t('admin.console.monitoring.successRate'), value: `${successRate}%` },
     ];
     return <section className="admin-monitoring-dashboard">
-      <header className="admin-monitoring-hero">
-        <div className="admin-monitoring-hero-copy">
-          <span className="admin-monitoring-eyebrow"><span className="admin-live-dot" /> {t('admin.console.adminConsole')}</span>
-          <h2>{t('admin.console.monitoring.title')}</h2>
-          <p>{t('admin.console.monitoring.description')}</p>
-        </div>
-      </header>
       <div className="admin-monitoring-kpis" aria-label={t('admin.console.monitoring.summary')}>
         {metrics.map(({ label, value }) => <article className="admin-monitoring-kpi" key={label}><div className="admin-monitoring-kpi-top"><span>{label}</span></div><strong>{value}</strong><small>{t('admin.console.monitoring.period', { days: filters.days })}</small></article>)}
       </div>

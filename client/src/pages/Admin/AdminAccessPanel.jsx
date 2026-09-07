@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CreditCard, Eye, EyeOff, Shield } from 'lucide-react';
+import { CreditCard, Eye, EyeOff, Shield } from '../../icons';
 import { api } from '../../api';
 import { formatDate } from '../../lib/formatters';
 import { Button } from '../../components/Button';
 import { CustomSelect } from '../../components/CustomSelect';
 import { useI18n } from '../../i18n/context';
+import AdminUserSearch from './AdminUserSearch';
+import { filterAdminUsers } from './user-search';
 
 const REASON_OPTIONS = [
   { value: 'support_case', labelKey: 'supportCase' },
@@ -26,7 +28,9 @@ export default function AdminAccessPanel({ users, capabilities = [], selectedUse
   const [content, setContent] = useState(null);
   const [clock, setClock] = useState(Date.now());
   const [busy, setBusy] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
   const selected = users.find((item) => item.id === selectedId);
+  const visibleUsers = filterAdminUsers(users, userSearch, selectedId);
   const canRevealPii = capabilities.includes('users.pii.reveal');
   const canRevealContent = capabilities.includes('users.content.reveal');
   const canManageBilling = capabilities.includes('billing.manage');
@@ -122,7 +126,7 @@ export default function AdminAccessPanel({ users, capabilities = [], selectedUse
   const remaining = (expiresAt) => Math.max(0, Math.ceil((Date.parse(expiresAt) - clock) / 1_000));
 
   return <section className="admin-content admin-access-layout admin-access-page">
-    <section className="admin-panel admin-user-picker"><div className="admin-panel-head"><h2>{t('admin.console.access.user')}</h2><small>{t('admin.console.access.accountCount', { count: users.length })}</small></div><div className="admin-list">{users.map((item) => <button type="button" key={item.id} className={selectedId === item.id ? 'active' : ''} onClick={() => { setSelectedId(item.id); onSelectUser?.(item.id); }}><div><b>{item.userRef}</b><small>{item.plan} · {item.emailVerified ? t('admin.console.access.verified') : t('admin.console.access.unverified')}</small></div><span>{item.restrictionCount ? t('admin.console.access.restrictionCount', { count: item.restrictionCount }) : t('admin.console.access.roomCount', { count: item.roomCount })}</span></button>)}</div></section>
+    <section className="admin-panel admin-user-picker"><div className="admin-panel-head"><h2>{t('admin.console.access.user')}</h2><small>{t('admin.console.access.accountCount', { count: users.length })}</small></div><AdminUserSearch value={userSearch} onChange={setUserSearch} label={t('admin.console.list.search')} placeholder={t('admin.console.list.searchPlaceholder')} /><div className="admin-list">{visibleUsers.map((item) => <button type="button" key={item.id} className={selectedId === item.id ? 'active' : ''} onClick={() => { setSelectedId(item.id); onSelectUser?.(item.id); }}><div><b>{item.userRef}</b><small>{item.plan} · {item.emailVerified ? t('admin.console.access.verified') : t('admin.console.access.unverified')}</small></div><span>{item.restrictionCount ? t('admin.console.access.restrictionCount', { count: item.restrictionCount }) : t('admin.console.access.roomCount', { count: item.roomCount })}</span></button>)}{!visibleUsers.length && <p className="admin-user-search-empty">{t('admin.console.list.noResults')}</p>}</div></section>
     <div className="admin-access-detail">
       <section className="admin-panel"><div className="admin-panel-head"><div><h2>{selected?.userRef || t('admin.console.access.chooseUser')}</h2><small>{selected ? t('admin.console.access.planDetails', { messages: selected.messageCount, tokens: Number(selected.totalTokens || 0).toLocaleString('id-ID') }) : ''}</small></div></div>{selected && <>{canManageBilling && <div className="admin-plan-control"><label htmlFor="admin-plan-key">{t('admin.console.access.plan')}<CustomSelect id="admin-plan-key" ariaLabel={t('admin.console.access.planAria')} value={planForm.planKey} onChange={(planKey) => setPlanForm((value) => ({ ...value, planKey }))} options={[{value:'free',label:t('admin.console.access.free')},{value:'monthly',label:t('admin.console.access.pro')},{value:'pro',label:t('admin.console.access.max')}]} /></label>{planForm.planKey !== 'free' && <label>{t('admin.console.access.duration')}<input aria-label={t('admin.console.access.duration')} type="number" min="1" max="3650" value={planForm.durationDays} onChange={(event) => setPlanForm((value) => ({ ...value, durationDays: event.target.value }))}/><small>{t('admin.console.access.days')}</small></label>}<Button onClick={changePlan} disabled={busy}><CreditCard size={14}/>{t('admin.console.access.changePlan')}</Button><span>{t('admin.console.access.currentPlan')}: <b>{selected.plan}</b></span></div>}{canRestrict && <div className="admin-restriction-form"><label htmlFor="admin-restriction-target">{t('admin.console.access.restrictionType')}<CustomSelect id="admin-restriction-target" ariaLabel={t('admin.console.access.restrictionAria')} value={form.targetType} onChange={(targetType) => setForm((value) => ({ ...value, targetType }))} options={[{value:'account',label:t('admin.console.access.suspendAccount')},{value:'device',label:t('admin.console.access.blockDevice')},{value:'ip',label:t('admin.console.access.blockNetwork')}]} /></label><label className="admin-permanent-check"><input aria-label={t('admin.console.access.permanent')} type="checkbox" checked={form.permanent} onChange={(event) => setForm((value) => ({ ...value, permanent: event.target.checked }))}/><span>{t('admin.console.access.permanent')}</span></label>{!form.permanent && <label>{t('admin.console.access.duration')}<input aria-label={t('admin.console.access.durationAria')} type="number" min="1" max="3650" value={form.durationDays} onChange={(event) => setForm((value) => ({ ...value, durationDays: event.target.value }))}/></label>}<label className="admin-form-wide">{t('admin.console.access.reason')}<textarea aria-label={t('admin.console.access.reasonAria')} maxLength="280" value={form.reason} onChange={(event) => setForm((value) => ({ ...value, reason: event.target.value }))} placeholder={t('admin.console.access.reasonPlaceholder')}/></label><Button onClick={createRestriction} disabled={busy || form.reason.trim().length < 8}><Shield size={14}/>{t('admin.console.access.apply')}</Button></div>}</>}</section>
 

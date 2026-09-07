@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { Activity, Bot, History, LogOut, Moon, Network, ServerCog, Sun } from 'lucide-react';
+import { Activity, Bot, History, LogOut, Moon, Network, ServerCog, Sun } from '../../../icons';
 import { api } from '../../../api';
 import { BrandMark } from '../../../components/BrandMark';
 import { ADMIN_AI_PATHS, adminAiAffordances, createAdminAiClient } from '../../../lib/admin-ai';

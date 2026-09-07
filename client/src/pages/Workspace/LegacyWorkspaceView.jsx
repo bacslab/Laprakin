@@ -6,7 +6,7 @@ import {
   Bell, ChevronRight, CircleAlert, FolderKanban, FolderOpen, HelpCircle, LayoutTemplate, Menu, MessageCircle,
   Moon, Monitor, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Save, Search, Settings2,
   SlidersHorizontal, Sun, X,
-} from 'lucide-react';
+} from '../../icons';
 import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/Button';
 import { CustomSelect } from '../../components/CustomSelect';

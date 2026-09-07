@@ -15,6 +15,7 @@ const [overview, charts, shared, broadcasts, providers, models, changes, health,
   read('../src/pages/Admin/ai/RoutingModule.jsx'),
   read('../src/styles/admin-overhaul.css'),
 ]);
+const legacyWorkspace = await read('../src/pages/Admin/LegacyAdminWorkspace.jsx');
 const credits = await read('../src/pages/Admin/legacy/CreditsRoute.jsx');
 const pricing = await read('../src/pages/Admin/AdminPricingPanel.jsx');
 const alerts = await read('../src/pages/Admin/legacy/AlertsRoute.jsx');
@@ -51,6 +52,19 @@ test('inline page search is removed in favor of global admin search', () => {
   assert.match(styles, /admin-global-search-trigger/);
 });
 
+test('global admin refresh is a single header control with a time-only status', () => {
+  assert.match(legacyWorkspace, /admin-global-refresh/);
+  assert.match(shared, /admin:refresh/);
+  assert.match(legacyWorkspace, /Ctrl\+Alt\+R/);
+  assert.doesNotMatch(shared, /admin-route-status/);
+  assert.doesNotMatch(shared, /formatDate\(resource\.lastUpdated\)/);
+});
+
+test('list pagination only appears when another page exists', () => {
+  assert.match(shared, /const showPagination = Boolean\(pageInfo\?\.nextCursor \|\| cursor > 0\)/);
+  assert.match(shared, /if \(!hasFilters && !showPagination\) return null/);
+});
+
 test('legacy Admin surfaces inherit the Monitoring scale tokens', () => {
   assert.match(styles, /--admin-ui-font-size/);
   assert.match(styles, /--admin-ui-content-max/);
@@ -77,7 +91,7 @@ test('Harga dan diskon keeps plan editing controls at the Monitoring scale', () 
 test('Error realtime keeps alert rows and actions readable at the Monitoring scale', () => {
   assert.match(alerts, /admin-alerts-page/);
   assert.match(styles, /\.admin-alerts-page[^\{]*\{[^}]*padding-top:\s*22px/s);
-  assert.match(styles, /\.admin-alerts-page \.admin-alert-list\s*>\s*article[^\{]*\{[^}]*padding:\s*16px\s+0/s);
+  assert.match(styles, /\.admin-alerts-page \.admin-alert-list\s*>\s*article[^\{]*\{[^}]*padding:\s*16px\s+0\s+16px\s+18px/s);
   assert.match(styles, /\.admin-alerts-page \.admin-alert-list b[^\{]*\{[^}]*font-size:\s*\.9rem/s);
   assert.match(styles, /\.admin-alerts-page \.admin-alert-list \.admin-actions button[^\{]*\{[^}]*min-height:\s*40px/s);
 });

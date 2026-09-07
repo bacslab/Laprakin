@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CircleAlert, Pencil, Trash2, X } from 'lucide-react';
+import { CircleAlert, Pencil, Trash2, X } from '../icons';
 import { useFocusReturn } from '../hooks/useFocusReturn';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { IconButton } from './IconButton';

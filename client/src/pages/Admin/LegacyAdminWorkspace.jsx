@@ -1,8 +1,9 @@
+import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from '../../router';
 import {
   AlertTriangle, BellRing, ClipboardList, CreditCard, FileCog, LayoutDashboard, LogOut, Mail,
-  Megaphone, MessageCircle, MessageSquareText, Moon, Shield, Sparkles, Sun,
-} from 'lucide-react';
+  Megaphone, MessageCircle, MessageSquareText, Moon, RefreshCw, Shield, Sparkles, Sun,
+} from '../../icons';
 import { api } from '../../api';
 import { BrandMark } from '../../components/BrandMark';
 import NotFoundPage from '../../components/NotFoundPage';
@@ -13,6 +14,7 @@ import { useI18n } from '../../i18n/context';
 import AdminLegacyRoutes from './AdminLegacyRoutes';
 import AdminGlobalSearch from './AdminGlobalSearch';
 import AdminAiWorkspace from './ai/AdminAiWorkspace';
+import { ADMIN_REFRESH_EVENT, ADMIN_RESOURCE_UPDATED_EVENT } from './legacy/shared';
 
 // Keep the locale contract for admin.console.privacyDescription; Monitoring intentionally renders no privacy badge.
 export default function LegacyAdminWorkspace() {
@@ -22,6 +24,31 @@ export default function LegacyAdminWorkspace() {
   const location = useLocation();
   const adminTheme = useResolvedTheme(prefs.theme || 'system');
   const setAdminTheme = (next) => setPrefs((value) => ({ ...value, theme: typeof next === 'function' ? next(resolveTheme(value.theme || 'system')) : next }));
+  const [globalRefreshAt, setGlobalRefreshAt] = useState(() => Date.now());
+  const [globalRefreshing, setGlobalRefreshing] = useState(false);
+  const triggerGlobalRefresh = useCallback(() => {
+    setGlobalRefreshing(true);
+    window.dispatchEvent(new Event(ADMIN_REFRESH_EVENT));
+    window.setTimeout(() => setGlobalRefreshing(false), 1200);
+  }, []);
+  useEffect(() => {
+    const handleUpdated = (event) => {
+      setGlobalRefreshAt(event.detail?.timestamp || Date.now());
+      setGlobalRefreshing(false);
+    };
+    window.addEventListener(ADMIN_RESOURCE_UPDATED_EVENT, handleUpdated);
+    return () => window.removeEventListener(ADMIN_RESOURCE_UPDATED_EVENT, handleUpdated);
+  }, []);
+  useEffect(() => {
+    const handleShortcut = (event) => {
+      if (event.ctrlKey && event.altKey && event.key.toLowerCase() === 'r') {
+        event.preventDefault();
+        triggerGlobalRefresh();
+      }
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [triggerGlobalRefresh]);
   const tabs = [
     ['overview', t('admin.console.tabs.overview'), LayoutDashboard],
     ['ai', t('admin.console.tabs.ai'), Sparkles],
@@ -44,7 +71,8 @@ export default function LegacyAdminWorkspace() {
   const isAi = normalizedPath === '/admin/ai'
     || Object.values(ADMIN_AI_PATHS).includes(normalizedPath)
     || normalizedPath.startsWith(`${ADMIN_AI_PATHS.providers}/`);
-  const isKnownLegacy = normalizedPath === '/admin' || tabs.some(([key]) => key !== 'ai' && legacyAdminPath(key) === normalizedPath);
+  const isUsersDetail = normalizedPath.startsWith(`${legacyAdminPath('users')}/`);
+  const isKnownLegacy = normalizedPath === '/admin' || isUsersDetail || tabs.some(([key]) => key !== 'ai' && legacyAdminPath(key) === normalizedPath);
   if (!isAi && !isKnownLegacy) return <NotFoundPage title="Halaman admin tidak ditemukan." description="Menu admin ini tidak tersedia atau alamatnya sudah berubah." />;
   const tab = isAi ? 'ai' : requestedTab;
   const tabGroups = [
@@ -64,7 +92,7 @@ export default function LegacyAdminWorkspace() {
       <div className="admin-sidebar-foot"><div><span>{(user.email || 'A').slice(0, 1).toUpperCase()}</span><small>{user.email}</small></div><button onClick={async () => { await api('/auth/logout', { method: 'POST', body: {} }); await refreshSession(); navigate('/'); }}><LogOut size={15}/>{t('admin.console.logout')}</button></div>
     </aside>
     <main className="admin-main">
-      <header className="admin-header"><div><p>{t('admin.console.adminConsole')}</p><h1>{tabs.find(([key]) => key === tab)?.[1]}</h1></div><div className="admin-header-actions"><AdminGlobalSearch t={t} navigate={navigate}/><button className="admin-theme-toggle" onClick={() => setAdminTheme((value) => value === 'dark' ? 'light' : 'dark')} title={t('admin.console.adminTheme')} aria-label={t('admin.console.adminTheme')}>{adminTheme === 'dark' ? <Sun size={15}/> : <Moon size={15}/>}</button></div></header>
+      <header className="admin-header"><div><p>{t('admin.console.adminConsole')}</p><h1>{tabs.find(([key]) => key === tab)?.[1]}</h1></div><div className="admin-header-actions"><AdminGlobalSearch t={t} navigate={navigate}/><div className="admin-refresh-cluster"><time dateTime={new Date(globalRefreshAt).toISOString()}>{new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(globalRefreshAt)).replace(':', '.')}</time><button type="button" className="admin-global-refresh" onClick={triggerGlobalRefresh} disabled={globalRefreshing} aria-label={t('admin.console.reload')} title={`${t('admin.console.reload')} · Ctrl+Alt+R`}><RefreshCw className={globalRefreshing ? 'spin' : ''} size={16}/></button></div><button className="admin-theme-toggle" onClick={() => setAdminTheme((value) => value === 'dark' ? 'light' : 'dark')} title={t('admin.console.adminTheme')} aria-label={t('admin.console.adminTheme')}>{adminTheme === 'dark' ? <Sun size={15}/> : <Moon size={15}/>}</button></div></header>
       {isAi ? <AdminAiWorkspace embedded /> : <AdminLegacyRoutes tab={tab} setNotice={setNotice}/>}
     </main>
   </div>;

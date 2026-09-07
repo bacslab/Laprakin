@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from '../icons';
 
 export function CustomSelect({ value, onChange, options, className = '', disabled = false, ariaLabel = 'Pilih opsi', id }) {
   const [open, setOpen] = useState(false);

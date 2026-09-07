@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { AlertOctagon, CheckCircle2, FlaskConical, History, Play, RotateCcw, ShieldCheck } from 'lucide-react';
+import { AlertOctagon, CheckCircle2, FlaskConical, History, Play, RotateCcw, ShieldCheck } from '../../../icons';
 import CustomSelect from '../../../components/CustomSelect';
 import { useLocation, useNavigate } from '../../../router';
 import { ADMIN_AI_PATHS } from '../../../lib/admin-ai';

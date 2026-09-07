@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from '../../icons';
 
 import { api, setCsrfToken } from '../../api';
 import { Button } from '../../components/Button';

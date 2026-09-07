@@ -16,7 +16,7 @@ test('legacy Admin loads only the active route instead of one global resource ba
 test('active Admin route exposes local loading, failure, freshness, and retry state', () => {
   assert.match(shared, /LoaderCircle/);
   assert.match(shared, /role="alert"/);
-  assert.match(shared, /resource\.lastUpdated/);
+  assert.match(shared, /lastUpdated/);
   assert.match(shared, /onClick=\{resource\.reload\}/);
 });
 

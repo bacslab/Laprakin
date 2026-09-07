@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, Upload } from 'lucide-react';
+import { Trash2, Upload } from '../icons';
 import { api } from '../api';
 import { Button } from './Button';
 import { useI18n } from '../i18n/context';

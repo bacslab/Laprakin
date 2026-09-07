@@ -1,4 +1,4 @@
-import { LoaderCircle } from 'lucide-react';
+import { LoaderCircle } from '../icons';
 import { useI18n } from '../i18n/context';
 
 export default function LoadingScreen() {

@@ -14,11 +14,20 @@ export default function UsersRoute({ setNotice }) {
   const selectedUserId = decodeURIComponent(location.pathname.split('/').filter(Boolean)[2] || '');
   const [query, setQuery] = useAdminListQuery('/admin/users', { limit: 25 });
   const load = useCallback(async () => {
-    const [userData, capabilityData] = await Promise.all([
-      api(adminListApiPath('/admin/users', query, { userId: selectedUserId })),
+    // Selecting a user controls the detail pane; it must never turn the
+    // picker into a single-user filter. Keep the list request scoped only by
+    // the visible search/pagination controls, and fetch the selected record
+    // separately only when it is outside the current page.
+    const [userData, selectedData, capabilityData] = await Promise.all([
+      api(adminListApiPath('/admin/users', query)),
+      selectedUserId ? api(adminListApiPath('/admin/users', { limit: 1 }, { userId: selectedUserId })) : Promise.resolve(null),
       api('/admin/capabilities'),
     ]);
-    return { ...userData, capabilities: capabilityData.capabilities || [] };
+    const selected = selectedData?.users?.[0];
+    const users = selected && !userData.users.some((item) => item.id === selected.id)
+      ? [selected, ...userData.users]
+      : userData.users;
+    return { ...userData, users, capabilities: capabilityData.capabilities || [] };
   }, [query.q, query.cursor, query.limit, selectedUserId]);
   const resource = useAdminRouteResource(load, { events: ['credit'] });
   const selectUser = (id) => navigate(`${id ? `/admin/users/${encodeURIComponent(id)}` : '/admin/users'}${location.search}`);

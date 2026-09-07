@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, X } from '../../icons';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
 import { useI18n } from '../../i18n/context';

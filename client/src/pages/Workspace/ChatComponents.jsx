@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, CodeXml, Copy, FileText, History, LoaderCircle, Pencil, RefreshCw, Share2, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, CodeXml, Copy, FileText, History, LoaderCircle, Pencil, RefreshCw, Share2, Sparkles, ThumbsDown, ThumbsUp, X } from '../../icons';
 import { Button } from '../../components/Button';
 import { useI18n } from '../../i18n/context';
 import { useApp } from '../../state/ui-context';

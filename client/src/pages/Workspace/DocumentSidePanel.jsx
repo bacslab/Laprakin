@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, CircleAlert, LoaderCircle, MessageCircle, X } from 'lucide-react';
+import { ArrowDownToLine, CircleAlert, LoaderCircle, MessageCircle, X } from '../../icons';
 import { renderAsync as renderDocx } from 'docx-preview';
 import { CustomSelect } from '../../components/CustomSelect';
 import { IconButton } from '../../components/IconButton';

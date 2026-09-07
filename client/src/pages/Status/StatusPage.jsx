@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, CircleAlert, LoaderCircle, RefreshCw } from 'lucide-react';
+import { CheckCircle2, CircleAlert, LoaderCircle, RefreshCw } from '../../icons';
 import { Link } from '../../router';
 import { api } from '../../api';
 import { useI18n } from '../../i18n/context';

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, LoaderCircle, Upload, UserRound } from 'lucide-react';
+import { ArrowRight, LoaderCircle, Upload, UserRound } from '../../icons';
 import { api } from '../../api';
 import { Button } from '../../components/Button';
 import { INSTITUTION_LOGO_MAX_BYTES } from '../../components/InstitutionLogoField';

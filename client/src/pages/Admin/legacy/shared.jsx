@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, ArrowLeft, ArrowRight, LoaderCircle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, LoaderCircle } from '../../../icons';
 import { Button } from '../../../components/Button';
 import CustomSelect from '../../../components/CustomSelect';
-import { formatDate } from '../../../lib/formatters';
 import { useI18n } from '../../../i18n/context';
+
+export const ADMIN_REFRESH_EVENT = 'admin:refresh';
+export const ADMIN_RESOURCE_UPDATED_EVENT = 'admin:resource-updated';
 
 export function useAdminRouteResource(load, { events = [] } = {}) {
   const [resource, setResource] = useState({ data: null, loading: true, error: '', lastUpdated: null });
@@ -11,7 +13,9 @@ export function useAdminRouteResource(load, { events = [] } = {}) {
     setResource((current) => ({ ...current, loading: true, error: '' }));
     try {
       const data = await load();
-      setResource({ data, loading: false, error: '', lastUpdated: Date.now() });
+      const timestamp = Date.now();
+      setResource({ data, loading: false, error: '', lastUpdated: timestamp });
+      window.dispatchEvent(new CustomEvent(ADMIN_RESOURCE_UPDATED_EVENT, { detail: { timestamp } }));
       return data;
     } catch (error) {
       setResource((current) => ({ ...current, loading: false, error: error.message || String(error) }));
@@ -20,6 +24,11 @@ export function useAdminRouteResource(load, { events = [] } = {}) {
   }, [load]);
 
   useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    const handleRefresh = () => { reload(); };
+    window.addEventListener(ADMIN_REFRESH_EVENT, handleRefresh);
+    return () => window.removeEventListener(ADMIN_REFRESH_EVENT, handleRefresh);
+  }, [reload]);
   useEffect(() => {
     if (!events.length) return undefined;
     const stream = new EventSource('/api/admin/events');
@@ -39,10 +48,7 @@ export function AdminRouteState({ resource, children }) {
     return <div className="admin-loading-state" role="alert"><AlertTriangle size={20}/><b>{t('admin.console.loadFailed')}</b><span>{resource.error}</span><Button variant="secondary" onClick={resource.reload}>{t('admin.console.retry')}</Button></div>;
   }
   return <>
-    <div className="admin-route-status">
-      {resource.error ? <span role="alert">{resource.error}</span> : <span>{t('admin.console.lastUpdated', { date: formatDate(resource.lastUpdated) })}</span>}
-      <Button variant="secondary" onClick={resource.reload} disabled={resource.loading}><RefreshCw className={resource.loading ? 'spin' : ''} size={14}/>{t('admin.console.reload')}</Button>
-    </div>
+    {resource.error && <div className="admin-route-error" role="alert"><AlertTriangle size={15}/><span>{resource.error}</span><Button variant="secondary" onClick={resource.reload}>{t('admin.console.retry')}</Button></div>}
     {children(resource.data, resource)}
   </>;
 }
@@ -50,9 +56,12 @@ export function AdminRouteState({ resource, children }) {
 export function AdminListControls({ query, setQuery, pageInfo, statuses = [], extra = null }) {
   const { t } = useI18n();
   const cursor = Number.parseInt(query.cursor || '0', 10) || 0;
+  const showPagination = Boolean(pageInfo?.nextCursor || cursor > 0);
+  const hasFilters = statuses.length > 0 || Boolean(extra);
+  if (!hasFilters && !showPagination) return null;
   return <div className="admin-list-controls">
     {statuses.length > 0 && <label>{t('admin.console.list.status')}<CustomSelect ariaLabel={t('admin.console.list.status')} value={query.status} onChange={(status) => setQuery({ status })} options={statuses.map(({ value, label }) => ({ value, label }))}/></label>}
     {extra}
-    <div className="admin-list-pagination"><button type="button" aria-label={t('admin.console.list.previous')} title={t('admin.console.list.previous')} disabled={cursor <= 0} onClick={() => setQuery({ cursor: String(Math.max(0, cursor - query.limit)) })}><ArrowLeft size={16} /></button><span aria-label={t('admin.console.list.page', { page: Math.floor(cursor / query.limit) + 1 })}>{Math.floor(cursor / query.limit) + 1}</span><button type="button" aria-label={t('admin.console.list.next')} title={t('admin.console.list.next')} disabled={!pageInfo?.nextCursor} onClick={() => setQuery({ cursor: pageInfo.nextCursor })}><ArrowRight size={16} /></button></div>
+    {showPagination && <div className="admin-list-pagination"><button type="button" aria-label={t('admin.console.list.previous')} title={t('admin.console.list.previous')} disabled={cursor <= 0} onClick={() => setQuery({ cursor: String(Math.max(0, cursor - query.limit)) })}><ArrowLeft size={16} /></button><span aria-label={t('admin.console.list.page', { page: Math.floor(cursor / query.limit) + 1 })}>{Math.floor(cursor / query.limit) + 1}</span><button type="button" aria-label={t('admin.console.list.next')} title={t('admin.console.list.next')} disabled={!pageInfo?.nextCursor} onClick={() => setQuery({ cursor: pageInfo.nextCursor })}><ArrowRight size={16} /></button></div>}
   </div>;
 }

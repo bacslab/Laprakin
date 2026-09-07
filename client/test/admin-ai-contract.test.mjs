@@ -48,6 +48,7 @@ test('AI modules load statically so production deep links cannot lose a chunk', 
   assert.match(shared, /role="alert"/);
   assert.match(shared, /role="status"/);
   assert.doesNotMatch(routes, /admin\/(?:cms|users|feedback|audit|overview)/);
+  assert.match(shared, /if \(!canPrevious && !nextCursor\) return null/);
 });
 
 test('admin AI client preserves filter and cursor state at the network boundary', async () => {
@@ -141,6 +142,11 @@ test('legacy admin tabs use paths instead of volatile component state', () => {
   assert.match(legacy, /legacyAdminPath/);
   assert.match(legacy, /t\('admin\.console\.tabs\.ai'\)/);
   assert.doesNotMatch(legacy, /useState\(['"]overview['"]\)/);
+});
+
+test('user access deep links stay inside the legacy admin shell', () => {
+  assert.match(legacy, /isUsersDetail/);
+  assert.match(legacy, /normalizedPath\.startsWith\(`\$\{legacyAdminPath\('users'\)\}\/`\)/);
 });
 
 test('embedded AI controls stay inside the single admin shell with deliberate spacing', async () => {

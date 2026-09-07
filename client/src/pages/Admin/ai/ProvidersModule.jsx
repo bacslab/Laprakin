@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { KeyRound, Plus, ServerCog } from 'lucide-react';
+import { KeyRound, Plus, ServerCog } from '../../../icons';
 import CustomSelect from '../../../components/CustomSelect';
 import { Link, useLocation, useNavigate } from '../../../router';
 import { ADMIN_AI_PATHS } from '../../../lib/admin-ai';

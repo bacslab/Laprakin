@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GitBranchPlus, Plus, Save, Trash2 } from 'lucide-react';
+import { GitBranchPlus, Plus, Save, Trash2 } from '../../../icons';
 import CustomSelect from '../../../components/CustomSelect';
 import { useApp } from '../../../state/ui-context';
 import { AdminResource, EmptyState, PageIntro, StatusPill, useAdminAi, useAdminAiCopy, useAdminResource } from './shared';

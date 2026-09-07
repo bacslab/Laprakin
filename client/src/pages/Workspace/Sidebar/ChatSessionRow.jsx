@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Archive, ChevronRight, FolderOpen, MoreHorizontal, Pencil, Pin, PinOff, Plus, Trash2 } from 'lucide-react';
+import { Archive, ChevronRight, FolderOpen, MoreHorizontal, Pencil, Pin, PinOff, Plus, Trash2 } from '../../../icons';
 import { normalizedCourseKey } from '../../../lib/academic';
 import { useApp } from '../../../state/ui-context';
 import { useI18n } from '../../../i18n/context';

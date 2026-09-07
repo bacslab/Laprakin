@@ -124,9 +124,9 @@
   .auth-card-footer>span { margin-left: auto; color: var(--auth-muted); font-size: .6rem; }
   .auth-page .auth-text-button { display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 2px 0; background: transparent; color: var(--auth-muted); font-size: .64rem; font-weight: 800; text-align: left; transition: color .2s ease; }
   .auth-page .auth-text-button:hover { color: var(--auth-text); }
-  .auth-legal { width: min(390px, calc(100vw - 42px)); margin: 8px 0 0; color: var(--auth-muted); font-size: .6rem; line-height: 1.5; text-align: center; }
-  .auth-legal a { color: var(--auth-text); text-decoration: none; }
-  .auth-legal a:hover { text-decoration: underline; }
+  .auth-legal { width: max-content; margin: 8px 0 0; color: var(--auth-muted); font-size: min(.6rem, calc((100vw - 32px) / 65)); line-height: 1.5; text-align: center; white-space: nowrap; }
+  .auth-legal a { color: #b7ec63; font-weight: 800; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; transition: color .2s ease, text-decoration-thickness .2s ease; }
+  .auth-legal a:hover { color: #e2ff9b; text-decoration-thickness: 2px; }
 
   @media(max-width: 600px) {
     .auth-page { grid-template-rows: 56px minmax(0, 1fr); }
@@ -152,7 +152,7 @@
     body[data-laprakin-theme] .auth-page .auth-form input { height: 36px; }
     .auth-submit { height: 39px; }
     .auth-card-footer>span { display: none; }
-    .auth-legal { margin-top: 4px; font-size: .56rem; }
+    .auth-legal { margin-top: 4px; font-size: min(.56rem, calc((100vw - 32px) / 65)); }
   }
 
   .auth-page .google-logo { width: 18px; height: 18px; flex: 0 0 auto; }
@@ -175,3 +175,7 @@
   .auth-page .auth-text-button { font-size: .64rem; font-weight: 800; }
   .auth-page .auth-form input { font-size: .72rem; font-weight: 500; }
 }
+
+/* Keep legal links above the legacy unlayered form compatibility rules. */
+.auth-page .auth-legal a { color: #b7ec63; font-weight: 800; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; transition: color .2s ease, text-decoration-thickness .2s ease; }
+.auth-page .auth-legal a:hover { color: #e2ff9b; text-decoration-thickness: 2px; }

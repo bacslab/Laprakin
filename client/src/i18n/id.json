@@ -1496,7 +1496,7 @@
       "renderFailed": "Bagian ini mengalami masalah tampilan",
       "lastUpdated": "Terakhir diperbarui: {{date}}",
       "retry": "Coba muat ulang",
-      "list": { "search": "Cari", "searchPlaceholder": "Cari di daftar ini", "recipientSearch": "Cari penerima", "status": "Status", "all": "Semua", "allUsers": "Semua user", "previous": "Sebelumnya", "next": "Berikutnya", "page": "Halaman {{page}}" },
+      "list": { "search": "Cari user", "searchPlaceholder": "Cari user berdasarkan referensi", "recipientSearch": "Cari penerima", "noResults": "Tidak ada user yang cocok", "status": "Status", "all": "Semua", "allUsers": "Semua user", "previous": "Sebelumnya", "next": "Berikutnya", "page": "Halaman {{page}}" },
       "privacyTitle": "Privacy-first monitoring",
       "privacyDescription": "Hanya metadata operasional. Isi chat, dokumen, file, NIM, IP, fingerprint, prompt, dan output AI tidak ditampilkan.",
       "metrics": {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, CheckCircle2, CircleAlert, CreditCard, LoaderCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Check, CheckCircle2, CircleAlert, CreditCard, LoaderCircle, RefreshCw } from '../../icons';
 import { useLocation, useNavigate } from '../../router';
 import { api } from '../../api';
 import { Button } from '../../components/Button';

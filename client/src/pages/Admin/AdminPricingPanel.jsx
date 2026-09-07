@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Save } from 'lucide-react';
+import { Save } from '../../icons';
 import { api } from '../../api';
 import { pricingFallback, pricingFeatures } from '../../data/pricing';
 import { Button } from '../../components/Button';

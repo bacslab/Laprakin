@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { FileCog, RefreshCw } from 'lucide-react';
+import { FileCog, Trash2 } from '../../../icons';
 import { api } from '../../../api';
 import { Button } from '../../../components/Button';
 import { useI18n } from '../../../i18n/context';
@@ -18,5 +18,5 @@ export default function RetentionRoute({ setNotice }) {
       await resource.reload();
     } catch (error) { setNotice(error.message); } finally { setBusy(false); }
   };
-  return <AdminRouteState resource={resource}>{() => <section className="admin-content admin-retention-page"><div className="admin-panel admin-wide retention-panel"><FileCog size={24}/><h2>{t('admin.console.retention.title')}</h2><p>{t('admin.console.retention.description')}</p><Button onClick={run} disabled={busy}><RefreshCw size={14}/>{t('admin.console.retention.run')}</Button></div></section>}</AdminRouteState>;
+  return <AdminRouteState resource={resource}>{() => <section className="admin-content admin-retention-page"><div className="admin-panel admin-wide retention-panel"><FileCog size={24}/><h2>{t('admin.console.retention.title')}</h2><p>{t('admin.console.retention.description')}</p><Button onClick={run} disabled={busy}><Trash2 size={14}/>{t('admin.console.retention.run')}</Button></div></section>}</AdminRouteState>;
 }

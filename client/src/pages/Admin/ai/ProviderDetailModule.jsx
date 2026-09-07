@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ArrowLeft, KeyRound, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, KeyRound, ShieldAlert } from '../../../icons';
 import { Link, useLocation } from '../../../router';
 import { ADMIN_AI_PATHS } from '../../../lib/admin-ai';
 import { useApp } from '../../../state/ui-context';

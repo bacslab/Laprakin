@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, ClipboardList, FileText, GraduationCap, LayoutTemplate, LockKeyhole, Pencil, Plus, Send } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ClipboardList, FileText, GraduationCap, LayoutTemplate, LockKeyhole, Pencil, Plus, Send } from '../../icons';
 import { CustomSelect } from '../../components/CustomSelect';
 import { useI18n } from '../../i18n/context';
 import { localizeAiDataClasses } from '../../lib/ai-consent-labels';

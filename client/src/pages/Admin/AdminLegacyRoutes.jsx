@@ -1,5 +1,5 @@
 import { Component } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from '../../icons';
 import { Button } from '../../components/Button';
 import { useI18n } from '../../i18n/context';
 

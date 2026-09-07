@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Eye, FlaskConical, Plus, Power } from 'lucide-react';
+import { Eye, FlaskConical, Plus, Power } from '../../../icons';
 import CustomSelect from '../../../components/CustomSelect';
 import { useLocation, useNavigate } from '../../../router';
 import { ADMIN_AI_PATHS } from '../../../lib/admin-ai';

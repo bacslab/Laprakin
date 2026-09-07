@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Plus, X } from 'lucide-react';
+import { FileText, Plus, X } from '../../icons';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../../api';
 import { inferPendingAttachmentKind } from '../../lib/attachments';
