@@ -18,5 +18,5 @@ export default function RetentionRoute({ setNotice }) {
       await resource.reload();
     } catch (error) { setNotice(error.message); } finally { setBusy(false); }
   };
-  return <AdminRouteState resource={resource}>{() => <section className="admin-content"><div className="admin-panel admin-wide retention-panel"><FileCog size={24}/><h2>{t('admin.console.retention.title')}</h2><p>{t('admin.console.retention.description')}</p><Button onClick={run} disabled={busy}><RefreshCw size={14}/>{t('admin.console.retention.run')}</Button></div></section>}</AdminRouteState>;
+  return <AdminRouteState resource={resource}>{() => <section className="admin-content admin-retention-page"><div className="admin-panel admin-wide retention-panel"><FileCog size={24}/><h2>{t('admin.console.retention.title')}</h2><p>{t('admin.console.retention.description')}</p><Button onClick={run} disabled={busy}><RefreshCw size={14}/>{t('admin.console.retention.run')}</Button></div></section>}</AdminRouteState>;
 }

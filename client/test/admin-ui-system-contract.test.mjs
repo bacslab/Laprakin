@@ -25,6 +25,7 @@ const accessPanel = await read('../src/pages/Admin/AdminAccessPanel.jsx');
 const appealsPanel = await read('../src/pages/Admin/AdminAppealsPanel.jsx');
 const riskPanel = await read('../src/pages/Admin/AdminLegacyContentPanels.jsx');
 const auditRoute = await read('../src/pages/Admin/legacy/AuditRoute.jsx');
+const retentionRoute = await read('../src/pages/Admin/legacy/RetentionRoute.jsx');
 
 test('monitoring stays focused and uses flat, restrained surfaces', () => {
   assert.doesNotMatch(overview, /Privacy-first monitoring|privacyDescription/i);
@@ -159,4 +160,12 @@ test('Audit log keeps event rows readable at the Monitoring scale', () => {
   assert.match(styles, /\.admin-audit-page \.admin-list\s*>\s*article[^{]*\{[^}]*padding:\s*16px\s+0/s);
   assert.match(styles, /\.admin-audit-page \.admin-list b[^{]*\{[^}]*font-size:\s*\.9rem/s);
   assert.match(styles, /\.admin-audit-page \.admin-list small[^{]*\{[^}]*font-size:\s*\.76rem/s);
+});
+
+test('Retensi keeps the cleanup action and policy copy at the Monitoring scale', () => {
+  assert.match(retentionRoute, /admin-retention-page/);
+  assert.match(styles, /\.admin-retention-page[^{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-retention-page \.retention-panel[^{]*\{[^}]*gap:\s*14px/s);
+  assert.match(styles, /\.admin-retention-page \.retention-panel h2[^{]*\{[^}]*font-size:\s*1\.2rem/s);
+  assert.match(styles, /\.admin-retention-page \.retention-panel > \.button[^{]*\{[^}]*min-height:\s*44px/s);
 });

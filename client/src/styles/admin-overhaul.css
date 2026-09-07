@@ -640,3 +640,10 @@
 .admin-audit-page .admin-list > article { gap: 18px; padding: 16px 0; }
 .admin-audit-page .admin-list b { overflow-wrap: anywhere; font-size: .9rem; }
 .admin-audit-page .admin-list small { margin-top: 5px; font-size: .76rem; }
+
+.admin-retention-page { padding-top: 22px; }
+.admin-retention-page .retention-panel { gap: 14px; padding: 28px; }
+.admin-retention-page .retention-panel svg { width: 28px; height: 28px; }
+.admin-retention-page .retention-panel h2 { font-size: 1.2rem; }
+.admin-retention-page .retention-panel p { max-width: 720px; font-size: .84rem; line-height: 1.6; }
+.admin-retention-page .retention-panel > .button { min-height: 44px; border-radius: 10px; padding: 0 16px; font-size: .85rem; }
