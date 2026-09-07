@@ -546,3 +546,33 @@
 .admin-feedback-page .admin-inline .button { min-height: 44px; border-radius: 10px; padding: 0 16px; font-size: .85rem; }
 .admin-feedback-page .admin-actions { min-width: 160px; }
 .admin-feedback-page .admin-actions .select-trigger { min-height: 44px; border-radius: 10px; font-size: .84rem; }
+
+.admin-cms-page { padding-top: 22px; }
+.admin-cms-page > .admin-panel { gap: 18px; }
+.admin-cms-page .cms-form { gap: 18px; padding-top: 18px; }
+.admin-cms-page .cms-form > label { gap: 7px; font-size: .8rem; font-weight: 700; }
+.admin-cms-page .cms-form > label input,
+.admin-cms-page .cms-form > label textarea { min-height: 44px; border-radius: 10px; padding: 10px 12px; font-size: .86rem; }
+.admin-cms-page .cms-copy-section { gap: 18px; padding: 18px; border-radius: 14px; }
+.admin-cms-page .cms-copy-section > div:first-child { gap: 5px; }
+.admin-cms-page .cms-copy-section > div:first-child b { font-size: .95rem; }
+.admin-cms-page .cms-copy-section > div:first-child small { font-size: .76rem; line-height: 1.5; }
+.admin-cms-page .cms-copy-grid { gap: 16px; }
+.admin-cms-page .cms-copy-grid label { gap: 7px; font-size: .78rem; font-weight: 700; }
+.admin-cms-page .cms-copy-grid input,
+.admin-cms-page .cms-copy-grid textarea { min-height: 44px; border-radius: 10px; padding: 10px 12px; font-size: .86rem; }
+.admin-cms-page .cms-copy-grid textarea { min-height: 112px; line-height: 1.55; }
+.admin-cms-page .cms-media-grid-expanded { gap: 16px; }
+.admin-cms-page .cms-media-card:last-child { grid-column: 1 / -1; }
+.admin-cms-page .cms-media-card { min-height: 320px; gap: 12px; padding: 18px; border-radius: 14px; }
+.admin-cms-page .cms-media-card b { font-size: .9rem; }
+.admin-cms-page .cms-media-card small { font-size: .72rem; line-height: 1.5; }
+.admin-cms-page .cms-media-preview { height: 128px; border-radius: 10px; font-size: .72rem; }
+.admin-cms-page .cms-media-card input { min-height: 44px; border-radius: 10px; padding: 10px 12px; font-size: .76rem; }
+.admin-cms-page .cms-testimonials { gap: 14px; }
+.admin-cms-page .cms-testimonials > b { font-size: .95rem; }
+.admin-cms-page .cms-testimonials > article { gap: 18px; border-radius: 12px; padding: 16px; }
+.admin-cms-page .cms-testimonials > article b { font-size: .88rem; }
+.admin-cms-page .cms-testimonials > article small,
+.admin-cms-page .cms-testimonials > article p { font-size: .76rem; line-height: 1.55; }
+.admin-cms-page > .admin-panel > .cms-form > .button { min-height: 44px; border-radius: 10px; padding: 0 16px; font-size: .85rem; }

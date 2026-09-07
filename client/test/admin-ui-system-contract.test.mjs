@@ -112,3 +112,13 @@ test('Feedback keeps reply controls and status actions at the Monitoring scale',
   assert.match(styles, /\.admin-feedback-page \.admin-inline \.button[^{]*\{[^}]*min-height:\s*44px/s);
   assert.match(styles, /\.admin-feedback-page \.admin-actions \.select-trigger[^{]*\{[^}]*min-height:\s*44px/s);
 });
+
+test('Landing CMS keeps copy fields and media cards at the Monitoring scale', () => {
+  assert.match(integrations, /admin-cms-page/);
+  assert.match(styles, /\.admin-cms-page[^{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-cms-page \.cms-copy-grid input[^{]*\{[^}]*min-height:\s*44px/s);
+  assert.match(styles, /\.admin-cms-page \.cms-copy-grid textarea[^{]*\{[^}]*min-height:\s*112px/s);
+  assert.match(styles, /\.admin-cms-page \.cms-media-card[^{]*\{[^}]*min-height:\s*320px/s);
+  assert.match(styles, /\.admin-cms-page \.cms-media-preview[^{]*\{[^}]*height:\s*128px/s);
+  assert.match(styles, /\.admin-cms-page > \.admin-panel > \.cms-form > \.button[^{]*\{[^}]*min-height:\s*44px/s);
+});
