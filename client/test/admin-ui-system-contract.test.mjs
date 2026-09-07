@@ -17,6 +17,7 @@ const [overview, charts, shared, broadcasts, providers, models, changes, health,
 ]);
 const credits = await read('../src/pages/Admin/legacy/CreditsRoute.jsx');
 const pricing = await read('../src/pages/Admin/AdminPricingPanel.jsx');
+const alerts = await read('../src/pages/Admin/legacy/AlertsRoute.jsx');
 
 test('monitoring stays focused and uses flat, restrained surfaces', () => {
   assert.doesNotMatch(overview, /Privacy-first monitoring|privacyDescription/i);
@@ -63,4 +64,12 @@ test('Harga dan diskon keeps plan editing controls at the Monitoring scale', () 
   assert.match(styles, /\.admin-pricing-page \.admin-pricing-grid input[^\{]*\{[^}]*min-height:\s*44px/s);
   assert.match(styles, /\.admin-pricing-page \.admin-pricing-grid textarea[^\{]*\{[^}]*min-height:\s*112px/s);
   assert.match(styles, /\.admin-pricing-page \.admin-pricing-grid label[^\{]*\{[^}]*font-size:\s*\.8rem/s);
+});
+
+test('Error realtime keeps alert rows and actions readable at the Monitoring scale', () => {
+  assert.match(alerts, /admin-alerts-page/);
+  assert.match(styles, /\.admin-alerts-page[^\{]*\{[^}]*padding-top:\s*22px/s);
+  assert.match(styles, /\.admin-alerts-page \.admin-alert-list\s*>\s*article[^\{]*\{[^}]*padding:\s*16px\s+0/s);
+  assert.match(styles, /\.admin-alerts-page \.admin-alert-list b[^\{]*\{[^}]*font-size:\s*\.9rem/s);
+  assert.match(styles, /\.admin-alerts-page \.admin-alert-list \.admin-actions button[^\{]*\{[^}]*min-height:\s*40px/s);
 });
