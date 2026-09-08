@@ -123,6 +123,14 @@ try {
   await page.goto(`${webBase}/pricing`, { waitUntil: 'networkidle' });
   await page.getByRole('heading', { name: 'Choose the plan that fits.', exact: true }).waitFor();
   assert.equal(await page.locator('.pricing-compact-card').count(), 4);
+  const planButtonTypography = await page.locator('.pricing-compact-card > button').first().evaluate((button) => {
+    const style = getComputedStyle(button);
+    return { fontFamily: style.fontFamily, fontSize: parseFloat(style.fontSize), fontWeight: style.fontWeight, lineHeight: parseFloat(style.lineHeight) };
+  });
+  assert.match(planButtonTypography.fontFamily, /Plus Jakarta Sans/i, `Pricing plan button font family drifted: ${JSON.stringify(planButtonTypography)}`);
+  assert.ok(planButtonTypography.fontSize <= 12, `Pricing plan button font size drifted: ${JSON.stringify(planButtonTypography)}`);
+  assert.ok(Number(planButtonTypography.fontWeight) >= 700, `Pricing plan button weight drifted: ${JSON.stringify(planButtonTypography)}`);
+  assert.ok(planButtonTypography.lineHeight <= 14, `Pricing plan button line height drifted: ${JSON.stringify(planButtonTypography)}`);
   assert.equal(await page.locator('[class*="public-pricing-"], [class*="landing-"], [class*="hero-"], [class*="compare-"]').count(), 0);
   await assertNoHorizontalOverflow(page, 'Pricing desktop');
   await page.screenshot({ path: path.join(screenshotDir, 'pricing-desktop.png'), fullPage: true });

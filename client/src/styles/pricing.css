@@ -239,3 +239,15 @@
   .pricing-compact-checkout .button { width:100%; }
 }
 }
+
+/* Keep the compact plan actions aligned with pricing typography. The global
+   compatibility reset uses `font: inherit` for native buttons; this scoped
+   layer restores the deliberate pricing scale and weight after that reset. */
+@layer compatibility {
+  .pricing-compact-card > button {
+    font-family: var(--font-sans);
+    font-size: .67rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+}
